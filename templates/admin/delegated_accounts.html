@@ -1,0 +1,102 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Delegated account access | Debre Markos Homes</title>
+    <link rel="stylesheet" href="{% static 'portal.css' %}" />
+  </head>
+  <body>
+    <header>
+      <div class="container navbar">
+        <div class="header-left">
+          <a class="header-back" href="/admin-portal/" aria-label="Back to dashboard">←</a>
+          <div class="brand"><span class="brand-mark">D</span> Debre Markos Admin</div>
+        </div>
+        <nav class="nav-links">
+          <a href="/admin-portal/">Dashboard</a>
+          <a href="/admin-portal/properties/">Properties</a>
+          <a href="/admin-portal/viewing-requests/">Viewings</a>
+          <a href="/admin-portal/delegated-accounts/">Staff access</a>
+        </nav>
+        <a class="btn btn-primary" href="/">Public site</a>
+      </div>
+    </header>
+
+    <main class="container" style="padding: 35px 0 70px;">
+      <div class="section-title"><h1>Delegated account access</h1></div>
+
+      {% if messages %}
+        <div class="panel" style="margin-bottom:18px;">
+          {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+        </div>
+      {% endif %}
+
+      {% if invitation_token %}
+        <section class="panel" role="status">
+          <h2>One-time invitation token</h2>
+          <p>This token is shown only now. Share it securely with the invited person; do not send it in public messages.</p>
+          <pre style="white-space:pre-wrap;overflow-wrap:anywhere;">{{ invitation_token }}</pre>
+          <p>The invitee can open the site’s invitation-acceptance page and enter this token to set their own password.</p>
+        </section>
+      {% endif %}
+
+      <div class="layout-2" style="margin-top: 28px;">
+        <section class="panel">
+          <h2>Create an administrator or broker invitation</h2>
+          <p>New accounts are inactive until the invitee sets a password with the one-time token.</p>
+          <form method="post">
+            {% csrf_token %}
+            {{ create_form.as_p }}
+            <button class="btn btn-primary" type="submit">Create invitation</button>
+          </form>
+        </section>
+
+        {% if selected_profile and edit_form %}
+          <section class="panel">
+            <h2>Update {{ selected_profile.user.username }}</h2>
+            <p>Deactivating the account immediately removes access.</p>
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="account_id" value="{{ selected_profile.user_id }}" />
+              {{ edit_form.as_p }}
+              <button class="btn btn-primary" type="submit">Save access</button>
+            </form>
+          </section>
+        {% endif %}
+      </div>
+
+      <section class="panel" style="margin-top: 28px;">
+        <h2>Current delegated accounts</h2>
+        <table class="table">
+          <thead>
+            <tr><th>Account</th><th>Role</th><th>Active</th><th>Permissions</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            {% for profile in profiles %}
+              <tr>
+                <td>{{ profile.user.username }}<br /><span>{{ profile.user.email }}</span></td>
+                <td>{{ profile.get_role_display }}</td>
+                <td>{% if profile.user.is_active %}Active{% else %}Inactive{% endif %}</td>
+                <td>
+                  {% for permission in profile.management_permissions %}
+                    <span class="tag green">{{ permission }}</span>
+                  {% empty %}
+                    No management permissions
+                  {% endfor %}
+                </td>
+                <td><a href="?account_id={{ profile.user_id }}">Manage</a></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5">No delegated accounts have been created.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <footer><div class="container">Debre Markos Homes · Owner-controlled access</div></footer>
+  </body>
+</html>

@@ -13,6 +13,7 @@ interface LoginPageProps {
 interface LoginLocationState {
   from?: string | { pathname?: string; search?: string; hash?: string };
   registered?: boolean;
+  invitationAccepted?: boolean;
   username?: string;
 }
 
@@ -59,6 +60,7 @@ export function LoginPage({ text }: LoginPageProps) {
         <h1>{text('signIn')}</h1>
         <p className="auth-intro">{text('loginIntro')}</p>
         {state?.registered && <p className="auth-success" role="status">{text('registrationSuccess')}</p>}
+        {state?.invitationAccepted && <p className="auth-success" role="status">{text('invitationAccepted')}</p>}
         {authError && <p className="auth-form-error" role="alert">{text('accountStatusError')} {authError}</p>}
         {error && <p className="auth-form-error" role="alert">{error}</p>}
         <form className="auth-form" onSubmit={submit}>

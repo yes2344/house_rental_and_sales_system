@@ -50,6 +50,9 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
             'bedrooms',
             'bathrooms',
             'area_sqft',
+            'area_value',
+            'area_unit',
+            'rental_frequency',
             'status',
             'primary_image',
             'created_at',
@@ -93,6 +96,14 @@ class PublicPropertyDetailSerializer(PublicPropertyListSerializer):
             'updated_at',
         ]
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if not instance.contact_publicly_visible:
+            representation.pop('contact_name', None)
+            representation.pop('contact_phone', None)
+            representation.pop('contact_email', None)
+        return representation
+
 
 class PropertyManagementSerializer(serializers.ModelSerializer):
     category = serializers.ChoiceField(source='property_type', choices=Property.PROPERTY_TYPES)
@@ -108,6 +119,23 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         default=Property.Status.AVAILABLE,
     )
     price = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
+    area_value = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal('0.01'),
+        required=False,
+        allow_null=True,
+    )
+    area_unit = serializers.ChoiceField(
+        choices=Property.AreaUnit.choices,
+        required=False,
+        allow_blank=True,
+    )
+    rental_frequency = serializers.ChoiceField(
+        choices=Property.RentalFrequency.choices,
+        required=False,
+        allow_blank=True,
+    )
     amenities = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Amenity.objects.all(),
@@ -119,6 +147,8 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     owner_id = serializers.IntegerField(read_only=True, allow_null=True)
+    submitted_by_id = serializers.IntegerField(read_only=True, allow_null=True)
+    moderation_note = serializers.CharField(read_only=True)
 
     class Meta:
         model = Property
@@ -134,12 +164,19 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'bedrooms',
             'bathrooms',
             'area_sqft',
+            'area_value',
+            'area_unit',
+            'rental_frequency',
             'description',
             'features',
             'status',
             'publication_status',
             'is_featured',
             'owner_id',
+            'submitted_by_id',
+            'advertising_authorized',
+            'contact_publicly_visible',
+            'moderation_note',
             'amenities',
             'contact_name',
             'contact_phone',
@@ -153,6 +190,8 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'publication_status',
             'is_featured',
             'owner_id',
+            'submitted_by_id',
+            'moderation_note',
             'created_at',
             'updated_at',
         ]
@@ -171,6 +210,45 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'status': 'Only rental listings can be marked rented.'})
         if status == Property.Status.SOLD and listing_type != Property.ListingType.SALE:
             raise serializers.ValidationError({'status': 'Only sale listings can be marked sold.'})
+        area_value = attrs.get('area_value', self.instance.area_value if self.instance else None)
+        area_unit = attrs.get('area_unit', self.instance.area_unit if self.instance else '')
+        if (area_value is None) != (not area_unit):
+            raise serializers.ValidationError(
+                {'area_unit': 'Provide a supported measurement unit together with the property size.'}
+            )
+        rental_frequency = attrs.get(
+            'rental_frequency',
+            self.instance.rental_frequency if self.instance else '',
+        )
+        if listing_type == Property.ListingType.SALE and rental_frequency:
+            raise serializers.ValidationError(
+                {'rental_frequency': 'Rental frequency can only be set for rental listings.'}
+            )
+        advertising_authorized = attrs.get(
+            'advertising_authorized',
+            self.instance.advertising_authorized if self.instance else False,
+        )
+        contact_publicly_visible = attrs.get(
+            'contact_publicly_visible',
+            self.instance.contact_publicly_visible if self.instance else False,
+        )
+        if contact_publicly_visible:
+            if not advertising_authorized:
+                raise serializers.ValidationError(
+                    {'contact_publicly_visible': 'Advertising authorization is required.'}
+                )
+            contact_phone = attrs.get(
+                'contact_phone',
+                self.instance.contact_phone if self.instance else '',
+            )
+            contact_email = attrs.get(
+                'contact_email',
+                self.instance.contact_email if self.instance else '',
+            )
+            if not contact_phone and not contact_email:
+                raise serializers.ValidationError(
+                    {'contact_publicly_visible': 'Add a public phone number or email address.'}
+                )
         return attrs
 
     @transaction.atomic
@@ -178,7 +256,16 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         amenities = validated_data.pop('amenities', [])
         user = self.context['request'].user
         owner = user if Profile.objects.filter(user=user, role=Profile.Role.OWNER).exists() else None
-        property_obj = Property.objects.create(owner=owner, **validated_data)
+        if 'area_sqft' in validated_data and 'area_value' not in validated_data:
+            area_sqft = validated_data['area_sqft']
+            validated_data['area_value'] = Decimal(area_sqft) if area_sqft > 0 else None
+            validated_data['area_unit'] = Property.AreaUnit.SQUARE_FEET if area_sqft > 0 else ''
+        property_obj = Property.objects.create(
+            owner=owner,
+            submitted_by=user,
+            publication_status=Property.PublicationStatus.DRAFT,
+            **validated_data,
+        )
         if Profile.objects.filter(
             user=user,
             role=Profile.Role.BROKER,
@@ -186,6 +273,21 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         ).exists():
             PropertyBrokerAssignment.objects.create(property=property_obj, broker=user)
         property_obj.amenities.set(amenities)
+        return property_obj
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        amenities = validated_data.pop('amenities', None)
+        if 'area_sqft' in validated_data and 'area_value' not in validated_data:
+            area_sqft = validated_data['area_sqft']
+            validated_data['area_value'] = Decimal(area_sqft) if area_sqft > 0 else None
+            validated_data['area_unit'] = Property.AreaUnit.SQUARE_FEET if area_sqft > 0 else ''
+        if any(getattr(instance, field) != value for field, value in validated_data.items()):
+            if instance.publication_status != Property.PublicationStatus.DRAFT:
+                instance.publication_status = Property.PublicationStatus.DRAFT
+        property_obj = super().update(instance, validated_data)
+        if amenities is not None:
+            property_obj.amenities.set(amenities)
         return property_obj
 
 

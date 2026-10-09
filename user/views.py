@@ -1,11 +1,19 @@
+import hashlib
 import re
+import secrets
 
-from django.contrib import messages
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_http_methods
+from rest_framework.throttling import ScopedRateThrottle
 
 from .forms import ViewingRequestForm
 from .models import Property, ViewingRequest
+from viewings.models import ViewingRequestEvent
+from viewings.serializers import appointment_is_in_past
 
 
 STOPWORDS = {
@@ -71,26 +79,143 @@ def property_detail(request, slug):
     return render(request, 'user/property_detail.html', {'property': property_obj, 'images': images})
 
 
+@never_cache
 def viewing_request(request, property_id=None):
     property_obj = None
     if property_id:
-        property_obj = get_object_or_404(Property, id=property_id, status='active')
+        property_obj = get_object_or_404(
+            Property.objects.filter(
+                publication_status=Property.PublicationStatus.PUBLISHED,
+                status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+            ),
+            id=property_id,
+        )
 
     if request.method == 'POST':
         form = ViewingRequestForm(request.POST)
+        throttle = ScopedRateThrottle()
+        throttle.scope = 'public_viewing_request'
+        if not throttle.allow_request(request, None):
+            form.add_error(None, 'Too many viewing requests. Please try again later.')
+            return render(request, 'user/viewing_request.html', {
+                'form': form,
+                'property': property_obj,
+                'property_list': Property.objects.filter(
+                    publication_status=Property.PublicationStatus.PUBLISHED,
+                    status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+                ).order_by('-created_at'),
+            }, status=429)
         if form.is_valid():
-            viewing = form.save(commit=False)
-            selected = request.POST.get('property_id')
-            property_ref = get_object_or_404(Property, id=selected, status='active') if selected else property_obj
-            viewing.property = property_ref
-            viewing.save()
-            messages.success(request, 'Your viewing request has been submitted successfully.')
-            return redirect('user_property_detail', slug=property_ref.slug)
+            selected = request.POST.get('property_id') or (property_obj.pk if property_obj else None)
+            if isinstance(selected, str) and not selected.isdecimal():
+                selected = None
+            public_properties = Property.objects.filter(
+                publication_status=Property.PublicationStatus.PUBLISHED,
+                status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+            )
+            property_ref = public_properties.filter(pk=selected).first() if selected else None
+            if property_ref is None:
+                form.add_error(None, 'Select an available property before submitting a request.')
+            else:
+                receipt_token = secrets.token_urlsafe(32)
+                with transaction.atomic():
+                    viewing = form.save(commit=False)
+                    viewing.property = property_ref
+                    viewing.requester = request.user if request.user.is_authenticated else None
+                    viewing.receipt_token_digest = hashlib.sha256(receipt_token.encode()).hexdigest()
+                    viewing.save()
+                    ViewingRequestEvent.objects.create(
+                        viewing_request=viewing,
+                        actor=viewing.requester,
+                        event_type=ViewingRequestEvent.Type.SUBMITTED,
+                        to_status=viewing.status,
+                    )
+                return render(request, 'user/viewing_request_receipt.html', {
+                    'viewing': viewing,
+                    'receipt_token': receipt_token,
+                })
     else:
         form = ViewingRequestForm(initial={'property_id': property_obj.id if property_obj else None})
 
     return render(request, 'user/viewing_request.html', {
         'form': form,
         'property': property_obj,
-        'property_list': Property.objects.filter(status='active').order_by('-created_at'),
+        'property_list': Property.objects.filter(
+            publication_status=Property.PublicationStatus.PUBLISHED,
+            status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+        ).order_by('-created_at'),
+    })
+
+
+@never_cache
+@require_http_methods(['GET', 'POST'])
+def viewing_request_status(request):
+    receipt_token = ''
+    viewing = None
+    error = ''
+    if request.method == 'POST':
+        receipt_token = request.POST.get('receipt_token', '').strip()
+        throttle = ScopedRateThrottle()
+        throttle.scope = 'public_viewing_receipt'
+        if not throttle.allow_request(request, None):
+            error = 'Too many receipt lookups. Please try again later.'
+            return render(request, 'user/viewing_request_status.html', {
+                'receipt_token': receipt_token,
+                'viewing': None,
+                'error': error,
+                'appointment_timezone': timezone.get_current_timezone_name(),
+            }, status=429)
+        if receipt_token and len(receipt_token) <= 200:
+            digest = hashlib.sha256(receipt_token.encode()).hexdigest()
+            decision = request.POST.get('decision')
+            with transaction.atomic():
+                queryset = ViewingRequest.objects.select_related('property')
+                if decision in ('accept', 'decline'):
+                    queryset = queryset.select_for_update()
+                viewing = queryset.filter(receipt_token_digest=digest).first()
+                if viewing and decision in ('accept', 'decline'):
+                    if viewing.status != ViewingRequest.Status.PROPOSED:
+                        error = 'There is no pending appointment proposal to decide.'
+                        viewing = None
+                    elif decision == 'accept' and appointment_is_in_past(
+                        viewing.proposed_date,
+                        viewing.proposed_time,
+                    ):
+                        error = 'This appointment proposal has expired. Contact the property manager.'
+                        viewing = None
+                    else:
+                        previous_status = viewing.status
+                        if decision == 'accept':
+                            viewing.status = ViewingRequest.Status.CONFIRMED
+                            viewing.scheduled_date = viewing.proposed_date
+                            viewing.scheduled_time = viewing.proposed_time
+                            event_type = ViewingRequestEvent.Type.PROPOSAL_ACCEPTED
+                        else:
+                            viewing.status = ViewingRequest.Status.DECLINED
+                            event_type = ViewingRequestEvent.Type.PROPOSAL_DECLINED
+                        viewing.guest_responded_at = timezone.now()
+                        viewing.save(update_fields=[
+                            'status',
+                            'scheduled_date',
+                            'scheduled_time',
+                            'guest_responded_at',
+                        ])
+                        ViewingRequestEvent.objects.create(
+                            viewing_request=viewing,
+                            event_type=event_type,
+                            from_status=previous_status,
+                            to_status=viewing.status,
+                            proposed_date=viewing.proposed_date,
+                            proposed_time=viewing.proposed_time,
+                        )
+        else:
+            error = 'Enter the private receipt token provided when the request was submitted.'
+        if viewing is None and not error:
+            error = 'The request could not be found. Check the private receipt token and try again.'
+
+    return render(request, 'user/viewing_request_status.html', {
+        'receipt_token': receipt_token,
+        'viewing': viewing,
+        'error': error,
+        'appointment_timezone': timezone.get_current_timezone_name(),
     })

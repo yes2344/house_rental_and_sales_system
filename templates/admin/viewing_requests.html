@@ -37,7 +37,7 @@
               <th>Client</th>
               <th>Property</th>
               <th>Preferred</th>
-              <th>Scheduled</th>
+              <th>Appointment</th>
               <th>Status</th>
               <th>Action</th>
             </tr>
@@ -48,11 +48,11 @@
               <td>{{ request.full_name }}</td>
               <td>{{ request.property.title }}</td>
               <td>{{ request.preferred_date }}{% if request.preferred_time %} at {{ request.preferred_time }}{% endif %}</td>
-              <td>{% if request.scheduled_date %}{{ request.scheduled_date }}{% if request.scheduled_time %} at {{ request.scheduled_time }}{% endif %}{% else %}-{% endif %}</td>
+              <td>{% if request.scheduled_date %}{{ request.scheduled_date }}{% if request.scheduled_time %} at {{ request.scheduled_time }}{% endif %}{% elif request.proposed_date %}Proposed: {{ request.proposed_date }}{% if request.proposed_time %} at {{ request.proposed_time }}{% endif %}{% else %}-{% endif %}</td>
               <td>
                 {% if request.status == 'confirmed' %}
                   <span class="tag green">{{ request.status|title }}</span>
-                {% elif request.status == 'pending' %}
+                {% elif request.status == 'pending' or request.status == 'proposed' %}
                   <span class="tag yellow">{{ request.status|title }}</span>
                 {% else %}
                   <span class="tag red">{{ request.status|title }}</span>

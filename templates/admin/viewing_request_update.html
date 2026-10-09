@@ -33,14 +33,26 @@
         <p><strong>Client:</strong> {{ viewing.full_name }}</p>
         <p><strong>Property:</strong> {{ viewing.property.title }}</p>
         <p><strong>Requested date/time:</strong> {{ viewing.preferred_date }}{% if viewing.preferred_time %} at {{ viewing.preferred_time }}{% endif %}</p>
+        <p><strong>Status:</strong> {{ viewing.get_status_display }}</p>
+        {% if viewing.scheduled_date %}<p><strong>Confirmed appointment:</strong> {{ viewing.scheduled_date }}{% if viewing.scheduled_time %} at {{ viewing.scheduled_time }}{% endif %} ({{ appointment_timezone }})</p>{% endif %}
         <p><strong>Message:</strong> {{ viewing.message }}</p>
+
+        <h2>Request history</h2>
+        <ol>
+          {% for event in events %}
+            <li>{{ event.get_event_type_display }}{% if event.proposed_date %}: {{ event.proposed_date }}{% if event.proposed_time %} at {{ event.proposed_time }}{% endif %} ({{ appointment_timezone }}){% endif %} — {{ event.created_at }}{% if event.actor %} by {{ event.actor.get_username }}{% endif %}</li>
+          {% empty %}
+            <li>No event history is available for this legacy request.</li>
+          {% endfor %}
+        </ol>
 
         <form method="post">
           {% csrf_token %}
+          {{ form.non_field_errors }}
           <div class="two-col">
-            <label>Status{{ form.status }}</label>
-            <label>Scheduled date{{ form.scheduled_date }}</label>
-            <label>Scheduled time{{ form.scheduled_time }}</label>
+            <label>Proposed date{{ form.proposed_date }}{{ form.proposed_date.errors }}</label>
+            <label>Proposed time{{ form.proposed_time }}{{ form.proposed_time.errors }}</label>
+            <label>Reject request{{ form.reject_request }}{{ form.reject_request.errors }}</label>
             <label>Agent notes{{ form.agent_notes }}</label>
           </div>
           <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:18px;">

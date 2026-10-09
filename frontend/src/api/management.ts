@@ -4,8 +4,10 @@ import type { PaginatedResponse } from './properties';
 export type ManagedListingType = 'sale' | 'rent';
 export type ManagedPropertyType = 'house' | 'villa' | 'apartment' | 'land' | 'commercial';
 export type ManagedPropertyStatus = 'available' | 'rented' | 'sold' | 'inactive';
-export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'rejected';
-export type ViewingRequestStatus = 'pending' | 'confirmed' | 'rejected';
+export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended';
+export type ManagedAreaUnit = 'sqm' | 'sqft' | '';
+export type ManagedRentalFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
+export type ViewingRequestStatus = 'pending' | 'proposed' | 'confirmed' | 'rejected' | 'declined';
 
 export interface AmenityOption {
   id: number;
@@ -26,12 +28,19 @@ export interface ManagedProperty {
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;
+  area_value: string | null;
+  area_unit: ManagedAreaUnit;
+  rental_frequency: ManagedRentalFrequency;
   description: string;
   features: string;
   status: ManagedPropertyStatus;
   publication_status: PublicationStatus;
   is_featured: boolean;
   owner_id: number | null;
+  submitted_by_id: number | null;
+  advertising_authorized: boolean;
+  contact_publicly_visible: boolean;
+  moderation_note: string;
   amenities: number[];
   contact_name: string;
   contact_phone: string;
@@ -49,6 +58,9 @@ export interface ManagedPropertyPayload {
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;
+  area_value: string | null;
+  area_unit: ManagedAreaUnit;
+  rental_frequency: ManagedRentalFrequency;
   description: string;
   features: string;
   status: ManagedPropertyStatus;
@@ -56,6 +68,8 @@ export interface ManagedPropertyPayload {
   contact_name: string;
   contact_phone: string;
   contact_email: string;
+  advertising_authorized: boolean;
+  contact_publicly_visible: boolean;
 }
 
 export interface ManagedImage {
@@ -80,17 +94,29 @@ export interface ManagedViewingRequest {
   preferred_date: string;
   preferred_time: string | null;
   message: string;
+  proposed_date: string | null;
+  proposed_time: string | null;
   status: ViewingRequestStatus;
   scheduled_date: string | null;
   scheduled_time: string | null;
   agent_notes: string;
+  appointment_timezone: string;
+  events: {
+    event_type: string;
+    from_status: string;
+    to_status: string;
+    proposed_date: string | null;
+    proposed_time: string | null;
+    actor_name: string | null;
+    created_at: string;
+  }[];
   created_at: string;
 }
 
 export interface ManagedViewingRequestPayload {
-  status: ViewingRequestStatus;
-  scheduled_date: string | null;
-  scheduled_time: string | null;
+  status?: 'rejected';
+  proposed_date?: string | null;
+  proposed_time?: string | null;
   agent_notes: string;
 }
 
@@ -136,6 +162,11 @@ export async function updateManagedProperty(
   payload: ManagedPropertyPayload,
 ): Promise<ManagedProperty> {
   const response = await apiClient.patch<ManagedProperty>(`/owner/properties/${id}/`, payload);
+  return response.data;
+}
+
+export async function submitManagedProperty(id: number): Promise<ManagedProperty> {
+  const response = await apiClient.post<ManagedProperty>(`/owner/properties/${id}/submit/`);
   return response.data;
 }
 

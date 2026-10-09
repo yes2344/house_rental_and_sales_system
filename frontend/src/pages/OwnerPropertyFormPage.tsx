@@ -10,6 +10,7 @@ import {
   getAmenities,
   getManagedImages,
   getManagedProperty,
+  submitManagedProperty,
   updateManagedImage,
   updateManagedProperty,
   uploadManagedImage,
@@ -18,6 +19,8 @@ import {
   type ManagedListingType,
   type ManagedProperty,
   type ManagedPropertyPayload,
+  type ManagedAreaUnit,
+  type ManagedRentalFrequency,
   type ManagedPropertyStatus,
   type ManagedPropertyType,
 } from '../api/management';
@@ -37,6 +40,9 @@ interface PropertyFormValues {
   bedrooms: string;
   bathrooms: string;
   area_sqft: string;
+  area_value: string;
+  area_unit: ManagedAreaUnit;
+  rental_frequency: ManagedRentalFrequency;
   description: string;
   features: string;
   status: ManagedPropertyStatus;
@@ -44,6 +50,8 @@ interface PropertyFormValues {
   contact_name: string;
   contact_phone: string;
   contact_email: string;
+  advertising_authorized: boolean;
+  contact_publicly_visible: boolean;
 }
 
 const initialValues: PropertyFormValues = {
@@ -55,6 +63,9 @@ const initialValues: PropertyFormValues = {
   bedrooms: '',
   bathrooms: '',
   area_sqft: '',
+  area_value: '',
+  area_unit: '',
+  rental_frequency: '',
   description: '',
   features: '',
   status: 'available',
@@ -62,6 +73,8 @@ const initialValues: PropertyFormValues = {
   contact_name: '',
   contact_phone: '',
   contact_email: '',
+  advertising_authorized: false,
+  contact_publicly_visible: false,
 };
 
 function fromProperty(property: ManagedProperty): PropertyFormValues {
@@ -74,6 +87,9 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
     bedrooms: String(property.bedrooms),
     bathrooms: String(property.bathrooms),
     area_sqft: String(property.area_sqft),
+    area_value: property.area_value ?? (property.area_sqft ? String(property.area_sqft) : ''),
+    area_unit: property.area_unit || (property.area_sqft ? 'sqft' : ''),
+    rental_frequency: property.rental_frequency,
     description: property.description,
     features: property.features,
     status: property.status,
@@ -81,6 +97,8 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
     contact_name: property.contact_name,
     contact_phone: property.contact_phone,
     contact_email: property.contact_email,
+    advertising_authorized: property.advertising_authorized,
+    contact_publicly_visible: property.contact_publicly_visible,
   };
 }
 
@@ -101,6 +119,7 @@ const publicationMessage: Record<ManagedProperty['publication_status'], MessageK
   pending_review: 'publicationPending',
   published: 'publicationPublished',
   rejected: 'publicationRejected',
+  suspended: 'publicationSuspended',
 };
 
 export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPageProps) {
@@ -121,6 +140,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
   const [saving, setSaving] = useState(false);
+  const [submissionBusy, setSubmissionBusy] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
   const [imageBusyId, setImageBusyId] = useState<number | null>(null);
@@ -202,7 +222,14 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
       price: values.price.trim(),
       bedrooms: values.bedrooms ? Number(values.bedrooms) : 0,
       bathrooms: values.bathrooms ? Number(values.bathrooms) : 0,
-      area_sqft: values.area_sqft ? Number(values.area_sqft) : 0,
+      area_sqft: values.area_unit === 'sqft' && values.area_value
+        ? Math.round(Number(values.area_value))
+        : 0,
+      area_value: values.area_value ? values.area_value : null,
+      area_unit: values.area_value ? values.area_unit : '',
+      rental_frequency: values.listing_type === 'rent' ? values.rental_frequency : '',
+      advertising_authorized: values.advertising_authorized,
+      contact_publicly_visible: values.contact_publicly_visible,
     };
     try {
       if (isEditing && propertyId !== null) {
@@ -219,6 +246,24 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
       setSaveError(getErrorMessage(error));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const submitForReview = async () => {
+    if (propertyId === null) return;
+    setSubmissionBusy(true);
+    setSaveError('');
+    setSaveSuccess('');
+    setFieldErrors({});
+    try {
+      const submitted = await submitManagedProperty(propertyId);
+      setProperty(submitted);
+      setSaveSuccess(text('listingSubmitted'));
+    } catch (error: unknown) {
+      setFieldErrors(getApiFieldErrors(error));
+      setSaveError(getErrorMessage(error));
+    } finally {
+      setSubmissionBusy(false);
     }
   };
 
@@ -368,6 +413,9 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         <section className="publication-note" aria-label={text('publicationStatus')}>
           <strong>{text('publicationStatus')}: {text(publicationMessage[property.publication_status])}</strong>
           <p>{text('publicationReadOnlyNote')}</p>
+          {property.publication_status === 'rejected' && property.moderation_note && (
+            <p><strong>{text('moderationFeedback')}:</strong> {property.moderation_note}</p>
+          )}
         </section>
       )}
 
@@ -431,10 +479,32 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('bathrooms')}
             </label>
             <label className="manager-field">
-              <span>{text('sizeLabel')} (sq ft)</span>
-              <input type="number" min="0" step="1" value={values.area_sqft} onChange={(event) => updateValue('area_sqft', event.target.value)} />
-              {fieldError('area_sqft')}
+              <span>{text('sizeLabel')}</span>
+              <input type="number" min="0.01" step="0.01" value={values.area_value} onChange={(event) => updateValue('area_value', event.target.value)} />
+              {fieldError('area_value')}
             </label>
+            <label className="manager-field">
+              <span>{text('areaUnit')}</span>
+              <select value={values.area_unit} onChange={(event) => updateValue('area_unit', event.target.value as ManagedAreaUnit)}>
+                <option value="">{text('optionalField')}</option>
+                <option value="sqm">{text('squareMetres')}</option>
+                <option value="sqft">{text('squareFeet')}</option>
+              </select>
+              {fieldError('area_unit')}
+            </label>
+            {values.listing_type === 'rent' && (
+              <label className="manager-field">
+                <span>{text('rentalFrequency')} *</span>
+                <select value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
+                  <option value="">{text('selectOption')}</option>
+                  <option value="daily">{text('daily')}</option>
+                  <option value="weekly">{text('weekly')}</option>
+                  <option value="monthly">{text('monthly')}</option>
+                  <option value="yearly">{text('yearly')}</option>
+                </select>
+                {fieldError('rental_frequency')}
+              </label>
+            )}
             <label className="manager-field manager-field-wide">
               <span>{text('detailsHeading')} *</span>
               <textarea required rows={5} value={values.description} onChange={(event) => updateValue('description', event.target.value)} />
@@ -486,12 +556,42 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('contact_email')}
             </label>
           </div>
+          <label className="amenity-choice">
+            <input
+              type="checkbox"
+              checked={values.advertising_authorized}
+              onChange={(event) => updateValue('advertising_authorized', event.target.checked)}
+            />
+            <span>{text('advertisingAuthorization')}</span>
+          </label>
+          <label className="amenity-choice">
+            <input
+              type="checkbox"
+              checked={values.contact_publicly_visible}
+              onChange={(event) => updateValue('contact_publicly_visible', event.target.checked)}
+            />
+            <span>{text('publicContactDisclosure')}</span>
+          </label>
+          {fieldError('advertising_authorized')}
+          {fieldError('contact_publicly_visible')}
         </section>
 
         <div className="manager-form-actions">
-          <button className="button button-primary" type="submit" disabled={saving || deleting}>
+          <button className="button button-primary" type="submit" disabled={saving || deleting || submissionBusy}>
             {saving ? text('savingListing') : text('saveListing')}
           </button>
+          {isEditing && property && (
+            property.publication_status === 'draft' || property.publication_status === 'rejected'
+          ) && (
+            <button
+              className="button button-outline"
+              type="button"
+              disabled={saving || deleting || submissionBusy}
+              onClick={() => void submitForReview()}
+            >
+              {submissionBusy ? text('submittingForReview') : text('submitForReview')}
+            </button>
+          )}
           {isEditing && (
             <button className="button button-danger" type="button" disabled={deleting || saving} onClick={() => void removeProperty()}>
               <Trash2 size={15} aria-hidden="true" />{deleting ? text('deletingListing') : text('deleteListing')}

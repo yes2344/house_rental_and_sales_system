@@ -10,7 +10,7 @@ interface RequireListingManagerProps {
 export function RequireListingManager({ text }: RequireListingManagerProps) {
   const { account } = useAuth();
 
-  if (account?.role === 'owner' || account?.role === 'broker' || account?.role === 'administrator') {
+  if (account) {
     return <Outlet />;
   }
 

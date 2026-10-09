@@ -11,4 +11,5 @@ urlpatterns = [
     path('properties/<int:pk>/delete/', views.delete_property, name='admin_property_delete'),
     path('viewing-requests/', views.viewing_requests, name='admin_viewing_requests'),
     path('viewing-requests/<int:pk>/update/', views.update_viewing_request, name='admin_viewing_update'),
+    path('delegated-accounts/', views.delegated_accounts, name='admin_delegated_accounts'),
 ]

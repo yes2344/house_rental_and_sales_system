@@ -8,7 +8,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from accounts.permissions import IsPlatformAdministrator
+from accounts.models import DelegatedAccountInvitation, Profile
+from accounts.permissions import HasManagementPermission, IsPlatformOwner
+from accounts.serializers import (
+    AccountSerializer,
+    DelegatedAccountCreateSerializer,
+    DelegatedAccountSerializer,
+)
 from admin.audit import record_admin_action
 from admin.models import AdminAuditEvent
 from admin.serializers import (
@@ -27,7 +33,8 @@ User = get_user_model()
 
 
 class AdminUserListView(generics.ListAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.USERS_MANAGE
     serializer_class = AdminUserSerializer
     queryset = User.objects.none()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -39,11 +46,15 @@ class AdminUserListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return User.objects.none()
-        return User.objects.select_related('profile').order_by(*self.ordering)
+        queryset = User.objects.select_related('profile').order_by(*self.ordering)
+        if not self.request.user.is_superuser:
+            queryset = queryset.filter(is_staff=False, is_superuser=False)
+        return queryset
 
 
 class AdminUserDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.USERS_MANAGE
     serializer_class = AdminUserSerializer
     queryset = User.objects.none()
     http_method_names = ['get', 'patch', 'head', 'options']
@@ -51,7 +62,10 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return User.objects.none()
-        return User.objects.select_related('profile')
+        queryset = User.objects.select_related('profile')
+        if not self.request.user.is_superuser:
+            queryset = queryset.filter(is_staff=False, is_superuser=False)
+        return queryset
 
     @transaction.atomic
     def perform_update(self, serializer):
@@ -96,24 +110,126 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
         return super().patch(request, *args, **kwargs)
 
 
+class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsPlatformOwner]
+    serializer_class = DelegatedAccountSerializer
+
+    def get_queryset(self):
+        return User.objects.filter(
+            is_superuser=False,
+            profile__role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
+        ).select_related('profile').order_by('username')
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = DelegatedAccountCreateSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        profile = user.profile
+        record_admin_action(
+            request.user,
+            action='delegated_account_created',
+            object_type='user',
+            object_id=user.pk,
+            changes={
+                'role': profile.role,
+                'management_permissions': profile.management_permissions,
+                'is_active': user.is_active,
+            },
+        )
+        return Response(
+            {
+                'account': self.get_serializer(user).data,
+                'invitation_token': serializer.invitation_token,
+                'invitation_expires_at': serializer.invitation.expires_at,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        if request.method == 'POST':
+            response['Cache-Control'] = 'no-store'
+            response['Pragma'] = 'no-cache'
+        return response
+
+
+class AdminDelegatedAccountDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsPlatformOwner]
+    serializer_class = DelegatedAccountSerializer
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        return User.objects.filter(
+            is_superuser=False,
+            profile__role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
+        ).select_related('profile')
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        user = serializer.instance
+        before_profile = user.profile
+        before = {
+            'role': before_profile.role,
+            'management_permissions': list(before_profile.management_permissions),
+            'is_active': user.is_active,
+        }
+        updated = serializer.save()
+        after_profile = updated.profile
+        after = {
+            'role': after_profile.role,
+            'management_permissions': list(after_profile.management_permissions),
+            'is_active': updated.is_active,
+        }
+        changes = {
+            key: {'from': before[key], 'to': value}
+            for key, value in after.items()
+            if before[key] != value
+        }
+        if changes:
+            record_admin_action(
+                self.request.user,
+                action='delegated_account_updated',
+                object_type='user',
+                object_id=updated.pk,
+                changes=changes,
+            )
+
+
 class AdminPropertyListView(generics.ListAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    permissions_by_method = {
+        'GET': [
+            Profile.Permission.PROPERTY_VIEW_ALL,
+            Profile.Permission.PROPERTY_MODERATE,
+        ],
+    }
     serializer_class = AdminPropertySerializer
     queryset = Property.objects.none()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'publication_status', 'listing_type', 'property_type']
-    search_fields = ['title', 'location', 'owner__username']
+    search_fields = ['title', 'location', 'owner__username', 'submitted_by__username']
     ordering_fields = ['created_at', 'updated_at', 'price']
     ordering = ['-created_at']
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Property.objects.none()
-        return Property.objects.select_related('owner').order_by(*self.ordering)
+        return Property.objects.select_related('owner', 'submitted_by').order_by(*self.ordering)
 
 
 class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    permissions_by_method = {
+        'GET': [
+            Profile.Permission.PROPERTY_VIEW_ALL,
+            Profile.Permission.PROPERTY_MODERATE,
+        ],
+        'PATCH': Profile.Permission.PROPERTY_MODERATE,
+    }
     serializer_class = AdminPropertySerializer
     queryset = Property.objects.none()
     http_method_names = ['get', 'patch', 'head', 'options']
@@ -121,7 +237,7 @@ class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Property.objects.none()
-        return Property.objects.select_related('owner')
+        return Property.objects.select_related('owner', 'submitted_by')
 
     @transaction.atomic
     def perform_update(self, serializer):
@@ -131,8 +247,21 @@ class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
             'status': instance.status,
             'is_featured': instance.is_featured,
         }
-        note = serializer.validated_data.pop('moderation_note', '')
-        updated = serializer.save()
+        note = serializer.validated_data.pop('moderation_note', None)
+        publication_status = serializer.validated_data.get(
+            'publication_status',
+            instance.publication_status,
+        )
+        if note is None:
+            note = (
+                instance.moderation_note
+                if publication_status in (
+                    Property.PublicationStatus.REJECTED,
+                    Property.PublicationStatus.SUSPENDED,
+                )
+                else ''
+            )
+        updated = serializer.save(moderation_note=note)
         after = {
             'publication_status': updated.publication_status,
             'status': updated.status,
@@ -160,7 +289,8 @@ class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
 
 
 class AdminBrokerAssignmentListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.BROKERS_ASSIGN
     serializer_class = AdminBrokerAssignmentSerializer
     queryset = PropertyBrokerAssignment.objects.none()
 
@@ -196,7 +326,8 @@ class AdminBrokerAssignmentListCreateView(generics.ListCreateAPIView):
 
 
 class AdminBrokerAssignmentDetailView(generics.DestroyAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.BROKERS_ASSIGN
     serializer_class = AdminBrokerAssignmentSerializer
     queryset = PropertyBrokerAssignment.objects.none()
     lookup_field = 'broker_id'
@@ -242,7 +373,8 @@ class PublicListingReportCreateView(generics.CreateAPIView):
 
 
 class AdminListingReportListView(generics.ListAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.REPORTS_REVIEW
     serializer_class = AdminListingReportSerializer
     queryset = ListingReport.objects.none()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -258,7 +390,8 @@ class AdminListingReportListView(generics.ListAPIView):
 
 
 class AdminListingReportDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.REPORTS_REVIEW
     serializer_class = AdminListingReportSerializer
     queryset = ListingReport.objects.none()
     http_method_names = ['get', 'patch', 'head', 'options']
@@ -294,7 +427,8 @@ class AdminListingReportDetailView(generics.RetrieveUpdateAPIView):
 
 
 class AdminAuditEventListView(generics.ListAPIView):
-    permission_classes = [IsPlatformAdministrator]
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.AUDIT_VIEW
     serializer_class = AdminAuditEventSerializer
     queryset = AdminAuditEvent.objects.none()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]

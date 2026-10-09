@@ -9,6 +9,23 @@
     />
     <meta name="theme-color" content="#f8f8f4" />
     <title>Habesha Homes | Find your place in Debre Markos</title>
+    <script>
+      try {
+        const saved = JSON.parse(localStorage.getItem('habesha-homes-guest-preferences') || '{}');
+        const selectedTheme =
+          ['light', 'dark', 'system'].includes(saved.theme) ? saved.theme : 'system';
+        document.documentElement.dataset.theme = selectedTheme === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : selectedTheme;
+        document.documentElement.dataset.density =
+          ['comfortable', 'compact'].includes(saved.density) ? saved.density : 'comfortable';
+        document.documentElement.dataset.reducedMotion = saved.reduced_motion ? 'reduce' : 'system';
+      } catch {
+        document.documentElement.dataset.theme = 'system';
+        document.documentElement.dataset.density = 'comfortable';
+        document.documentElement.dataset.reducedMotion = 'system';
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

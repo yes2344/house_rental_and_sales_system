@@ -9,10 +9,11 @@ import type { Locale, MessageKey } from '../i18n';
 interface HeaderProps {
   locale: Locale;
   onLocaleChange: (locale: Locale) => void;
+  preferenceError: string;
   text: (key: MessageKey) => string;
 }
 
-export function Header({ locale, onLocaleChange, text }: HeaderProps) {
+export function Header({ locale, onLocaleChange, preferenceError, text }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutError, setLogoutError] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
@@ -69,6 +70,7 @@ export function Header({ locale, onLocaleChange, text }: HeaderProps) {
           >
             <NavLink to="/" end onClick={closeMenu}>{text('home')}</NavLink>
             <NavLink to="/properties" onClick={closeMenu}>{text('explore')}</NavLink>
+            <NavLink to="/settings" onClick={closeMenu}>{text('settingsTitle')}</NavLink>
             <a href="/#how-it-works" onClick={closeMenu}>{text('howItWorks')}</a>
           </nav>
 
@@ -98,6 +100,7 @@ export function Header({ locale, onLocaleChange, text }: HeaderProps) {
               {text('listAProperty')} <ArrowUpRight size={15} aria-hidden="true" />
             </Link>
             {logoutError && <span className="header-action-error" role="alert">{logoutError}</span>}
+            {preferenceError && <span className="header-action-error" role="alert">{preferenceError}</span>}
           </div>
         </div>
       </header>

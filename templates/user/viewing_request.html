@@ -42,6 +42,7 @@
         <div class="panel">
           <form method="post">
             {% csrf_token %}
+            {{ form.non_field_errors }}
             <div class="two-col">
               <label>Full name{{ form.full_name }}</label>
               <label>Email{{ form.email }}</label>
@@ -56,6 +57,7 @@
               </select>
             </label>
             <label>Preferred date{{ form.preferred_date }}</label>
+            <label>Preferred time (optional){{ form.preferred_time }}</label>
             <label>Message{{ form.message }}</label>
             <button type="submit" class="btn btn-primary" style="width:100%;">Submit request</button>
           </form>

@@ -192,6 +192,15 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
                 <h2 id="viewing-form-title">{text('requestSuccessTitle')}</h2>
                 <p>{text('requestSuccessBody')}</p>
                 <p className="viewing-receipt">{text('requestReference')}: #{receipt.id} · {text('requestPending')}</p>
+                <p>{text('receiptTokenHelp')}</p>
+                <code className="viewing-receipt-token">{receipt.receipt_token}</code>
+                <Link
+                  className="button button-outline"
+                  to="/viewing-requests/status"
+                  state={{ token: receipt.receipt_token }}
+                >
+                  {text('checkRequestStatus')}
+                </Link>
               </div>
               <div className="viewing-success-actions">
                 <Link className="button button-primary" to={`/properties/${encodeURIComponent(property.slug)}`}>

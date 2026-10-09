@@ -73,6 +73,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'accounts.middleware.OwnerOnlyDjangoAdminMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -134,7 +135,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Addis_Ababa'
 USE_I18N = True
 USE_TZ = True
 SESSION_COOKIE_SECURE = not DEBUG
@@ -163,7 +164,9 @@ REST_FRAMEWORK = {
         'account_login': '10/minute',
         'account_registration': '5/hour',
         'public_viewing_request': '10/hour',
+        'public_viewing_receipt': '20/hour',
         'public_listing_report': '5/hour',
+        'delegated_invitation_accept': '10/hour',
     },
 }
 

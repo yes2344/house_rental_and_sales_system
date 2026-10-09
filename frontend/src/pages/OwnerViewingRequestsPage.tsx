@@ -21,25 +21,44 @@ interface OwnerViewingRequestsPageProps {
 const PAGE_SIZE = 12;
 
 interface RequestFormValues {
-  status: ViewingRequestStatus;
-  scheduled_date: string;
-  scheduled_time: string;
+  status: '' | 'rejected';
+  proposed_date: string;
+  proposed_time: string;
   agent_notes: string;
 }
 
 function formFromRequest(request: ManagedViewingRequest): RequestFormValues {
   return {
-    status: request.status,
-    scheduled_date: request.scheduled_date ?? '',
-    scheduled_time: request.scheduled_time?.slice(0, 5) ?? '',
+    status: '',
+    proposed_date: request.proposed_date ?? '',
+    proposed_time: request.proposed_time?.slice(0, 5) ?? '',
     agent_notes: request.agent_notes,
   };
 }
 
 function requestStatusMessage(status: ViewingRequestStatus): MessageKey {
+  if (status === 'proposed') return 'viewingProposed';
   if (status === 'confirmed') return 'viewingConfirmed';
   if (status === 'rejected') return 'viewingRejected';
+  if (status === 'declined') return 'viewingVisitorDeclined';
   return 'viewingPending';
+}
+
+function isViewingRequestStatus(value: string | null): value is ViewingRequestStatus {
+  return value === 'pending'
+    || value === 'proposed'
+    || value === 'confirmed'
+    || value === 'rejected'
+    || value === 'declined';
+}
+
+function eventMessage(eventType: string): MessageKey {
+  if (eventType === 'proposal_sent') return 'appointmentProposedEvent';
+  if (eventType === 'proposal_revised') return 'appointmentRevisedEvent';
+  if (eventType === 'proposal_accepted') return 'appointmentAcceptedEvent';
+  if (eventType === 'proposal_declined') return 'appointmentDeclinedEvent';
+  if (eventType === 'rejected') return 'requestRejectedEvent';
+  return 'requestSubmittedEvent';
 }
 
 export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps) {
@@ -62,9 +81,7 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
   const rawPage = Number(searchParams.get('page') ?? 1);
   const page = Number.isInteger(rawPage) && rawPage > 1 ? rawPage : 1;
   const rawStatus = searchParams.get('status');
-  const statusFilter = rawStatus === 'pending' || rawStatus === 'confirmed' || rawStatus === 'rejected'
-    ? rawStatus
-    : undefined;
+  const statusFilter = isViewingRequestStatus(rawStatus) ? rawStatus : undefined;
   const rawOrdering = searchParams.get('ordering');
   const ordering = rawOrdering === 'preferred_date' || rawOrdering === 'scheduled_date'
     ? rawOrdering
@@ -129,9 +146,11 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
     setSaveError('');
     setSaveSuccess('');
     const payload: ManagedViewingRequestPayload = {
-      status: values.status,
-      scheduled_date: values.scheduled_date || null,
-      scheduled_time: values.scheduled_time || null,
+      ...(values.status === 'rejected' ? { status: 'rejected' as const } : {}),
+      ...(selected.status !== 'confirmed' ? {
+        proposed_date: values.proposed_date || null,
+        proposed_time: values.proposed_time || null,
+      } : {}),
       agent_notes: values.agent_notes,
     };
     try {
@@ -182,8 +201,10 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
           <select value={statusFilter ?? ''} onChange={(event) => updateFilter('status', event.target.value)}>
             <option value="">{text('allStatuses')}</option>
             <option value="pending">{text('viewingPending')}</option>
+            <option value="proposed">{text('viewingProposed')}</option>
             <option value="confirmed">{text('viewingConfirmed')}</option>
             <option value="rejected">{text('viewingRejected')}</option>
+            <option value="declined">{text('viewingVisitorDeclined')}</option>
           </select>
         </label>
         <label className="manager-filter">
@@ -191,6 +212,7 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
           <select value={ordering} onChange={(event) => updateFilter('ordering', event.target.value)}>
             <option value="-created_at">{text('sortNewest')}</option>
             <option value="preferred_date">{text('sortPreferredDate')}</option>
+            <option value="proposed_date">{text('appointmentProposalDate')}</option>
             <option value="scheduled_date">{text('sortScheduledDate')}</option>
           </select>
         </label>
@@ -276,26 +298,62 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
             <div><span>{text('phoneNumber')}</span><a href={`tel:${selected.phone}`}>{selected.phone}</a></div>
             <div><span>{text('preferredDate')}</span><strong>{preferredDate(selected)}</strong></div>
             {selected.message && <div className="request-message"><span>{text('requestMessage')}</span><p>{selected.message}</p></div>}
+            {selected.scheduled_date && (
+              <div>
+                <span>{text('scheduledDate')}</span>
+                <strong>{selected.scheduled_date}{selected.scheduled_time ? ` · ${selected.scheduled_time.slice(0, 5)}` : ''}</strong>
+                <small>{text('appointmentTimezone').replace('{timezone}', selected.appointment_timezone)}</small>
+              </div>
+            )}
           </div>
+          <section className="request-event-history" aria-labelledby="request-event-history-title">
+            <h3 id="request-event-history-title">{text('requestHistory')}</h3>
+            <ol>
+              {selected.events.map((event, index) => (
+                <li key={`${event.event_type}-${event.created_at}-${index}`}>
+                  <strong>{text(eventMessage(event.event_type))}</strong>
+                  <time dateTime={event.created_at}>{new Date(event.created_at).toLocaleString()}</time>
+                  {event.proposed_date && (
+                    <span>
+                      {event.proposed_date}{event.proposed_time ? ` · ${event.proposed_time.slice(0, 5)}` : ''}
+                    </span>
+                  )}
+                  {event.actor_name && <span>{event.actor_name}</span>}
+                </li>
+              ))}
+            </ol>
+          </section>
           <form className="request-update-form" onSubmit={(event) => void saveRequest(event)}>
             <h3>{text('manageRequest')}</h3>
             <div className="manager-form-grid">
               <label className="manager-field">
                 <span>{text('requestStatus')}</span>
-                <select value={values.status} onChange={(event) => updateFormValue('status', event.target.value as ViewingRequestStatus)}>
-                  <option value="pending">{text('viewingPending')}</option>
-                  <option value="confirmed">{text('viewingConfirmed')}</option>
+                <select value={values.status} onChange={(event) => updateFormValue('status', event.target.value as '' | 'rejected')}>
+                  <option value="">{text('keepCurrentStatus')}</option>
                   <option value="rejected">{text('viewingRejected')}</option>
                 </select>
               </label>
               <label className="manager-field">
-                <span>{text('scheduledDate')}</span>
-                <input type="date" value={values.scheduled_date} onChange={(event) => updateFormValue('scheduled_date', event.target.value)} />
+                <span>{text('appointmentProposalDate')}</span>
+                <input
+                  type="date"
+                  value={values.proposed_date}
+                  disabled={selected.status === 'confirmed'}
+                  onChange={(event) => updateFormValue('proposed_date', event.target.value)}
+                />
               </label>
               <label className="manager-field">
-                <span>{text('scheduledTime')}</span>
-                <input type="time" value={values.scheduled_time} onChange={(event) => updateFormValue('scheduled_time', event.target.value)} />
+                <span>{text('appointmentProposalTime')}</span>
+                <input
+                  type="time"
+                  value={values.proposed_time}
+                  disabled={selected.status === 'confirmed'}
+                  onChange={(event) => updateFormValue('proposed_time', event.target.value)}
+                />
               </label>
+              <p className="manager-field-hint">
+                {text('appointmentTimezone').replace('{timezone}', selected.appointment_timezone)}
+              </p>
               <label className="manager-field manager-field-wide">
                 <span>{text('privateAgentNotes')}</span>
                 <textarea rows={4} value={values.agent_notes} onChange={(event) => updateFormValue('agent_notes', event.target.value)} />

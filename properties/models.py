@@ -1,5 +1,7 @@
+from decimal import Decimal
+
 from django.conf import settings
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
@@ -39,6 +41,17 @@ class Property(models.Model):
         PENDING_REVIEW = 'pending_review', 'Pending review'
         PUBLISHED = 'published', 'Published'
         REJECTED = 'rejected', 'Rejected'
+        SUSPENDED = 'suspended', 'Suspended'
+
+    class AreaUnit(models.TextChoices):
+        SQUARE_METRES = 'sqm', 'Square metres'
+        SQUARE_FEET = 'sqft', 'Square feet'
+
+    class RentalFrequency(models.TextChoices):
+        DAILY = 'daily', 'Daily'
+        WEEKLY = 'weekly', 'Weekly'
+        MONTHLY = 'monthly', 'Monthly'
+        YEARLY = 'yearly', 'Yearly'
 
     STATUS_CHOICES = [
         (Status.LEGACY_ACTIVE, 'Active'),
@@ -62,9 +75,28 @@ class Property(models.Model):
     property_type = models.CharField(max_length=50, choices=PROPERTY_TYPES, default='house')
     listing_type = models.CharField(max_length=20, choices=LISTING_TYPE_CHOICES, default=ListingType.SALE)
     price = models.DecimalField(max_digits=12, decimal_places=2)
+    rental_frequency = models.CharField(
+        max_length=10,
+        choices=RentalFrequency.choices,
+        blank=True,
+        default='',
+    )
     bedrooms = models.PositiveIntegerField(default=0)
     bathrooms = models.PositiveIntegerField(default=0)
     area_sqft = models.PositiveIntegerField(default=0)
+    area_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
+    area_unit = models.CharField(
+        max_length=5,
+        choices=AreaUnit.choices,
+        blank=True,
+        default='',
+    )
     description = models.TextField()
     features = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=Status.AVAILABLE)
@@ -81,6 +113,16 @@ class Property(models.Model):
         null=True,
         blank=True,
     )
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='submitted_properties',
+        null=True,
+        blank=True,
+    )
+    advertising_authorized = models.BooleanField(default=False)
+    contact_publicly_visible = models.BooleanField(default=False)
+    moderation_note = models.TextField(blank=True)
     assigned_brokers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through='PropertyBrokerAssignment',
@@ -125,8 +167,29 @@ class Property(models.Model):
                 name='property_status_listing_type_compatible',
             ),
             models.CheckConstraint(
-                condition=Q(publication_status__in=['draft', 'pending_review', 'published', 'rejected']),
+                condition=Q(publication_status__in=[
+                    'draft', 'pending_review', 'published', 'rejected', 'suspended',
+                ]),
                 name='property_valid_publication_status',
+            ),
+            models.CheckConstraint(
+                condition=Q(area_value__isnull=True) | Q(area_value__gt=0),
+                name='property_area_positive',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(area_value__isnull=True, area_unit='')
+                    | Q(area_value__gt=0, area_unit__in=['sqm', 'sqft'])
+                ),
+                name='property_area_unit_matches_value',
+            ),
+            models.CheckConstraint(
+                condition=Q(rental_frequency__in=['', 'daily', 'weekly', 'monthly', 'yearly']),
+                name='property_valid_rental_frequency',
+            ),
+            models.CheckConstraint(
+                condition=Q(listing_type='rent') | Q(rental_frequency=''),
+                name='property_frequency_only_for_rent',
             ),
         ]
 

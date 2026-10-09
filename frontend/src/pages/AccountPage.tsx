@@ -21,8 +21,10 @@ interface ProfileValues {
 
 const statusMessage: Record<string, MessageKey> = {
   pending: 'viewingPending',
+  proposed: 'viewingProposed',
   confirmed: 'viewingConfirmed',
   rejected: 'viewingRejected',
+  declined: 'viewingVisitorDeclined',
 };
 
 const roleMessage: Record<string, MessageKey> = {

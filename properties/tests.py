@@ -1,3 +1,4 @@
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -11,6 +12,7 @@ from rest_framework.test import APITestCase
 from PIL import Image
 
 from accounts.models import Profile
+from admin.models import AdminAuditEvent
 from properties.models import Amenity, Property, PropertyBrokerAssignment, PropertyImage
 
 
@@ -57,6 +59,44 @@ class PropertyConstraintTests(TestCase):
     def test_existing_active_status_remains_valid_for_legacy_data(self):
         property_obj = self.make_property(status=Property.Status.LEGACY_ACTIVE)
         self.assertEqual(property_obj.status, 'active')
+
+    def test_property_can_store_area_with_a_supported_measurement_unit(self):
+        property_obj = self.make_property(area_value='120.50', area_unit=Property.AreaUnit.SQUARE_METRES)
+        property_obj.refresh_from_db()
+
+        self.assertEqual(property_obj.area_value, Decimal('120.50'))
+        self.assertEqual(property_obj.area_unit, Property.AreaUnit.SQUARE_METRES)
+
+    def test_zero_area_is_rejected_by_database(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.make_property(area_value=0, area_unit=Property.AreaUnit.SQUARE_FEET)
+
+    def test_area_value_requires_a_supported_unit(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.make_property(area_value=120, area_unit='acres')
+
+    def test_rental_frequency_is_rejected_for_sale_listings(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.make_property(
+                    listing_type=Property.ListingType.SALE,
+                    rental_frequency=Property.RentalFrequency.MONTHLY,
+                )
+
+    def test_rental_frequency_can_be_stored_for_rental_listings(self):
+        property_obj = self.make_property(
+            listing_type=Property.ListingType.RENT,
+            rental_frequency=Property.RentalFrequency.MONTHLY,
+        )
+
+        self.assertEqual(property_obj.rental_frequency, Property.RentalFrequency.MONTHLY)
+
+    def test_suspended_publication_status_is_valid(self):
+        property_obj = self.make_property(publication_status=Property.PublicationStatus.SUSPENDED)
+
+        self.assertEqual(property_obj.publication_status, Property.PublicationStatus.SUSPENDED)
 
 
 class PublicPropertyApiTests(APITestCase):
@@ -161,6 +201,7 @@ class PublicPropertyApiTests(APITestCase):
     def test_detail_includes_public_contact_and_localized_amenity_fields(self):
         self.property.contact_phone = '+251900000000'
         self.property.contact_email = 'contact@example.com'
+        self.property.contact_publicly_visible = True
         self.property.save()
 
         response = self.client.get(
@@ -171,6 +212,21 @@ class PublicPropertyApiTests(APITestCase):
         self.assertEqual(response.data['contact_phone'], '+251900000000')
         self.assertEqual(response.data['amenities'][0]['slug'], 'garden')
         self.assertEqual(response.data['currency'], 'ETB')
+
+    def test_detail_does_not_expose_private_contact_by_default(self):
+        self.property.contact_name = 'Private owner'
+        self.property.contact_phone = '+251900000000'
+        self.property.contact_email = 'private@example.com'
+        self.property.save()
+
+        response = self.client.get(
+            reverse('api:property-detail', kwargs={'slug': self.property.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('contact_name', response.data)
+        self.assertNotIn('contact_phone', response.data)
+        self.assertNotIn('contact_email', response.data)
 
     def test_detail_does_not_expose_unavailable_property(self):
         self.property.status = Property.Status.RENTED
@@ -251,7 +307,8 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         property_obj = Property.objects.get(slug=response.data['slug'])
         self.assertEqual(property_obj.owner_id, self.owner.pk)
-        self.assertEqual(property_obj.publication_status, Property.PublicationStatus.PENDING_REVIEW)
+        self.assertEqual(property_obj.submitted_by_id, self.owner.pk)
+        self.assertEqual(property_obj.publication_status, Property.PublicationStatus.DRAFT)
         self.assertFalse(property_obj.is_featured)
         self.assertEqual(response.data['currency'], 'ETB')
 
@@ -297,6 +354,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(valid.status_code, 200)
         self.property.refresh_from_db()
         self.assertEqual(self.property.status, Property.Status.RENTED)
+        self.assertEqual(self.property.publication_status, Property.PublicationStatus.DRAFT)
 
     def test_invalid_price_is_rejected_before_database_write(self):
         self.client.force_authenticate(user=self.owner)
@@ -316,6 +374,10 @@ class ManagedPropertyApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            management_permissions=[
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+            ],
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
         self.client.force_authenticate(user=broker)
@@ -335,14 +397,65 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(created.status_code, 201)
         created_obj = Property.objects.get(slug=created.data['slug'])
         self.assertIsNone(created_obj.owner_id)
+        self.assertEqual(created_obj.submitted_by_id, broker.pk)
         self.assertTrue(created_obj.assigned_brokers.filter(pk=broker.pk).exists())
 
-    def test_customer_cannot_access_listing_management(self):
+    def test_registered_customer_can_create_and_manage_only_submitted_listings(self):
         self.client.force_authenticate(user=self.customer)
 
+        created = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(title='Customer submitted draft'),
+            format='json',
+        )
         response = self.client.get(reverse('api:managed-property-list'))
+        customer_property = Property.objects.get(pk=created.data['id'])
+        denied = self.client.patch(
+            reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
+            {'title': 'Not my property'},
+            format='json',
+        )
 
-        self.assertIn(response.status_code, [401, 403])
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(customer_property.publication_status, Property.PublicationStatus.DRAFT)
+        self.assertEqual(customer_property.submitted_by_id, self.customer.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(denied.status_code, 404)
+
+    def test_listing_submission_requires_authorization_and_responsible_contact(self):
+        self.client.force_authenticate(user=self.customer)
+        created = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(title='Submission workflow draft'),
+            format='json',
+        )
+        submit_url = reverse('api:managed-property-submit', kwargs={'pk': created.data['id']})
+
+        missing_authorization = self.client.post(submit_url, {}, format='json')
+        updated = self.client.patch(
+            reverse('api:managed-property-detail', kwargs={'pk': created.data['id']}),
+            {
+                'advertising_authorized': True,
+                'contact_name': 'Responsible contact',
+            },
+            format='json',
+        )
+        submitted = self.client.post(submit_url, {}, format='json')
+
+        self.assertEqual(missing_authorization.status_code, 400)
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(submitted.status_code, 200)
+        self.assertEqual(
+            submitted.data['publication_status'],
+            Property.PublicationStatus.PENDING_REVIEW,
+        )
+        self.assertTrue(
+            AdminAuditEvent.objects.filter(
+                action='property_submitted',
+                object_id=str(created.data['id']),
+            ).exists()
+        )
 
     def test_delete_removes_managed_property(self):
         self.client.force_authenticate(user=self.owner)
@@ -403,6 +516,20 @@ class PropertyImageApiTests(APITestCase):
         image = PropertyImage.objects.get(pk=response.data['id'])
         self.assertTrue(image.is_primary)
         self.assertTrue(Path(image.image.path).is_file())
+
+    def test_changing_images_takes_a_published_property_out_of_publication(self):
+        self.property.publication_status = Property.PublicationStatus.PUBLISHED
+        self.property.save(update_fields=['publication_status'])
+
+        response = self.client.post(
+            self.image_url(),
+            {'image': self.make_image(), 'caption': 'Updated image'},
+            format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.property.refresh_from_db()
+        self.assertEqual(self.property.publication_status, Property.PublicationStatus.DRAFT)
 
     def test_invalid_file_extension_is_rejected(self):
         response = self.client.post(

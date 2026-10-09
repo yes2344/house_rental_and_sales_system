@@ -3,7 +3,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from accounts.models import Profile
+from accounts.models import DelegatedAccountInvitation, Profile
 from admin.models import AdminAuditEvent
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
@@ -17,6 +17,7 @@ class AdminApiTests(APITestCase):
             username='platform-admin',
             password='SecurePass123!value',
             is_staff=True,
+            is_superuser=True,
         )
         self.customer = User.objects.create_user(
             username='admin-managed-customer',
@@ -39,30 +40,23 @@ class AdminApiTests(APITestCase):
             owner=self.owner,
         )
 
-    def test_admin_user_management_updates_role_and_approval_with_audit(self):
+    def test_user_management_updates_ordinary_user_data_and_audits_without_exposing_pii(self):
         self.client.force_authenticate(user=self.admin_user)
 
-        response = self.client.patch(
+        role_update = self.client.patch(
             reverse('api:admin-user-detail', kwargs={'pk': self.customer.pk}),
             {'role': Profile.Role.BROKER, 'broker_approved': True},
             format='json',
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['role'], Profile.Role.BROKER)
-        self.assertTrue(response.data['broker_approved'])
-        self.assertTrue(
-            AdminAuditEvent.objects.filter(
-                action='user_updated',
-                object_id=str(self.customer.pk),
-            ).exists()
-        )
+        self.assertEqual(role_update.status_code, 400)
         contact_update = self.client.patch(
             reverse('api:admin-user-detail', kwargs={'pk': self.customer.pk}),
             {'email': 'updated-customer@example.com'},
             format='json',
         )
         self.assertEqual(contact_update.status_code, 200)
+        self.assertEqual(contact_update.data['role'], Profile.Role.CUSTOMER)
         contact_event = AdminAuditEvent.objects.filter(
             action='user_updated',
             object_id=str(self.customer.pk),
@@ -89,6 +83,260 @@ class AdminApiTests(APITestCase):
         )
         self.assertEqual(self_deactivation.status_code, 400)
 
+    def test_staff_flag_alone_does_not_grant_admin_api_access(self):
+        delegated_without_permissions = User.objects.create_user(
+            username='staff-without-permissions',
+            password='SecurePass123!value',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated_without_permissions,
+            role=Profile.Role.ADMINISTRATOR,
+        )
+        self.client.force_authenticate(user=delegated_without_permissions)
+
+        response = self.client.get(reverse('api:admin-property-list'))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_create_and_invite_delegated_administrator(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post(
+            reverse('api:admin-delegated-account-list'),
+            {
+                'username': 'listing-reviewer',
+                'email': 'reviewer@example.com',
+                'role': Profile.Role.ADMINISTRATOR,
+                'management_permissions': [
+                    Profile.Permission.PROPERTY_VIEW_ALL,
+                    Profile.Permission.PROPERTY_MODERATE,
+                ],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        account = User.objects.get(username='listing-reviewer')
+        self.assertFalse(account.is_active)
+        self.assertTrue(account.is_staff)
+        self.assertFalse(account.is_superuser)
+        self.assertEqual(
+            account.profile.management_permissions,
+            [Profile.Permission.PROPERTY_VIEW_ALL, Profile.Permission.PROPERTY_MODERATE],
+        )
+        token = response.data['invitation_token']
+        self.assertEqual(len(token), 43)
+        self.assertNotIn(token, str(AdminAuditEvent.objects.get(action='delegated_account_created').changes))
+        self.assertTrue(
+            DelegatedAccountInvitation.objects.filter(
+                user=account,
+                token_digest=DelegatedAccountInvitation.digest(token),
+            ).exists()
+        )
+
+    def test_delegated_invitation_activates_user_once_with_password(self):
+        self.client.force_authenticate(user=self.admin_user)
+        created = self.client.post(
+            reverse('api:admin-delegated-account-list'),
+            {
+                'username': 'invited-broker',
+                'email': 'invited-broker@example.com',
+                'role': Profile.Role.BROKER,
+                'management_permissions': [
+                    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+                ],
+            },
+            format='json',
+        )
+        token = created.data['invitation_token']
+        self.client.force_authenticate(user=None)
+
+        accepted = self.client.post(
+            reverse('api:invitation-accept'),
+            {'token': token, 'password': 'Unique!InvitedAccount873'},
+            format='json',
+        )
+        replay = self.client.post(
+            reverse('api:invitation-accept'),
+            {'token': token, 'password': 'Unique!InvitedAccount873'},
+            format='json',
+        )
+
+        invited_user = User.objects.get(username='invited-broker')
+        self.assertEqual(accepted.status_code, 200)
+        self.assertTrue(invited_user.is_active)
+        self.assertTrue(invited_user.check_password('Unique!InvitedAccount873'))
+        self.assertEqual(invited_user.profile.role, Profile.Role.BROKER)
+        self.assertEqual(replay.status_code, 400)
+
+    def test_owner_can_assign_invited_broker_and_scope_access_to_that_listing(self):
+        self.client.force_authenticate(user=self.admin_user)
+        created = self.client.post(
+            reverse('api:admin-delegated-account-list'),
+            {
+                'username': 'assigned-broker',
+                'email': 'assigned-broker@example.com',
+                'role': Profile.Role.BROKER,
+                'management_permissions': [
+                    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+                ],
+            },
+            format='json',
+        )
+        broker = User.objects.get(username='assigned-broker')
+        assignment = self.client.post(
+            reverse(
+                'api:admin-broker-assignment-list',
+                kwargs={'property_id': self.property.pk},
+            ),
+            {'broker_id': broker.pk},
+            format='json',
+        )
+        token = created.data['invitation_token']
+        self.client.force_authenticate(user=None)
+        accepted = self.client.post(
+            reverse('api:invitation-accept'),
+            {'token': token, 'password': 'Maple!RiverStone8294'},
+            format='json',
+        )
+
+        self.assertEqual(assignment.status_code, 201)
+        self.assertEqual(accepted.status_code, 200, accepted.data)
+        broker.refresh_from_db()
+        self.client.force_authenticate(user=broker)
+        assigned_properties = self.client.get(reverse('api:managed-property-list'))
+        self.assertEqual(assigned_properties.status_code, 200)
+        self.assertEqual(assigned_properties.data['count'], 1)
+        self.assertEqual(assigned_properties.data['results'][0]['id'], self.property.pk)
+
+    def test_broker_cannot_receive_global_permissions_or_owner_only_permissions(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post(
+            reverse('api:admin-delegated-account-list'),
+            {
+                'username': 'overprivileged-broker',
+                'email': 'overprivileged@example.com',
+                'role': Profile.Role.BROKER,
+                'management_permissions': [Profile.Permission.PROPERTY_VIEW_ALL],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(User.objects.filter(username='overprivileged-broker').exists())
+
+    def test_delegated_permissions_are_enforced_and_owner_can_revoke_them(self):
+        delegated = User.objects.create_user(
+            username='limited-reviewer',
+            password='SecurePass123!value',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.PROPERTY_VIEW_ALL],
+        )
+        self.client.force_authenticate(user=delegated)
+
+        can_view = self.client.get(reverse('api:admin-property-list'))
+        cannot_moderate = self.client.patch(
+            reverse('api:admin-property-detail', kwargs={'pk': self.property.pk}),
+            {'publication_status': Property.PublicationStatus.PUBLISHED},
+            format='json',
+        )
+
+        self.assertEqual(can_view.status_code, 200)
+        self.assertEqual(cannot_moderate.status_code, 403)
+        self.client.force_authenticate(user=self.admin_user)
+        update_permissions = self.client.patch(
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': delegated.pk}),
+            {
+                'management_permissions': [
+                    Profile.Permission.PROPERTY_VIEW_ALL,
+                    Profile.Permission.PROPERTY_MODERATE,
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(update_permissions.status_code, 200)
+        self.assertTrue(
+            AdminAuditEvent.objects.filter(action='delegated_account_updated').exists()
+        )
+        self.client.force_authenticate(user=delegated)
+        can_moderate = self.client.patch(
+            reverse('api:admin-property-detail', kwargs={'pk': self.property.pk}),
+            {'publication_status': Property.PublicationStatus.PUBLISHED},
+            format='json',
+        )
+        self.assertEqual(can_moderate.status_code, 200)
+
+        self.client.force_authenticate(user=self.admin_user)
+        revoked = self.client.patch(
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': delegated.pk}),
+            {'management_permissions': []},
+            format='json',
+        )
+        self.assertEqual(revoked.status_code, 200)
+        self.client.force_authenticate(user=delegated)
+        denied_after_revoke = self.client.get(reverse('api:admin-property-list'))
+        self.assertEqual(denied_after_revoke.status_code, 403)
+
+    def test_delegated_accounts_cannot_promote_themselves_or_change_owner_access(self):
+        delegated = User.objects.create_user(
+            username='no-self-promotion',
+            password='SecurePass123!value',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.USERS_MANAGE],
+        )
+        self.client.force_authenticate(user=delegated)
+
+        promotion = self.client.patch(
+            reverse('api:admin-user-detail', kwargs={'pk': delegated.pk}),
+            {'is_superuser': True, 'role': Profile.Role.OWNER},
+            format='json',
+        )
+        protected_owner = self.client.patch(
+            reverse('api:admin-user-detail', kwargs={'pk': self.admin_user.pk}),
+            {'is_active': False, 'email': 'attacker@example.com'},
+            format='json',
+        )
+        self.assertEqual(promotion.status_code, 404)
+        self.assertEqual(protected_owner.status_code, 404)
+        self.admin_user.refresh_from_db()
+        self.assertTrue(self.admin_user.is_active)
+        self.assertTrue(self.admin_user.is_superuser)
+
+    def test_deactivated_delegated_administrator_loses_api_access(self):
+        delegated = User.objects.create_user(
+            username='deactivated-reviewer',
+            password='SecurePass123!value',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.PROPERTY_VIEW_ALL],
+        )
+        self.client.force_authenticate(user=delegated)
+        self.assertEqual(self.client.get(reverse('api:admin-property-list')).status_code, 200)
+
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.patch(
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': delegated.pk}),
+            {'is_active': False},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        delegated.refresh_from_db()
+        self.client.force_authenticate(user=delegated)
+        self.assertEqual(self.client.get(reverse('api:admin-property-list')).status_code, 403)
+
     def test_admin_can_reject_a_listing_with_reason_and_audit(self):
         self.client.force_authenticate(user=self.admin_user)
         url = reverse('api:admin-property-detail', kwargs={'pk': self.property.pk})
@@ -110,11 +358,46 @@ class AdminApiTests(APITestCase):
         self.assertEqual(missing_reason.status_code, 400)
         self.assertEqual(rejected.status_code, 200)
         self.assertEqual(rejected.data['publication_status'], Property.PublicationStatus.REJECTED)
+        self.property.refresh_from_db()
+        self.assertEqual(self.property.moderation_note, 'Listing details need correction.')
         self.assertTrue(
             AdminAuditEvent.objects.filter(
                 action='property_moderated',
                 object_id=str(self.property.pk),
             ).exists()
+        )
+        self.client.force_authenticate(user=self.owner)
+        owner_view = self.client.get(
+            reverse('api:managed-property-detail', kwargs={'pk': self.property.pk})
+        )
+        self.assertEqual(owner_view.status_code, 200)
+        self.assertEqual(owner_view.data['moderation_note'], 'Listing details need correction.')
+
+    def test_admin_must_record_a_reason_when_suspending_a_listing(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('api:admin-property-detail', kwargs={'pk': self.property.pk})
+
+        missing_reason = self.client.patch(
+            url,
+            {'publication_status': Property.PublicationStatus.SUSPENDED},
+            format='json',
+        )
+        suspended = self.client.patch(
+            url,
+            {
+                'publication_status': Property.PublicationStatus.SUSPENDED,
+                'moderation_note': 'Temporarily suspended pending verification.',
+            },
+            format='json',
+        )
+
+        self.assertEqual(missing_reason.status_code, 400)
+        self.assertEqual(suspended.status_code, 200)
+        self.property.refresh_from_db()
+        self.assertEqual(self.property.publication_status, Property.PublicationStatus.SUSPENDED)
+        self.assertEqual(
+            self.property.moderation_note,
+            'Temporarily suspended pending verification.',
         )
 
     def test_admin_cannot_publish_a_sold_or_rented_listing(self):
@@ -241,11 +524,96 @@ class AdminApiTests(APITestCase):
 
 
 class AdminPortalMethodTests(TestCase):
+    def test_owner_can_create_delegated_account_invitation_from_portal(self):
+        owner = User.objects.create_superuser(
+            username='portal-owner',
+            password='SecurePass123!value',
+        )
+        client = Client()
+        client.force_login(owner)
+
+        response = client.post(
+            reverse('admin_delegated_accounts'),
+            {
+                'username': 'portal-broker',
+                'email': 'portal-broker@example.com',
+                'role': Profile.Role.BROKER,
+                'management_permissions': [
+                    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+                ],
+            },
+        )
+
+        invited = User.objects.get(username='portal-broker')
+        invitation = DelegatedAccountInvitation.objects.get(user=invited)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Cache-Control', response)
+        self.assertEqual(response['Cache-Control'], 'no-store')
+        self.assertFalse(invited.is_active)
+        self.assertEqual(invited.profile.role, Profile.Role.BROKER)
+        self.assertEqual(invited.profile.management_permissions, [
+            Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+            Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+        ])
+        invitation_token = response.context['invitation_token']
+        self.assertEqual(
+            invitation.token_digest,
+            DelegatedAccountInvitation.digest(invitation_token),
+        )
+        self.assertNotContains(response, invitation.token_digest)
+        self.assertTrue(
+            AdminAuditEvent.objects.filter(
+                action='delegated_account_created',
+                object_id=str(invited.pk),
+            ).exists()
+        )
+
+    def test_owner_portal_can_revoke_delegated_account_access(self):
+        owner = User.objects.create_superuser(
+            username='portal-access-owner',
+            password='SecurePass123!value',
+        )
+        delegated = User.objects.create_user(
+            username='portal-access-broker',
+            password='SecurePass123!value',
+            is_active=True,
+        )
+        profile = Profile.objects.create(
+            user=delegated,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
+        )
+        client = Client()
+        client.force_login(owner)
+
+        response = client.post(
+            reverse('admin_delegated_accounts'),
+            {
+                'account_id': str(delegated.pk),
+                'role': Profile.Role.BROKER,
+                'is_active': '',
+                'management_permissions': [],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        delegated.refresh_from_db()
+        profile.refresh_from_db()
+        self.assertFalse(delegated.is_active)
+        self.assertEqual(profile.management_permissions, [])
+        self.assertTrue(
+            AdminAuditEvent.objects.filter(
+                action='delegated_account_updated',
+                object_id=str(delegated.pk),
+            ).exists()
+        )
+
     def test_legacy_property_mutation_routes_require_post(self):
-        staff = User.objects.create_user(
+        staff = User.objects.create_superuser(
             username='legacy-portal-staff',
             password='SecurePass123!value',
-            is_staff=True,
         )
         property_obj = Property.objects.create(
             title='Legacy portal property',
@@ -266,11 +634,37 @@ class AdminPortalMethodTests(TestCase):
         property_obj.refresh_from_db()
         self.assertEqual(property_obj.status, Property.Status.AVAILABLE)
 
-    def test_staff_post_to_toggle_route_changes_status_and_writes_audit(self):
+    def test_staff_flag_alone_does_not_grant_legacy_portal_access(self):
         staff = User.objects.create_user(
-            username='legacy-toggle-staff',
+            username='delegated-without-portal-permissions',
             password='SecurePass123!value',
             is_staff=True,
+        )
+        client = Client()
+        client.force_login(staff)
+
+        response = client.get(reverse('admin_dashboard'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/admin/login/', response.url)
+
+    def test_staff_flag_alone_does_not_grant_django_admin_access(self):
+        staff = User.objects.create_user(
+            username='staff-without-django-admin-access',
+            password='SecurePass123!value',
+            is_staff=True,
+        )
+        client = Client()
+        client.force_login(staff)
+
+        response = client.get('/admin/')
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_post_to_toggle_route_changes_status_and_writes_audit(self):
+        staff = User.objects.create_superuser(
+            username='legacy-toggle-staff',
+            password='SecurePass123!value',
         )
         property_obj = Property.objects.create(
             title='Toggle portal property',

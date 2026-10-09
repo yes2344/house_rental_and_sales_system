@@ -8,4 +8,5 @@ urlpatterns = [
     path('property/<slug:slug>/', views.property_detail, name='user_property_detail'),
     path('viewing-request/', views.viewing_request, name='user_viewing_request'),
     path('viewing-request/<int:property_id>/', views.viewing_request, name='user_property_request'),
+    path('viewing-request/status/', views.viewing_request_status, name='user_viewing_request_status'),
 ]

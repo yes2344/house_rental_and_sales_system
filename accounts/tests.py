@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
-from accounts.models import Profile
+from accounts.models import Profile, UserPreferences
 from accounts.permissions import IsPropertyManagerOrAdministrator, IsViewingRequestManager
 from favorites.models import Favorite
 from properties.models import Property, PropertyBrokerAssignment
@@ -132,6 +132,10 @@ class ListingObjectPermissionTests(TestCase):
             user=self.broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            management_permissions=[
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+            ],
         )
         self.unapproved_broker = user_model.objects.create_user(username='unapproved-broker')
         Profile.objects.create(
@@ -217,3 +221,88 @@ class AccountActivityApiTests(APITestCase):
         self.assertEqual(response.data['viewing_requests'][0]['id'], own_request.pk)
         self.assertNotIn('email', response.data['viewing_requests'][0])
         self.assertNotIn('phone', response.data['viewing_requests'][0])
+
+
+class AccountPreferencesApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.first_user = user_model.objects.create_user(username='preferences-first')
+        Profile.objects.create(user=self.first_user, role=Profile.Role.CUSTOMER)
+        self.second_user = user_model.objects.create_user(username='preferences-second')
+        Profile.objects.create(user=self.second_user, role=Profile.Role.CUSTOMER)
+
+    def test_authenticated_user_reads_and_updates_only_their_preferences(self):
+        self.client.force_authenticate(user=self.first_user)
+
+        initial = self.client.get(reverse('api:preferences'))
+        self.assertEqual(initial.status_code, 200)
+        self.assertEqual(initial.data, {
+            'theme': UserPreferences.Theme.SYSTEM,
+            'locale': UserPreferences.Locale.ENGLISH,
+            'density': UserPreferences.Density.COMFORTABLE,
+            'reduced_motion': False,
+        })
+
+        updated = self.client.patch(
+            reverse('api:preferences'),
+            {'theme': 'dark', 'locale': 'am', 'reduced_motion': True},
+            format='json',
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.data['theme'], UserPreferences.Theme.DARK)
+        self.assertEqual(updated.data['locale'], UserPreferences.Locale.AMHARIC)
+        self.assertTrue(updated.data['reduced_motion'])
+        self.assertFalse(UserPreferences.objects.filter(user=self.second_user).exists())
+
+        self.client.force_authenticate(user=self.second_user)
+        second_user_preferences = self.client.get(reverse('api:preferences'))
+        self.assertEqual(second_user_preferences.status_code, 200)
+        self.assertEqual(second_user_preferences.data['theme'], UserPreferences.Theme.SYSTEM)
+
+    def test_unsupported_fields_and_values_are_rejected(self):
+        self.client.force_authenticate(user=self.first_user)
+
+        protected_field = self.client.patch(
+            reverse('api:preferences'),
+            {'theme': 'dark', 'role': 'administrator', 'management_permissions': ['settings.manage']},
+            format='json',
+        )
+        invalid_choice = self.client.patch(
+            reverse('api:preferences'),
+            {'theme': 'sepia'},
+            format='json',
+        )
+
+        self.assertEqual(protected_field.status_code, 400)
+        self.assertEqual(invalid_choice.status_code, 400)
+        self.assertEqual(self.first_user.profile.role, Profile.Role.CUSTOMER)
+        self.assertFalse(UserPreferences.objects.filter(user=self.first_user).exists())
+
+    def test_reset_changes_only_the_current_users_preferences(self):
+        first_preferences = UserPreferences.objects.create(
+            user=self.first_user,
+            theme=UserPreferences.Theme.DARK,
+            locale=UserPreferences.Locale.AMHARIC,
+            density=UserPreferences.Density.COMPACT,
+            reduced_motion=True,
+        )
+        second_preferences = UserPreferences.objects.create(
+            user=self.second_user,
+            theme=UserPreferences.Theme.LIGHT,
+        )
+        self.client.force_authenticate(user=self.first_user)
+
+        response = self.client.post(reverse('api:preferences-reset'), {}, format='json')
+
+        self.assertEqual(response.status_code, 200)
+        first_preferences.refresh_from_db()
+        second_preferences.refresh_from_db()
+        self.assertEqual(first_preferences.theme, UserPreferences.Theme.SYSTEM)
+        self.assertEqual(first_preferences.locale, UserPreferences.Locale.ENGLISH)
+        self.assertEqual(first_preferences.density, UserPreferences.Density.COMFORTABLE)
+        self.assertFalse(first_preferences.reduced_motion)
+        self.assertEqual(second_preferences.theme, UserPreferences.Theme.LIGHT)
+
+    def test_preferences_require_authentication(self):
+        response = self.client.get(reverse('api:preferences'))
+        self.assertIn(response.status_code, [401, 403])

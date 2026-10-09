@@ -16,6 +16,8 @@ class AdminRoleField(serializers.ChoiceField):
         return instance
 
     def to_representation(self, instance):
+        if instance.is_superuser:
+            return 'owner'
         if instance.is_staff:
             return 'administrator'
         profile = getattr(instance, 'profile', None)
@@ -32,8 +34,13 @@ class AdminBrokerApprovalField(serializers.BooleanField):
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
-    role = AdminRoleField(choices=Profile.Role.choices, required=False)
-    broker_approved = AdminBrokerApprovalField(required=False)
+    role = AdminRoleField(choices=Profile.Role.choices, read_only=True)
+    broker_approved = AdminBrokerApprovalField(read_only=True)
+    management_permissions = serializers.ListField(
+        child=serializers.ChoiceField(choices=Profile.Permission.choices),
+        source='profile.management_permissions',
+        read_only=True,
+    )
 
     class Meta:
         model = User
@@ -48,55 +55,32 @@ class AdminUserSerializer(serializers.ModelSerializer):
             'is_superuser',
             'role',
             'broker_approved',
+            'management_permissions',
             'date_joined',
         ]
         read_only_fields = ['id', 'username', 'is_staff', 'is_superuser', 'date_joined']
 
     def to_internal_value(self, data):
-        privileged_fields = {'is_staff', 'is_superuser'} & data.keys()
+        privileged_fields = {'is_staff', 'is_superuser', 'role', 'broker_approved', 'management_permissions'} & data.keys()
         if privileged_fields:
             raise serializers.ValidationError(
-                {field: 'Administrator privileges cannot be changed through this endpoint.' for field in privileged_fields}
+                {field: 'Roles and permissions are managed through the owner-only delegated-account interface.' for field in privileged_fields}
             )
         return super().to_internal_value(data)
 
     def validate(self, attrs):
+        if self.instance and (self.instance.is_staff or self.instance.is_superuser):
+            raise serializers.ValidationError('Privileged accounts are managed through the owner-only interface.')
         if self.instance and self.instance.pk == self.context['request'].user.pk:
             if attrs.get('is_active') is False:
                 raise serializers.ValidationError({'is_active': 'You cannot deactivate your own account.'})
-        if self.instance and self.instance.is_staff and {'role', 'broker_approved'} & attrs.keys():
-            raise serializers.ValidationError('Administrator roles cannot be changed through this endpoint.')
-        resulting_role = attrs.get(
-            'role',
-            getattr(getattr(self.instance, 'profile', None), 'role', Profile.Role.CUSTOMER),
-        )
-        if attrs.get('broker_approved') and resulting_role != Profile.Role.BROKER:
-            raise serializers.ValidationError(
-                {'broker_approved': 'Only a broker account can be approved.'}
-            )
         return attrs
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        role = validated_data.pop('role', None)
-        broker_approved = validated_data.pop('broker_approved', None)
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.save()
-
-        if role is not None or broker_approved is not None:
-            profile, _ = Profile.objects.get_or_create(
-                user=instance,
-                defaults={'role': role or Profile.Role.CUSTOMER},
-            )
-            if role is not None:
-                profile.role = role
-            if broker_approved is not None:
-                profile.broker_approved = broker_approved
-            elif role is not None and role != Profile.Role.BROKER:
-                profile.broker_approved = False
-            profile.save(update_fields=['role', 'broker_approved', 'updated_at'])
-            instance.profile = profile
         return instance
 
 
@@ -108,6 +92,7 @@ class AdminPropertySerializer(serializers.ModelSerializer):
         write_only=True,
     )
     owner_id = serializers.IntegerField(read_only=True, allow_null=True)
+    submitted_by_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Property
@@ -123,6 +108,7 @@ class AdminPropertySerializer(serializers.ModelSerializer):
             'publication_status',
             'is_featured',
             'owner_id',
+            'submitted_by_id',
             'moderation_note',
             'created_at',
             'updated_at',
@@ -136,6 +122,7 @@ class AdminPropertySerializer(serializers.ModelSerializer):
             'listing_type',
             'price',
             'owner_id',
+            'submitted_by_id',
             'created_at',
             'updated_at',
         ]
@@ -150,12 +137,16 @@ class AdminPropertySerializer(serializers.ModelSerializer):
             self.instance.status if self.instance else Property.Status.AVAILABLE,
         )
         listing_type = self.instance.listing_type if self.instance else Property.ListingType.SALE
-        if (
-            attrs.get('publication_status') == Property.PublicationStatus.REJECTED
-            and not attrs.get('moderation_note', '').strip()
-        ):
+        moderation_statuses = (
+            Property.PublicationStatus.REJECTED,
+            Property.PublicationStatus.SUSPENDED,
+        )
+        if attrs.get('publication_status') in moderation_statuses and not attrs.get(
+            'moderation_note',
+            '',
+        ).strip():
             raise serializers.ValidationError(
-                {'moderation_note': 'A reason is required when rejecting a listing.'}
+                {'moderation_note': 'A reason is required when rejecting or suspending a listing.'}
             )
         if publication_status == Property.PublicationStatus.PUBLISHED and property_status not in (
             Property.Status.AVAILABLE,

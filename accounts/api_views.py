@@ -1,4 +1,5 @@
 from django.contrib.auth import login, logout
+from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
@@ -7,15 +8,19 @@ from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 
+from accounts.models import UserPreferences
 from accounts.serializers import (
     AccountActivitySerializer,
     AccountSerializer,
     CsrfTokenSerializer,
+    DelegatedInvitationAcceptSerializer,
     EmptySerializer,
     LoginResponseSerializer,
     LoginSerializer,
     RegistrationSerializer,
+    UserPreferencesSerializer,
 )
 from favorites.models import Favorite
 from viewings.models import ViewingRequest
@@ -47,6 +52,25 @@ class RegistrationView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(AccountSerializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class DelegatedInvitationAcceptView(generics.GenericAPIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'delegated_invitation_accept'
+    serializer_class = DelegatedInvitationAcceptSerializer
+
+    @extend_schema(
+        summary='Accept an owner-issued administrator or broker invitation',
+        request=DelegatedInvitationAcceptSerializer,
+        responses={200: AccountSerializer},
+    )
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(AccountSerializer(user).data, status=status.HTTP_200_OK)
 
 
 @method_decorator(csrf_protect, name='dispatch')
@@ -97,6 +121,60 @@ class AccountMeView(generics.RetrieveUpdateAPIView):
     @extend_schema(summary='Update account contact details; roles are read-only')
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
+
+
+class AccountPreferencesView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary='Retrieve the authenticated user’s personal preferences',
+        responses={200: UserPreferencesSerializer},
+    )
+    def get(self, request):
+        preferences, _ = UserPreferences.objects.get_or_create(user=request.user)
+        return Response(UserPreferencesSerializer(preferences).data)
+
+    @transaction.atomic
+    @extend_schema(
+        summary='Update the authenticated user’s personal preferences',
+        request=UserPreferencesSerializer,
+        responses={200: UserPreferencesSerializer},
+    )
+    def patch(self, request):
+        preferences, _ = UserPreferences.objects.get_or_create(user=request.user)
+        serializer = UserPreferencesSerializer(
+            preferences,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class AccountPreferencesResetView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    @extend_schema(
+        summary='Reset the authenticated user’s personal preferences to defaults',
+        request=None,
+        responses={200: UserPreferencesSerializer},
+    )
+    def post(self, request):
+        preferences, _ = UserPreferences.objects.get_or_create(user=request.user)
+        preferences.theme = UserPreferences.Theme.SYSTEM
+        preferences.locale = UserPreferences.Locale.ENGLISH
+        preferences.density = UserPreferences.Density.COMFORTABLE
+        preferences.reduced_motion = False
+        preferences.save(update_fields=[
+            'theme',
+            'locale',
+            'density',
+            'reduced_motion',
+            'updated_at',
+        ])
+        return Response(UserPreferencesSerializer(preferences).data)
 
 
 class AccountActivityView(generics.GenericAPIView):

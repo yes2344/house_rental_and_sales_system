@@ -47,7 +47,7 @@ export interface AccountActivity {
       listing_type: 'sale' | 'rent';
       status: string;
     };
-    status: 'pending' | 'confirmed' | 'rejected';
+    status: 'pending' | 'proposed' | 'confirmed' | 'rejected' | 'declined';
     preferred_date: string;
     preferred_time: string | null;
     scheduled_date: string | null;
