@@ -1,0 +1,73 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard | Debre Markos Homes</title>
+    <link rel="stylesheet" href="{% static 'portal.css' %}" />
+  </head>
+  <body>
+    <header>
+      <div class="container navbar">
+        <div class="header-left">
+          <a class="header-back" href="#" onclick="history.back(); return false;" aria-label="Go back">←</a>
+          <div class="brand"><span class="brand-mark">D</span> Debre Markos Admin</div>
+        </div>
+        <nav class="nav-links">
+          <a href="/admin-portal/">Dashboard</a>
+          <a href="/admin-portal/properties/">Properties</a>
+          <a href="/admin-portal/properties/new/">Add property</a>
+          <a href="/admin-portal/viewing-requests/">Viewings</a>
+        </nav>
+        <a class="btn btn-primary" href="/">Public site</a>
+      </div>
+    </header>
+
+    <main class="container" style="padding: 35px 0 70px;">
+      <div class="section-title">
+        <h1>Admin dashboard</h1>
+        <a href="/admin-portal/properties/new/" class="btn btn-primary">Add new listing</a>
+      </div>
+
+      <div class="stats">
+        <div class="stat-box"><span class="tag green">Active</span><strong>{{ active_count }}</strong><span>Live listings</span></div>
+        <div class="stat-box"><span class="tag yellow">Inactive</span><strong>{{ inactive_count }}</strong><span>Hidden listings</span></div>
+        <div class="stat-box"><span class="tag green">Requests</span><strong>{{ pending_requests }}</strong><span>Pending visits</span></div>
+        <div class="stat-box"><span class="tag red">Status</span><strong>{{ recent_requests|length }}</strong><span>Recent entries</span></div>
+      </div>
+
+      <div class="layout-2" style="margin-top: 28px;">
+        <div class="panel">
+          <h2>Recent viewing requests</h2>
+          <div class="list">
+            {% for request in recent_requests %}
+              <div class="list-item">
+                <div>
+                  <strong>{{ request.full_name }}</strong><br/>
+                  <span>{{ request.property.title }}</span>
+                </div>
+                <span class="tag green">{{ request.status|title }}</span>
+              </div>
+            {% empty %}
+              <p>No viewing requests yet.</p>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Quick actions</h2>
+          <div class="list">
+            <div class="list-item"><div><strong>Create a new listing</strong><br/><span>Upload up to 10 photos</span></div><a class="btn btn-secondary" href="/admin-portal/properties/new/">Open</a></div>
+            <div class="list-item"><div><strong>Review all properties</strong><br/><span>Manage active and inactive status</span></div><a class="btn btn-secondary" href="/admin-portal/properties/">Open</a></div>
+            <div class="list-item"><div><strong>Manage viewings</strong><br/><span>Check visit requests</span></div><a class="btn btn-secondary" href="/admin-portal/viewing-requests/">Open</a></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="container">Debre Markos Homes · Admin dashboard</div>
+    </footer>
+  </body>
+</html>

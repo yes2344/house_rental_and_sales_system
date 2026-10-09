@@ -1,0 +1,256 @@
+from django.conf import settings
+from django.core.validators import FileExtensionValidator
+from django.db import models
+from django.db.models import Q
+from django.utils.text import slugify
+
+
+class Amenity(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    name_am = models.CharField(max_length=100, blank=True)
+    slug = models.SlugField(max_length=120, unique=True, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class Property(models.Model):
+    class ListingType(models.TextChoices):
+        SALE = 'sale', 'For Sale'
+        RENT = 'rent', 'For Rent'
+
+    class Status(models.TextChoices):
+        AVAILABLE = 'available', 'Available'
+        RENTED = 'rented', 'Rented'
+        SOLD = 'sold', 'Sold'
+        INACTIVE = 'inactive', 'Inactive'
+        LEGACY_ACTIVE = 'active', 'Active (legacy)'
+
+    class PublicationStatus(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        PENDING_REVIEW = 'pending_review', 'Pending review'
+        PUBLISHED = 'published', 'Published'
+        REJECTED = 'rejected', 'Rejected'
+
+    STATUS_CHOICES = [
+        (Status.LEGACY_ACTIVE, 'Active'),
+        (Status.AVAILABLE, 'Available'),
+        (Status.RENTED, 'Rented'),
+        (Status.SOLD, 'Sold'),
+        (Status.INACTIVE, 'Inactive'),
+    ]
+    LISTING_TYPE_CHOICES = ListingType.choices
+    PROPERTY_TYPES = [
+        ('house', 'House'),
+        ('villa', 'Villa'),
+        ('apartment', 'Apartment'),
+        ('land', 'Land'),
+        ('commercial', 'Commercial'),
+    ]
+
+    title = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True, blank=True)
+    location = models.CharField(max_length=200, db_index=True)
+    property_type = models.CharField(max_length=50, choices=PROPERTY_TYPES, default='house')
+    listing_type = models.CharField(max_length=20, choices=LISTING_TYPE_CHOICES, default=ListingType.SALE)
+    price = models.DecimalField(max_digits=12, decimal_places=2)
+    bedrooms = models.PositiveIntegerField(default=0)
+    bathrooms = models.PositiveIntegerField(default=0)
+    area_sqft = models.PositiveIntegerField(default=0)
+    description = models.TextField()
+    features = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=Status.AVAILABLE)
+    publication_status = models.CharField(
+        max_length=20,
+        choices=PublicationStatus.choices,
+        default=PublicationStatus.PENDING_REVIEW,
+    )
+    is_featured = models.BooleanField(default=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='owned_properties',
+        null=True,
+        blank=True,
+    )
+    assigned_brokers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through='PropertyBrokerAssignment',
+        related_name='assigned_properties',
+        through_fields=('property', 'broker'),
+        blank=True,
+    )
+    amenities = models.ManyToManyField(Amenity, related_name='properties', blank=True)
+    contact_name = models.CharField(max_length=200, blank=True)
+    contact_phone = models.CharField(max_length=50, blank=True)
+    contact_email = models.EmailField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        db_table = 'user_property'
+        indexes = [
+            models.Index(
+                fields=['publication_status', 'status', 'listing_type', '-created_at'],
+                name='property_public_search_idx',
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=Q(price__gt=0), name='property_price_positive'),
+            models.CheckConstraint(
+                condition=Q(
+                    property_type__in=['house', 'villa', 'apartment', 'land', 'commercial']
+                ),
+                name='property_valid_category',
+            ),
+            models.CheckConstraint(
+                condition=Q(status__in=['active', 'available', 'rented', 'sold', 'inactive']),
+                name='property_valid_status',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(status__in=['active', 'available', 'inactive'])
+                    | Q(status='rented', listing_type='rent')
+                    | Q(status='sold', listing_type='sale')
+                ),
+                name='property_status_listing_type_compatible',
+            ),
+            models.CheckConstraint(
+                condition=Q(publication_status__in=['draft', 'pending_review', 'published', 'rejected']),
+                name='property_valid_publication_status',
+            ),
+        ]
+
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.title) or 'property'
+            self.slug = base_slug
+            suffix = 2
+            while type(self).objects.filter(slug=self.slug).exclude(pk=self.pk).exists():
+                self.slug = f'{base_slug}-{suffix}'
+                suffix += 1
+        super().save(*args, **kwargs)
+
+    @property
+    def formatted_price(self):
+        return f'ETB {self.price:,.2f}'
+
+
+class PropertyImage(models.Model):
+    property = models.ForeignKey(Property, related_name='images', on_delete=models.CASCADE)
+    image = models.ImageField(
+        upload_to='property_images/',
+        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'webp'])],
+    )
+    caption = models.CharField(max_length=200, blank=True)
+    is_primary = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'user_propertyimage'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['property'],
+                condition=Q(is_primary=True),
+                name='property_image_one_primary_per_property',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.property.title} image'
+
+
+class PropertyBrokerAssignment(models.Model):
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='broker_assignments')
+    broker = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='property_broker_assignments',
+    )
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='granted_property_broker_assignments',
+        null=True,
+        blank=True,
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['property', 'broker'],
+                name='property_broker_assignment_unique',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['broker', 'granted_at'], name='broker_assignment_user_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.broker} assigned to {self.property}'
+
+
+class ListingReport(models.Model):
+    class Reason(models.TextChoices):
+        INACCURATE = 'inaccurate', 'Inaccurate information'
+        UNAVAILABLE = 'unavailable', 'Property unavailable'
+        FRAUD = 'fraud', 'Suspected fraud'
+        INAPPROPRIATE = 'inappropriate', 'Inappropriate content'
+        OTHER = 'other', 'Other'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        REVIEWED = 'reviewed', 'Reviewed'
+        DISMISSED = 'dismissed', 'Dismissed'
+        ACTION_TAKEN = 'action_taken', 'Action taken'
+
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.SET_NULL,
+        related_name='reports',
+        null=True,
+        blank=True,
+    )
+    property_title = models.CharField(max_length=200)
+    reporter_name = models.CharField(max_length=200)
+    reporter_email = models.EmailField()
+    reason = models.CharField(max_length=20, choices=Reason.choices)
+    details = models.TextField(blank=True, max_length=2000)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    moderator_notes = models.TextField(blank=True, max_length=2000)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='reviewed_listing_reports',
+        null=True,
+        blank=True,
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='listing_report_status_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.property_id and not self.property_title:
+            self.property_title = self.property.title
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.get_reason_display()} report for {self.property_title}'

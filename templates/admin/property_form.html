@@ -1,0 +1,131 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Listing | Admin</title>
+    <link rel="stylesheet" href="{% static 'portal.css' %}" />
+  </head>
+  <body>
+    <header>
+      <div class="container navbar">
+        <div class="header-left">
+          <a class="header-back" href="#" onclick="history.back(); return false;" aria-label="Go back">←</a>
+          <div class="brand"><span class="brand-mark">D</span> Debre Markos Admin</div>
+        </div>
+        <nav class="nav-links">
+          <a href="/admin-portal/">Dashboard</a>
+          <a href="/admin-portal/properties/">Properties</a>
+          <a href="/admin-portal/properties/new/">Add property</a>
+          <a href="/admin-portal/viewing-requests/">Viewings</a>
+        </nav>
+        <a class="btn btn-primary" href="/">Public site</a>
+      </div>
+    </header>
+
+    <main class="container" style="padding: 35px 0 70px;">
+      <div class="section-title">
+        <h1>{% if property %}Edit property{% else %}Create property listing{% endif %}</h1>
+        <a href="/admin-portal/properties/" class="btn btn-secondary">Back to list</a>
+      </div>
+
+      <div class="panel">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          {% if form.errors %}
+            <div class="panel" style="margin-bottom: 20px;">
+              {{ form.errors }}
+            </div>
+          {% endif %}
+          <div class="two-col">
+            <label>Property title{{ form.title }}</label>
+            <label>Price{{ form.price }}</label>
+            <label>Location{{ form.location }}</label>
+            <label>Property type{{ form.property_type }}</label>
+            <label>Listing type{{ form.listing_type }}</label>
+            <label>Bedrooms{{ form.bedrooms }}</label>
+            <label>Bathrooms{{ form.bathrooms }}</label>
+            <label>Area sq ft{{ form.area_sqft }}</label>
+            <label>Status{{ form.status }}</label>
+            <label>Featured{{ form.is_featured }}</label>
+            <label style="grid-column:1 / -1;">Description{{ form.description }}</label>
+            <label style="grid-column:1 / -1;">Features{{ form.features }}</label>
+            <label style="grid-column:1 / -1;">Upload photos (up to 10){{ form.images }}</label>
+            <div class="upload-preview" id="upload-preview" style="grid-column: 1 / -1;"></div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap: 12px; margin-top: 18px;">
+            <a href="/admin-portal/properties/" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Save listing</button>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <footer>
+      <div class="container">Debre Markos Homes · Listing editor</div>
+    </footer>
+
+    <script>
+      const fileInput = document.querySelector('input[type="file"]');
+      const previewBox = document.getElementById('upload-preview');
+
+      if (fileInput && previewBox) {
+        fileInput.addEventListener('change', (event) => {
+          const files = Array.from(event.target.files || []);
+          previewBox.innerHTML = '';
+
+          files.forEach((file) => {
+            const item = document.createElement('div');
+            item.className = 'upload-item';
+
+            const label = document.createElement('span');
+            label.className = 'upload-file-name';
+            label.textContent = file.name;
+
+            const progressWrap = document.createElement('div');
+            progressWrap.className = 'upload-progress-wrap';
+
+            const progressFill = document.createElement('span');
+            progressFill.className = 'upload-progress-fill';
+            progressWrap.appendChild(progressFill);
+
+            const progressLabel = document.createElement('span');
+            progressLabel.className = 'upload-progress-label';
+            progressLabel.textContent = '0%';
+
+            const done = document.createElement('span');
+            done.className = 'upload-success';
+            done.textContent = '✓';
+
+            item.appendChild(label);
+            item.appendChild(progressWrap);
+            item.appendChild(progressLabel);
+            item.appendChild(done);
+            previewBox.appendChild(item);
+
+            const tick = () => {
+              let value = 0;
+              const interval = setInterval(() => {
+                value += 12;
+                if (value >= 100) {
+                  value = 100;
+                  clearInterval(interval);
+                  progressFill.style.width = '100%';
+                  progressLabel.textContent = 'Done';
+                  progressLabel.style.color = '#0d6b48';
+                  done.classList.add('visible');
+                  return;
+                }
+                progressFill.style.width = value + '%';
+                progressLabel.textContent = value + '%';
+              }, 120);
+            };
+
+            tick();
+          });
+        });
+      }
+    </script>
+  </body>
+</html>

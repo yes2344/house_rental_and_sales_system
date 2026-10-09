@@ -1,0 +1,270 @@
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import serializers
+
+from accounts.models import Profile
+from admin.models import AdminAuditEvent
+from properties.models import ListingReport, Property, PropertyBrokerAssignment
+
+
+User = get_user_model()
+
+
+class AdminRoleField(serializers.ChoiceField):
+    def get_attribute(self, instance):
+        return instance
+
+    def to_representation(self, instance):
+        if instance.is_staff:
+            return 'administrator'
+        profile = getattr(instance, 'profile', None)
+        return profile.role if profile else None
+
+
+class AdminBrokerApprovalField(serializers.BooleanField):
+    def get_attribute(self, instance):
+        return instance
+
+    def to_representation(self, instance):
+        profile = getattr(instance, 'profile', None)
+        return bool(profile and profile.broker_approved)
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    role = AdminRoleField(choices=Profile.Role.choices, required=False)
+    broker_approved = AdminBrokerApprovalField(required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'is_active',
+            'is_staff',
+            'is_superuser',
+            'role',
+            'broker_approved',
+            'date_joined',
+        ]
+        read_only_fields = ['id', 'username', 'is_staff', 'is_superuser', 'date_joined']
+
+    def to_internal_value(self, data):
+        privileged_fields = {'is_staff', 'is_superuser'} & data.keys()
+        if privileged_fields:
+            raise serializers.ValidationError(
+                {field: 'Administrator privileges cannot be changed through this endpoint.' for field in privileged_fields}
+            )
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        if self.instance and self.instance.pk == self.context['request'].user.pk:
+            if attrs.get('is_active') is False:
+                raise serializers.ValidationError({'is_active': 'You cannot deactivate your own account.'})
+        if self.instance and self.instance.is_staff and {'role', 'broker_approved'} & attrs.keys():
+            raise serializers.ValidationError('Administrator roles cannot be changed through this endpoint.')
+        resulting_role = attrs.get(
+            'role',
+            getattr(getattr(self.instance, 'profile', None), 'role', Profile.Role.CUSTOMER),
+        )
+        if attrs.get('broker_approved') and resulting_role != Profile.Role.BROKER:
+            raise serializers.ValidationError(
+                {'broker_approved': 'Only a broker account can be approved.'}
+            )
+        return attrs
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        role = validated_data.pop('role', None)
+        broker_approved = validated_data.pop('broker_approved', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+
+        if role is not None or broker_approved is not None:
+            profile, _ = Profile.objects.get_or_create(
+                user=instance,
+                defaults={'role': role or Profile.Role.CUSTOMER},
+            )
+            if role is not None:
+                profile.role = role
+            if broker_approved is not None:
+                profile.broker_approved = broker_approved
+            elif role is not None and role != Profile.Role.BROKER:
+                profile.broker_approved = False
+            profile.save(update_fields=['role', 'broker_approved', 'updated_at'])
+            instance.profile = profile
+        return instance
+
+
+class AdminPropertySerializer(serializers.ModelSerializer):
+    moderation_note = serializers.CharField(
+        max_length=2000,
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
+    owner_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Property
+        fields = [
+            'id',
+            'title',
+            'slug',
+            'location',
+            'property_type',
+            'listing_type',
+            'price',
+            'status',
+            'publication_status',
+            'is_featured',
+            'owner_id',
+            'moderation_note',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'title',
+            'slug',
+            'location',
+            'property_type',
+            'listing_type',
+            'price',
+            'owner_id',
+            'created_at',
+            'updated_at',
+        ]
+
+    def validate(self, attrs):
+        publication_status = attrs.get(
+            'publication_status',
+            self.instance.publication_status if self.instance else Property.PublicationStatus.PENDING_REVIEW,
+        )
+        property_status = attrs.get(
+            'status',
+            self.instance.status if self.instance else Property.Status.AVAILABLE,
+        )
+        listing_type = self.instance.listing_type if self.instance else Property.ListingType.SALE
+        if (
+            attrs.get('publication_status') == Property.PublicationStatus.REJECTED
+            and not attrs.get('moderation_note', '').strip()
+        ):
+            raise serializers.ValidationError(
+                {'moderation_note': 'A reason is required when rejecting a listing.'}
+            )
+        if publication_status == Property.PublicationStatus.PUBLISHED and property_status not in (
+            Property.Status.AVAILABLE,
+            Property.Status.LEGACY_ACTIVE,
+        ):
+            raise serializers.ValidationError(
+                {'publication_status': 'Only available properties can be published.'}
+            )
+        if property_status == Property.Status.RENTED and listing_type != Property.ListingType.RENT:
+            raise serializers.ValidationError({'status': 'Only rental listings can be marked rented.'})
+        if property_status == Property.Status.SOLD and listing_type != Property.ListingType.SALE:
+            raise serializers.ValidationError({'status': 'Only sale listings can be marked sold.'})
+        return attrs
+
+
+class PublicListingReportSerializer(serializers.ModelSerializer):
+    property_id = serializers.PrimaryKeyRelatedField(
+        source='property',
+        queryset=Property.objects.filter(
+            publication_status=Property.PublicationStatus.PUBLISHED,
+            status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+        ),
+        write_only=True,
+    )
+
+    class Meta:
+        model = ListingReport
+        fields = ['id', 'property_id', 'reporter_name', 'reporter_email', 'reason', 'details', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+    def validate_reporter_name(self, value):
+        return value.strip()
+
+
+class PublicReportReceiptSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    status = serializers.ChoiceField(choices=ListingReport.Status.choices)
+    created_at = serializers.DateTimeField()
+
+
+class AdminListingReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ListingReport
+        fields = [
+            'id',
+            'property',
+            'property_title',
+            'reporter_name',
+            'reporter_email',
+            'reason',
+            'details',
+            'status',
+            'moderator_notes',
+            'reviewed_by',
+            'reviewed_at',
+            'created_at',
+        ]
+        read_only_fields = [
+            'id',
+            'property',
+            'property_title',
+            'reporter_name',
+            'reporter_email',
+            'reason',
+            'details',
+            'reviewed_by',
+            'reviewed_at',
+            'created_at',
+        ]
+
+    def update(self, instance, validated_data):
+        result = super().update(instance, validated_data)
+        if result.status == ListingReport.Status.PENDING:
+            result.reviewed_by = None
+            result.reviewed_at = None
+        else:
+            result.reviewed_by = self.context['request'].user
+            result.reviewed_at = timezone.now()
+        result.save(update_fields=['reviewed_by', 'reviewed_at'])
+        return result
+
+
+class AdminAuditEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminAuditEvent
+        fields = [
+            'id',
+            'actor_username',
+            'action',
+            'object_type',
+            'object_id',
+            'changes',
+            'created_at',
+        ]
+
+
+class AdminBrokerAssignmentSerializer(serializers.ModelSerializer):
+    broker_id = serializers.PrimaryKeyRelatedField(
+        source='broker',
+        queryset=User.objects.filter(
+            profile__role=Profile.Role.BROKER,
+            profile__broker_approved=True,
+        ),
+        required=True,
+    )
+    broker_username = serializers.CharField(source='broker.username', read_only=True)
+    granted_by_username = serializers.CharField(source='granted_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = PropertyBrokerAssignment
+        fields = ['id', 'broker_id', 'broker_username', 'granted_by_username', 'granted_at']
+        read_only_fields = ['id', 'broker_username', 'granted_by_username', 'granted_at']

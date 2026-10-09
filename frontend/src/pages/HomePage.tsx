@@ -1,0 +1,227 @@
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, House, MapPin, Search, ShieldCheck, UsersRound } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+
+import { getErrorMessage } from '../api/client';
+import { getLatestProperties, type PropertySummary } from '../api/properties';
+import { PropertyCard } from '../components/PropertyCard';
+import type { Locale, MessageKey } from '../i18n';
+
+export interface HomePageProps {
+  locale: Locale;
+  text: (key: MessageKey) => string;
+}
+
+export function HomePage({ locale, text }: HomePageProps) {
+  const navigate = useNavigate();
+  const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
+  const [propertyType, setPropertyType] = useState('');
+  const [location, setLocation] = useState('Debre Markos');
+  const [properties, setProperties] = useState<PropertySummary[]>([]);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const [listingsError, setListingsError] = useState('');
+
+  const loadListings = useCallback(async () => {
+    setListingsLoading(true);
+    setListingsError('');
+    try {
+      setProperties(await getLatestProperties());
+    } catch (error) {
+      setListingsError(getErrorMessage(error));
+    } finally {
+      setListingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadListings();
+  }, [loadListings]);
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = new URLSearchParams({ listing_type: listingType });
+    if (location.trim()) query.set('location', location.trim());
+    if (propertyType) query.set('property_type', propertyType);
+    navigate(`/properties?${query.toString()}`);
+  };
+
+  const searchCategory = (category: string) => {
+    navigate(`/properties?${new URLSearchParams({ property_type: category }).toString()}`);
+  };
+
+  return (
+    <main id="main-content">
+      <section className="hero-section">
+        <div className="container hero-grid">
+          <div className="hero-copy">
+            <p className="eyebrow"><span className="eyebrow-dot" />{text('heroEyebrow')}</p>
+            <h1>{text('heroTitle')}</h1>
+            <p className="hero-description">{text('heroBody')}</p>
+            <a className="hero-scroll-link" href="#latest-listings">
+              <span className="scroll-icon"><ArrowDown size={15} aria-hidden="true" /></span>
+              <span>{text('explore')}</span>
+            </a>
+          </div>
+          <div className="hero-visual">
+            <img src="/debre-markos-hills.svg" alt={text('heroArt')} />
+            <div className="hero-note">
+              <span className="hero-note-icon"><MapPin size={16} aria-hidden="true" /></span>
+              <span><strong>{text('illustrationCity')}</strong><small>Ethiopia · ኢትዮጵያ</small></span>
+            </div>
+            <div className="hero-image-caption">{text('illustrationCaption')}</div>
+          </div>
+          <form className="search-panel" onSubmit={submitSearch}>
+            <div className="search-panel-head">
+              <div>
+                <span className="search-overline"><Search size={14} aria-hidden="true" /> {text('searchLabel')}</span>
+              </div>
+              <div className="listing-type-toggle" role="group" aria-label={text('searchLabel')}>
+                <button
+                  type="button"
+                  className={listingType === 'sale' ? 'is-active' : ''}
+                  aria-pressed={listingType === 'sale'}
+                  onClick={() => setListingType('sale')}
+                >{text('searchBuy')}</button>
+                <button
+                  type="button"
+                  className={listingType === 'rent' ? 'is-active' : ''}
+                  aria-pressed={listingType === 'rent'}
+                  onClick={() => setListingType('rent')}
+                >{text('searchRent')}</button>
+              </div>
+            </div>
+            <div className="search-fields">
+              <label className="search-field">
+                <span>{text('location')}</span>
+                <span className="search-input-wrap"><MapPin size={17} aria-hidden="true" />
+                  <input
+                    value={location}
+                    onChange={(event) => setLocation(event.target.value)}
+                    placeholder={text('locationPlaceholder')}
+                    autoComplete="address-level2"
+                  />
+                </span>
+              </label>
+              <label className="search-field search-field-type">
+                <span>{text('propertyType')}</span>
+                <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
+                  <option value="">{text('anyType')}</option>
+                  <option value="house">{text('house')}</option>
+                  <option value="apartment">{text('apartment')}</option>
+                  <option value="land">{text('land')}</option>
+                  <option value="commercial">{text('commercial')}</option>
+                </select>
+              </label>
+              <button className="button button-primary search-submit" type="submit">
+                <Search size={17} aria-hidden="true" /><span>{text('searchButton')}</span>
+              </button>
+            </div>
+            <p className="search-note"><Check size={14} aria-hidden="true" />{text('searchNote')}</p>
+          </form>
+        </div>
+      </section>
+
+      <section className="trust-strip" aria-label="Marketplace features">
+        <div className="container trust-inner">
+          <div className="trust-item"><span className="trust-icon"><ShieldCheck size={18} aria-hidden="true" /></span>{text('promiseStatus')}</div>
+          <span className="trust-divider" aria-hidden="true" />
+          <div className="trust-item"><span className="trust-icon"><UsersRound size={18} aria-hidden="true" /></span>{text('promiseContact')}</div>
+          <span className="trust-divider" aria-hidden="true" />
+          <div className="trust-item"><span className="trust-icon"><Check size={18} aria-hidden="true" /></span>{text('promiseViewing')}</div>
+        </div>
+      </section>
+
+      <section className="section listings-section" id="latest-listings">
+        <div className="container">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow eyebrow-muted">{text('latestEyebrow')}</p>
+              <h2>{text('latestTitle')}</h2>
+              <p className="section-description">{text('latestDescription')}</p>
+            </div>
+            <Link className="text-link desktop-only" to="/properties">{text('seeAll')} <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+          {listingsLoading ? (
+            <div className="listing-state" role="status"><span className="loading-spinner" />{text('loadingListings')}</div>
+          ) : listingsError ? (
+            <div className="listing-state listing-error" role="alert">
+              <span>{text('listingsError')} <small>{listingsError}</small></span>
+              <button className="button button-outline" type="button" onClick={() => void loadListings()}>{text('retry')}</button>
+            </div>
+          ) : properties.length ? (
+            <div className="listing-grid">
+              {properties.map((property) => (
+                <PropertyCard key={property.id} property={property} locale={locale} text={text} />
+              ))}
+            </div>
+          ) : (
+            <div className="listing-empty">
+              <span className="empty-icon"><House size={23} aria-hidden="true" /></span>
+              <p>{text('noListings')}</p>
+              <Link className="text-link" to="/properties">{text('browseAll')} <ArrowRight size={16} aria-hidden="true" /></Link>
+            </div>
+          )}
+          <Link className="text-link mobile-only" to="/properties">{text('seeAll')} <ArrowRight size={16} aria-hidden="true" /></Link>
+        </div>
+      </section>
+
+      <section className="section category-section">
+        <div className="container">
+          <div className="section-heading category-heading">
+            <div>
+              <p className="eyebrow eyebrow-muted">{text('categoryEyebrow')}</p>
+              <h2>{text('categoryTitle')}</h2>
+              <p className="section-description">{text('categoryDescription')}</p>
+            </div>
+          </div>
+          <div className="category-grid">
+            {[
+              { key: 'house', type: 'house', symbol: '01' },
+              { key: 'apartment', type: 'apartment', symbol: '02' },
+              { key: 'land', type: 'land', symbol: '03' },
+              { key: 'commercial', type: 'commercial', symbol: '04' },
+            ].map((item) => (
+              <button className="category-card" type="button" key={item.type} onClick={() => searchCategory(item.type)}>
+                <span className="category-number">{item.symbol}</span>
+                <span className="category-icon"><House size={22} strokeWidth={1.6} aria-hidden="true" /></span>
+                <span className="category-name">{text(item.key as MessageKey)}</span>
+                <span className="category-action">{text('categorySearch')} <ArrowUpRight size={15} aria-hidden="true" /></span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section process-section" id="how-it-works">
+        <div className="container process-layout">
+          <div className="process-intro">
+            <p className="eyebrow"><span className="eyebrow-dot" />{text('processEyebrow')}</p>
+            <h2>{text('processTitle')}</h2>
+            <p>{text('heroBody')}</p>
+            <Link className="button button-light" to="/properties">{text('explore')} <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+          <div className="process-steps">
+            {[
+              { number: '01', title: 'processOneTitle', body: 'processOneBody', icon: <Search size={19} aria-hidden="true" /> },
+              { number: '02', title: 'processTwoTitle', body: 'processTwoBody', icon: <UsersRound size={19} aria-hidden="true" /> },
+              { number: '03', title: 'processThreeTitle', body: 'processThreeBody', icon: <MapPin size={19} aria-hidden="true" /> },
+            ].map((step) => (
+              <article className="process-step" key={step.number}>
+                <span className="step-number">{step.number}</span>
+                <span className="step-icon">{step.icon}</span>
+                <div><h3>{text(step.title as MessageKey)}</h3><p>{text(step.body as MessageKey)}</p></div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="closing-section">
+        <div className="container closing-inner">
+          <div><span className="closing-kicker">HABESHA HOMES · DEBRE MARKOS</span><h2>{text('closingTitle')}</h2><p>{text('closingBody')}</p></div>
+          <Link className="button button-light" to="/properties">{text('explore')} <ArrowRight size={16} aria-hidden="true" /></Link>
+        </div>
+      </section>
+    </main>
+  );
+}
