@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, generics, status
+from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -16,13 +17,14 @@ from accounts.serializers import (
     DelegatedAccountSerializer,
 )
 from admin.audit import record_admin_action
-from admin.models import AdminAuditEvent
+from admin.models import AdminAuditEvent, BrokerageSettings
 from admin.serializers import (
     AdminAuditEventSerializer,
     AdminBrokerAssignmentSerializer,
     AdminListingReportSerializer,
     AdminPropertySerializer,
     AdminUserSerializer,
+    BrokerageSettingsSerializer,
     PublicListingReportSerializer,
     PublicReportReceiptSerializer,
 )
@@ -30,6 +32,50 @@ from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
 
 User = get_user_model()
+
+
+class BrokerageSettingsView(APIView):
+    permission_classes = [AllowAny]
+    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [AllowAny()]
+        return [HasManagementPermission()]
+
+    def get_object(self):
+        try:
+            return BrokerageSettings.objects.get(pk=1)
+        except BrokerageSettings.DoesNotExist:
+            return BrokerageSettings(pk=1)
+
+    @extend_schema(summary='Retrieve public brokerage contact and social links')
+    def get(self, request):
+        return Response(BrokerageSettingsSerializer(self.get_object()).data)
+
+    @transaction.atomic
+    @extend_schema(
+        summary='Update brokerage contact and social links',
+        request=BrokerageSettingsSerializer,
+        responses={200: BrokerageSettingsSerializer},
+    )
+    def patch(self, request):
+        settings_obj, _ = BrokerageSettings.objects.select_for_update().get_or_create(pk=1)
+        serializer = BrokerageSettingsSerializer(
+            settings_obj,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        updated = serializer.save()
+        record_admin_action(
+            request.user,
+            action='brokerage_settings_updated',
+            object_type='brokerage_settings',
+            object_id=1,
+            changes={'fields': list(serializer.validated_data)},
+        )
+        return Response(BrokerageSettingsSerializer(updated).data)
 
 
 class AdminUserListView(generics.ListAPIView):

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Route, Routes } from 'react-router-dom';
 
+import { BrokerageContactProvider } from './BrokerageContactContext';
 import { PageLayout } from './components/PageLayout';
 import { RequireAuth } from './components/RequireAuth';
 import { RequireListingManager } from './components/RequireListingManager';
@@ -19,6 +20,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { OwnerListingsPage } from './pages/OwnerListingsPage';
 import { OwnerPropertyFormPage } from './pages/OwnerPropertyFormPage';
 import { OwnerViewingRequestsPage } from './pages/OwnerViewingRequestsPage';
+import { BrokerageSettingsPage } from './pages/BrokerageSettingsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { usePreferences } from './PreferencesContext';
 import { messages, type MessageKey } from './i18n';
@@ -32,6 +34,7 @@ export default function App() {
   );
 
   return (
+    <BrokerageContactProvider>
     <Routes>
       <Route
         element={(
@@ -59,15 +62,17 @@ export default function App() {
           <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
           <Route element={<RequireListingManager text={text} />}>
             <Route element={<OwnerDashboardLayout text={text} />}>
-              <Route path="owner/listings" element={<OwnerListingsPage locale={locale} text={text} />} />
-              <Route path="owner/listings/new" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
-              <Route path="owner/listings/:id/edit" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
-              <Route path="owner/viewing-requests" element={<OwnerViewingRequestsPage text={text} />} />
+          <Route path="management/listings" element={<OwnerListingsPage locale={locale} text={text} />} />
+          <Route path="management/listings/new" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
+          <Route path="management/listings/:id/edit" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
+          <Route path="management/viewing-requests" element={<OwnerViewingRequestsPage text={text} />} />
+          <Route path="management/brokerage" element={<BrokerageSettingsPage text={text} />} />
             </Route>
           </Route>
         </Route>
         <Route path="*" element={<NotFoundPage text={text} />} />
       </Route>
     </Routes>
+    </BrokerageContactProvider>
   );
 }

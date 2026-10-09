@@ -54,9 +54,9 @@
             <button type="button" class="slider-btn prev" aria-label="Previous image">‹</button>
             <div class="slider-dots">
               {% for image in images %}
-                <span class="slider-dot {% if forloop.first %}active{% endif %}" data-index="{{ forloop.counter0 }}"></span>
+                  <button type="button" class="slider-dot {% if forloop.first %}active{% endif %}" data-index="{{ forloop.counter0 }}" aria-label="Photo {{ forloop.counter }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}"></button>
               {% empty %}
-                <span class="slider-dot active" data-index="0"></span>
+                  <button type="button" class="slider-dot active" data-index="0" aria-label="Property photo placeholder" aria-pressed="true"></button>
               {% endfor %}
             </div>
             <button type="button" class="slider-btn next" aria-label="Next image">›</button>
@@ -85,9 +85,7 @@
       </div>
     </main>
 
-    <footer>
-      <div class="container">Debre Markos Homes · Property detail</div>
-    </footer>
+    {% include "user/_brokerage_footer.html" %}
 
     <script>
       const gallery = document.getElementById('property-gallery');
@@ -115,7 +113,28 @@
           dot.addEventListener('click', () => showSlide(Number(dot.dataset.index)));
         });
 
-        setInterval(() => showSlide(index + 1), 1500);
+        const slideshowRegion = gallery.parentElement;
+        const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+        let timer = null;
+        const stop = () => {
+          if (timer !== null) window.clearInterval(timer);
+          timer = null;
+        };
+        const start = () => {
+          if (motionPreference.matches || timer !== null) return;
+          timer = window.setInterval(() => showSlide(index + 1), 3000);
+        };
+        slideshowRegion?.addEventListener('mouseenter', stop);
+        slideshowRegion?.addEventListener('mouseleave', start);
+        slideshowRegion?.addEventListener('focusin', stop);
+        slideshowRegion?.addEventListener('focusout', (event) => {
+          if (!slideshowRegion.contains(event.relatedTarget)) start();
+        });
+        motionPreference.addEventListener('change', () => {
+          if (motionPreference.matches) stop();
+          else start();
+        });
+        start();
       }
     </script>
   </body>

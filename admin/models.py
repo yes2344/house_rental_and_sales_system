@@ -1,5 +1,46 @@
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import models
+
+
+class BrokerageSettings(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    platform_owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='brokerage_settings',
+        null=True,
+        blank=True,
+    )
+    business_name = models.CharField(max_length=160, blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    whatsapp_url = models.URLField(max_length=300, blank=True)
+    telegram_url = models.URLField(max_length=300, blank=True)
+    email = models.EmailField(blank=True)
+    facebook_url = models.URLField(max_length=300, blank=True)
+    instagram_url = models.URLField(max_length=300, blank=True)
+    tiktok_url = models.URLField(max_length=300, blank=True)
+    youtube_url = models.URLField(max_length=300, blank=True)
+    linkedin_url = models.URLField(max_length=300, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = 'brokerage settings'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        if self.platform_owner_id is None:
+            self.platform_owner = get_user_model().objects.filter(
+                is_superuser=True,
+                is_active=True,
+            ).order_by('pk').first()
+            if self.platform_owner is None:
+                raise ValidationError('Create an active platform-owner account before saving brokerage settings.')
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.business_name or 'Brokerage contact settings'
 
 
 class AdminAuditEvent(models.Model):

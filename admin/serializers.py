@@ -4,11 +4,43 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import Profile
-from admin.models import AdminAuditEvent
+from admin.models import AdminAuditEvent, BrokerageSettings
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
 
 User = get_user_model()
+
+
+class BrokerageSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BrokerageSettings
+        fields = [
+            'business_name',
+            'phone',
+            'whatsapp_url',
+            'telegram_url',
+            'email',
+            'facebook_url',
+            'instagram_url',
+            'tiktok_url',
+            'youtube_url',
+            'linkedin_url',
+        ]
+
+    def validate(self, attrs):
+        for field in (
+            'whatsapp_url',
+            'telegram_url',
+            'facebook_url',
+            'instagram_url',
+            'tiktok_url',
+            'youtube_url',
+            'linkedin_url',
+        ):
+            value = attrs.get(field)
+            if value and not value.startswith(('https://', 'http://')):
+                raise serializers.ValidationError({field: 'Enter an HTTP or HTTPS URL.'})
+        return attrs
 
 
 class AdminRoleField(serializers.ChoiceField):

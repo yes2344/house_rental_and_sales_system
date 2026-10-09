@@ -146,12 +146,17 @@ form .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .slider-dot {
   width: 10px;
   height: 10px;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   background: #c7d8d2;
   display: inline-block;
   cursor: pointer;
 }
 .slider-dot.active { background: #1a8a62; }
+@media (prefers-reduced-motion: reduce) {
+  .property-slide { transition: none; }
+}
 .upload-preview {
   display: grid;
   gap: 10px;

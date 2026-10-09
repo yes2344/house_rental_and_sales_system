@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import type { PropertySummary } from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
-import { PropertyPhoto } from './PropertyPhoto';
+import { PropertySlideshow } from './PropertySlideshow';
 
 interface PropertyCardProps {
   property: PropertySummary;
@@ -33,18 +33,23 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
   return (
     <article className="listing-card">
       <FavoriteButton propertyId={property.id} text={text} />
-      <Link className="listing-image-link" to={`/properties/${property.slug}`} aria-label={property.title}>
-        <PropertyPhoto
-          src={property.primary_image}
-          alt=""
-          className="listing-image"
-          fallbackClassName="listing-image listing-image-placeholder"
+      <div className="listing-image-link">
+        <PropertySlideshow
+          images={property.images ?? []}
+          fallbackImage={property.primary_image}
+          title={property.title}
           fallbackLabel={text('emptyImageLabel')}
+          previousLabel={text('previousPage')}
+          nextLabel={text('nextPage')}
+          photoLabel={text('photoNumber')}
         />
+        <Link className="listing-image-target" to={`/properties/${property.slug}`}>
+          <span className="visually-hidden">{property.title}</span>
+        </Link>
         <span className={`listing-type ${property.listing_type === 'rent' ? 'is-rent' : ''}`}>
           {property.listing_type === 'rent' ? text('forRent') : text('forSale')}
         </span>
-      </Link>
+      </div>
       <div className="listing-card-content">
         <div className="listing-location"><MapPin size={14} aria-hidden="true" />{property.location}</div>
         <h3><Link to={`/properties/${property.slug}`}>{property.title}</Link></h3>

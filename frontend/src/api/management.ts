@@ -36,15 +36,13 @@ export interface ManagedProperty {
   status: ManagedPropertyStatus;
   publication_status: PublicationStatus;
   is_featured: boolean;
-  owner_id: number | null;
   submitted_by_id: number | null;
-  advertising_authorized: boolean;
-  contact_publicly_visible: boolean;
   moderation_note: string;
   amenities: number[];
   contact_name: string;
   contact_phone: string;
   contact_email: string;
+  images: { id: number; url: string | null; caption: string; is_primary: boolean }[];
   created_at: string;
   updated_at: string;
 }
@@ -68,8 +66,6 @@ export interface ManagedPropertyPayload {
   contact_name: string;
   contact_phone: string;
   contact_email: string;
-  advertising_authorized: boolean;
-  contact_publicly_visible: boolean;
 }
 
 export interface ManagedImage {
@@ -140,7 +136,7 @@ export async function getManagedProperties(
   filters: ManagedPropertyFilters,
   signal?: AbortSignal,
 ): Promise<PaginatedResponse<ManagedProperty>> {
-  const response = await apiClient.get<PaginatedResponse<ManagedProperty>>('/owner/properties/', {
+  const response = await apiClient.get<PaginatedResponse<ManagedProperty>>('/management/properties/', {
     params: filters,
     signal,
   });
@@ -148,12 +144,12 @@ export async function getManagedProperties(
 }
 
 export async function getManagedProperty(id: number, signal?: AbortSignal): Promise<ManagedProperty> {
-  const response = await apiClient.get<ManagedProperty>(`/owner/properties/${id}/`, { signal });
+  const response = await apiClient.get<ManagedProperty>(`/management/properties/${id}/`, { signal });
   return response.data;
 }
 
 export async function createManagedProperty(payload: ManagedPropertyPayload): Promise<ManagedProperty> {
-  const response = await apiClient.post<ManagedProperty>('/owner/properties/', payload);
+  const response = await apiClient.post<ManagedProperty>('/management/properties/', payload);
   return response.data;
 }
 
@@ -161,22 +157,28 @@ export async function updateManagedProperty(
   id: number,
   payload: ManagedPropertyPayload,
 ): Promise<ManagedProperty> {
-  const response = await apiClient.patch<ManagedProperty>(`/owner/properties/${id}/`, payload);
+  const response = await apiClient.patch<ManagedProperty>(`/management/properties/${id}/`, payload);
   return response.data;
 }
 
-export async function submitManagedProperty(id: number): Promise<ManagedProperty> {
-  const response = await apiClient.post<ManagedProperty>(`/owner/properties/${id}/submit/`);
+export async function updateManagedPropertyPublication(
+  id: number,
+  publication_status: 'published' | 'draft',
+): Promise<ManagedProperty> {
+  const response = await apiClient.post<ManagedProperty>(
+    `/management/properties/${id}/publication/`,
+    { publication_status },
+  );
   return response.data;
 }
 
 export async function deleteManagedProperty(id: number): Promise<void> {
-  await apiClient.delete(`/owner/properties/${id}/`);
+  await apiClient.delete(`/management/properties/${id}/`);
 }
 
 export async function getManagedImages(propertyId: number, signal?: AbortSignal): Promise<ManagedImage[]> {
   const response = await apiClient.get<PaginatedResponse<ManagedImage>>(
-    `/owner/properties/${propertyId}/images/`,
+    `/management/properties/${propertyId}/images/`,
     { signal },
   );
   return response.data.results;
@@ -193,7 +195,7 @@ export async function uploadManagedImage(
   formData.append('caption', caption);
   formData.append('is_primary', String(isPrimary));
   const response = await apiClient.post<ManagedImage>(
-    `/owner/properties/${propertyId}/images/`,
+    `/management/properties/${propertyId}/images/`,
     formData,
   );
   return response.data;
@@ -205,14 +207,14 @@ export async function updateManagedImage(
   payload: { is_primary?: boolean; caption?: string },
 ): Promise<ManagedImage> {
   const response = await apiClient.patch<ManagedImage>(
-    `/owner/properties/${propertyId}/images/${imageId}/`,
+    `/management/properties/${propertyId}/images/${imageId}/`,
     payload,
   );
   return response.data;
 }
 
 export async function deleteManagedImage(propertyId: number, imageId: number): Promise<void> {
-  await apiClient.delete(`/owner/properties/${propertyId}/images/${imageId}/`);
+  await apiClient.delete(`/management/properties/${propertyId}/images/${imageId}/`);
 }
 
 export interface ManagedViewingRequestFilters {
@@ -227,7 +229,7 @@ export async function getManagedViewingRequests(
   signal?: AbortSignal,
 ): Promise<PaginatedResponse<ManagedViewingRequest>> {
   const response = await apiClient.get<PaginatedResponse<ManagedViewingRequest>>(
-    '/owner/viewing-requests/',
+    '/management/viewing-requests/',
     { params: filters, signal },
   );
   return response.data;
@@ -236,7 +238,7 @@ export async function getManagedViewingRequests(
 export async function getManagedViewingRequest(
   id: number,
 ): Promise<ManagedViewingRequest> {
-  const response = await apiClient.get<ManagedViewingRequest>(`/owner/viewing-requests/${id}/`);
+  const response = await apiClient.get<ManagedViewingRequest>(`/management/viewing-requests/${id}/`);
   return response.data;
 }
 
@@ -245,7 +247,7 @@ export async function updateManagedViewingRequest(
   payload: ManagedViewingRequestPayload,
 ): Promise<ManagedViewingRequest> {
   const response = await apiClient.patch<ManagedViewingRequest>(
-    `/owner/viewing-requests/${id}/`,
+    `/management/viewing-requests/${id}/`,
     payload,
   );
   return response.data;

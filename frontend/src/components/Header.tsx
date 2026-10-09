@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowUpRight, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
@@ -18,6 +18,14 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const [logoutError, setLogoutError] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
   const { account, authLoading, signOut } = useAuth();
+  const canManageListings = Boolean(account?.is_platform_owner || account?.management_permissions.some(
+    (permission) => [
+      'properties.view_all',
+      'properties.moderate',
+      'properties.edit_all',
+      'properties.manage_assigned',
+    ].includes(permission),
+  ));
   const closeMenu = () => setMenuOpen(false);
   const logout = () => {
     setLogoutError('');
@@ -96,9 +104,11 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             ) : (
               <Link className="header-sign-in" to="/login" onClick={closeMenu}>{text('signIn')}</Link>
             )}
-            <Link className="button button-small button-primary" to="/owner/listings/new" onClick={closeMenu}>
-              {text('listAProperty')} <ArrowUpRight size={15} aria-hidden="true" />
-            </Link>
+            {canManageListings && (
+              <Link className="button button-small button-primary" to="/management/listings" onClick={closeMenu}>
+                {text('managerListings')}
+              </Link>
+            )}
             {logoutError && <span className="header-action-error" role="alert">{logoutError}</span>}
             {preferenceError && <span className="header-action-error" role="alert">{preferenceError}</span>}
           </div>

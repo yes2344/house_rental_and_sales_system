@@ -18,11 +18,7 @@ def managed_properties(user):
     ):
         return Property.objects.all()
 
-    scope = Q()
-    if has_listing_role(user, Profile.Role.OWNER):
-        scope |= Q(owner=user)
-    if user and user.is_authenticated:
-        scope |= Q(submitted_by=user)
+    scope = Q(pk__in=[])
     if (
         has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
@@ -37,11 +33,7 @@ def editable_properties(user):
     if has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL):
         return Property.objects.all()
 
-    scope = Q()
-    if has_listing_role(user, Profile.Role.OWNER):
-        scope |= Q(owner=user)
-    if user and user.is_authenticated:
-        scope |= Q(submitted_by=user)
+    scope = Q(pk__in=[])
     if (
         has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)

@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from admin.models import BrokerageSettings
 from user.models import Property, ViewingRequest
 from viewings.models import ViewingRequestEvent
 
@@ -136,6 +137,7 @@ class ViewingRequestApprovalTests(TestCase):
             description='A visible home',
             features='Garden',
             status='active',
+            publication_status=Property.PublicationStatus.PUBLISHED,
             is_featured=False,
         )
 
@@ -143,3 +145,38 @@ class ViewingRequestApprovalTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, non_featured.title)
+
+    def test_legacy_public_pages_hide_drafts_and_unavailable_properties(self):
+        Property.objects.create(
+            title='Unpublished private draft',
+            slug='unpublished-private-draft',
+            location='Unverified address',
+            property_type='house',
+            price=320000,
+            description='Must not appear publicly.',
+            status='active',
+            publication_status=Property.PublicationStatus.DRAFT,
+        )
+
+        home_response = self.client.get(reverse('user_home'))
+        listings_response = self.client.get(reverse('user_listings'))
+        detail_response = self.client.get(
+            reverse('user_property_detail', args=['unpublished-private-draft'])
+        )
+
+        self.assertNotContains(home_response, 'Unpublished private draft')
+        self.assertNotContains(listings_response, 'Unpublished private draft')
+        self.assertEqual(detail_response.status_code, 404)
+
+    def test_legacy_public_footer_uses_configured_brokerage_contacts(self):
+        BrokerageSettings.objects.create(
+            business_name='Configured Brokerage',
+            phone='+251900000000',
+            email='brokerage@example.com',
+        )
+
+        response = self.client.get(reverse('user_home'))
+
+        self.assertContains(response, 'Configured Brokerage')
+        self.assertContains(response, 'tel:+251900000000')
+        self.assertContains(response, 'mailto:brokerage@example.com')

@@ -12,6 +12,7 @@ from admin.api_views import (
     AdminPropertyListView,
     AdminUserDetailView,
     AdminUserListView,
+    BrokerageSettingsView,
     PublicListingReportCreateView,
 )
 from accounts.api_views import (
@@ -31,7 +32,7 @@ from properties.views import (
     ManagedPropertyImageDetailView,
     ManagedPropertyImageListCreateView,
     ManagedPropertyListCreateView,
-    ManagedPropertySubmitView,
+    ManagedPropertyPublicationView,
     PublicAmenityListView,
     PublicPropertyDetailView,
     PublicPropertyListView,
@@ -46,6 +47,7 @@ from viewings.views import (
 app_name = 'api'
 
 urlpatterns = [
+    path('brokerage/contact/', BrokerageSettingsView.as_view(), name='brokerage-contact'),
     path('reports/', PublicListingReportCreateView.as_view(), name='listing-report-create'),
     path('auth/csrf/', CsrfTokenView.as_view(), name='csrf-token'),
     path('auth/register/', RegistrationView.as_view(), name='register'),
@@ -67,26 +69,26 @@ urlpatterns = [
         PrivateGuestReceiptView.as_view(),
         name='viewing-request-receipt',
     ),
-    path('owner/properties/', ManagedPropertyListCreateView.as_view(), name='managed-property-list'),
-    path('owner/properties/<int:pk>/', ManagedPropertyDetailView.as_view(), name='managed-property-detail'),
+    path('management/properties/', ManagedPropertyListCreateView.as_view(), name='managed-property-list'),
+    path('management/properties/<int:pk>/', ManagedPropertyDetailView.as_view(), name='managed-property-detail'),
     path(
-        'owner/properties/<int:pk>/submit/',
-        ManagedPropertySubmitView.as_view(),
-        name='managed-property-submit',
+        'management/properties/<int:pk>/publication/',
+        ManagedPropertyPublicationView.as_view(),
+        name='managed-property-publication',
     ),
     path(
-        'owner/properties/<int:property_id>/images/',
+        'management/properties/<int:property_id>/images/',
         ManagedPropertyImageListCreateView.as_view(),
         name='managed-property-images',
     ),
     path(
-        'owner/properties/<int:property_id>/images/<int:pk>/',
+        'management/properties/<int:property_id>/images/<int:pk>/',
         ManagedPropertyImageDetailView.as_view(),
         name='managed-property-image-detail',
     ),
-    path('owner/viewing-requests/', ManagedViewingRequestListView.as_view(), name='managed-viewing-list'),
+    path('management/viewing-requests/', ManagedViewingRequestListView.as_view(), name='managed-viewing-list'),
     path(
-        'owner/viewing-requests/<int:pk>/',
+        'management/viewing-requests/<int:pk>/',
         ManagedViewingRequestDetailView.as_view(),
         name='managed-viewing-detail',
     ),

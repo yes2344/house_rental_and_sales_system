@@ -1,0 +1,32 @@
+<footer>
+  <div class="container">
+    <strong>{{ brokerage_contact.business_name|default:"Debre Markos Homes" }}</strong>
+    {% if brokerage_contact.phone %}
+      <span> · <a href="tel:{{ brokerage_contact.phone }}">{{ brokerage_contact.phone }}</a></span>
+    {% endif %}
+    {% if brokerage_contact.email %}
+      <span> · <a href="mailto:{{ brokerage_contact.email }}">{{ brokerage_contact.email }}</a></span>
+    {% endif %}
+    {% if brokerage_contact.whatsapp_url %}
+      <span> · <a href="{{ brokerage_contact.whatsapp_url }}" target="_blank" rel="noopener noreferrer">WhatsApp</a></span>
+    {% endif %}
+    {% if brokerage_contact.telegram_url %}
+      <span> · <a href="{{ brokerage_contact.telegram_url }}" target="_blank" rel="noopener noreferrer">Telegram</a></span>
+    {% endif %}
+    {% if brokerage_contact.facebook_url %}
+      <span> · <a href="{{ brokerage_contact.facebook_url }}" target="_blank" rel="noopener noreferrer">Facebook</a></span>
+    {% endif %}
+    {% if brokerage_contact.instagram_url %}
+      <span> · <a href="{{ brokerage_contact.instagram_url }}" target="_blank" rel="noopener noreferrer">Instagram</a></span>
+    {% endif %}
+    {% if brokerage_contact.tiktok_url %}
+      <span> · <a href="{{ brokerage_contact.tiktok_url }}" target="_blank" rel="noopener noreferrer">TikTok</a></span>
+    {% endif %}
+    {% if brokerage_contact.youtube_url %}
+      <span> · <a href="{{ brokerage_contact.youtube_url }}" target="_blank" rel="noopener noreferrer">YouTube</a></span>
+    {% endif %}
+    {% if brokerage_contact.linkedin_url %}
+      <span> · <a href="{{ brokerage_contact.linkedin_url }}" target="_blank" rel="noopener noreferrer">LinkedIn</a></span>
+    {% endif %}
+  </div>
+</footer>

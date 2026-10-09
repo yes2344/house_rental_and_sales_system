@@ -47,7 +47,7 @@
           <h2>Filters</h2>
           <p>AI-driven results rank homes based on your keyword match, location, and features.</p>
           <form method="get" action="{% url 'user_listings' %}">
-            <label>Location<select name="q"><option value="">Any</option><option value="Addis Ababa Road">Addis Ababa Road</option><option value="Town Center">Town Center</option></select></label>
+            <label>Search by location<input type="text" name="q" value="{{ query|default:'' }}" placeholder="Enter a verified location" /></label>
             <label>Property type<select name="q"><option value="">Any</option><option value="villa">Villa</option><option value="house">House</option><option value="apartment">Apartment</option></select></label>
             <button type="submit" class="btn btn-primary" style="width:100%;">Apply filters</button>
           </form>
@@ -74,15 +74,13 @@
               </article>
               {% endwith %}
             {% empty %}
-              <p>No homes match your search. Try a broader keyword like “villa”, “family”, or “Town Center”.</p>
+              <p>No homes match your search. Try a broader keyword or a property type.</p>
             {% endfor %}
           </div>
         </div>
       </div>
     </main>
 
-    <footer>
-      <div class="container">Debre Markos Homes · Property listings</div>
-    </footer>
+    {% include "user/_brokerage_footer.html" %}
   </body>
 </html>

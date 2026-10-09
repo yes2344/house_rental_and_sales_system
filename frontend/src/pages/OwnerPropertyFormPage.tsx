@@ -10,7 +10,6 @@ import {
   getAmenities,
   getManagedImages,
   getManagedProperty,
-  submitManagedProperty,
   updateManagedImage,
   updateManagedProperty,
   uploadManagedImage,
@@ -50,8 +49,6 @@ interface PropertyFormValues {
   contact_name: string;
   contact_phone: string;
   contact_email: string;
-  advertising_authorized: boolean;
-  contact_publicly_visible: boolean;
 }
 
 const initialValues: PropertyFormValues = {
@@ -73,8 +70,6 @@ const initialValues: PropertyFormValues = {
   contact_name: '',
   contact_phone: '',
   contact_email: '',
-  advertising_authorized: false,
-  contact_publicly_visible: false,
 };
 
 function fromProperty(property: ManagedProperty): PropertyFormValues {
@@ -97,8 +92,6 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
     contact_name: property.contact_name,
     contact_phone: property.contact_phone,
     contact_email: property.contact_email,
-    advertising_authorized: property.advertising_authorized,
-    contact_publicly_visible: property.contact_publicly_visible,
   };
 }
 
@@ -140,7 +133,6 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
   const [saving, setSaving] = useState(false);
-  const [submissionBusy, setSubmissionBusy] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
   const [imageBusyId, setImageBusyId] = useState<number | null>(null);
@@ -228,8 +220,6 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
       area_value: values.area_value ? values.area_value : null,
       area_unit: values.area_value ? values.area_unit : '',
       rental_frequency: values.listing_type === 'rent' ? values.rental_frequency : '',
-      advertising_authorized: values.advertising_authorized,
-      contact_publicly_visible: values.contact_publicly_visible,
     };
     try {
       if (isEditing && propertyId !== null) {
@@ -239,31 +229,13 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         setSaveSuccess(text('listingSaved'));
       } else {
         const created = await createManagedProperty(payload);
-        navigate(`/owner/listings/${created.id}/edit`, { replace: true, state: { created: true } });
+        navigate(`/management/listings/${created.id}/edit`, { replace: true, state: { created: true } });
       }
     } catch (error: unknown) {
       setFieldErrors(getApiFieldErrors(error));
       setSaveError(getErrorMessage(error));
     } finally {
       setSaving(false);
-    }
-  };
-
-  const submitForReview = async () => {
-    if (propertyId === null) return;
-    setSubmissionBusy(true);
-    setSaveError('');
-    setSaveSuccess('');
-    setFieldErrors({});
-    try {
-      const submitted = await submitManagedProperty(propertyId);
-      setProperty(submitted);
-      setSaveSuccess(text('listingSubmitted'));
-    } catch (error: unknown) {
-      setFieldErrors(getApiFieldErrors(error));
-      setSaveError(getErrorMessage(error));
-    } finally {
-      setSubmissionBusy(false);
     }
   };
 
@@ -357,7 +329,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
     setSaveError('');
     try {
       await deleteManagedProperty(propertyId);
-      navigate('/owner/listings', { replace: true });
+      navigate('/management/listings', { replace: true });
     } catch (error: unknown) {
       setSaveError(getErrorMessage(error));
       setDeleting(false);
@@ -377,7 +349,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         <div className="manager-state manager-error" role="alert">
           <h1>{text('managerLoadError')}</h1>
           <p>{text('invalidListingId')}</p>
-          <Link className="button button-outline" to="/owner/listings">{text('backToListings')}</Link>
+          <Link className="button button-outline" to="/management/listings">{text('backToListings')}</Link>
         </div>
       </main>
     );
@@ -388,7 +360,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
       <main className="manager-page" id="main-content">
         <div className="manager-state manager-error" role="alert">
           <h1>{text('managerLoadError')}</h1><p>{pageError}</p>
-          <Link className="button button-outline" to="/owner/listings">{text('backToListings')}</Link>
+          <Link className="button button-outline" to="/management/listings">{text('backToListings')}</Link>
         </div>
       </main>
     );
@@ -406,7 +378,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           <h1>{text(isEditing ? 'editListing' : 'createListing')}</h1>
           <p>{text(isEditing ? 'editListingIntro' : 'createListingIntro')}</p>
         </div>
-        <Link className="button button-outline" to="/owner/listings"><ArrowLeft size={16} aria-hidden="true" />{text('backToListings')}</Link>
+        <Link className="button button-outline" to="/management/listings"><ArrowLeft size={16} aria-hidden="true" />{text('backToListings')}</Link>
       </section>
 
       {isEditing && property && (
@@ -556,42 +528,12 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('contact_email')}
             </label>
           </div>
-          <label className="amenity-choice">
-            <input
-              type="checkbox"
-              checked={values.advertising_authorized}
-              onChange={(event) => updateValue('advertising_authorized', event.target.checked)}
-            />
-            <span>{text('advertisingAuthorization')}</span>
-          </label>
-          <label className="amenity-choice">
-            <input
-              type="checkbox"
-              checked={values.contact_publicly_visible}
-              onChange={(event) => updateValue('contact_publicly_visible', event.target.checked)}
-            />
-            <span>{text('publicContactDisclosure')}</span>
-          </label>
-          {fieldError('advertising_authorized')}
-          {fieldError('contact_publicly_visible')}
         </section>
 
         <div className="manager-form-actions">
-          <button className="button button-primary" type="submit" disabled={saving || deleting || submissionBusy}>
+          <button className="button button-primary" type="submit" disabled={saving || deleting}>
             {saving ? text('savingListing') : text('saveListing')}
           </button>
-          {isEditing && property && (
-            property.publication_status === 'draft' || property.publication_status === 'rejected'
-          ) && (
-            <button
-              className="button button-outline"
-              type="button"
-              disabled={saving || deleting || submissionBusy}
-              onClick={() => void submitForReview()}
-            >
-              {submissionBusy ? text('submittingForReview') : text('submitForReview')}
-            </button>
-          )}
           {isEditing && (
             <button className="button button-danger" type="button" disabled={deleting || saving} onClick={() => void removeProperty()}>
               <Trash2 size={15} aria-hidden="true" />{deleting ? text('deletingListing') : text('deleteListing')}

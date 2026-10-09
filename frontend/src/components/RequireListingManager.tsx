@@ -10,7 +10,14 @@ interface RequireListingManagerProps {
 export function RequireListingManager({ text }: RequireListingManagerProps) {
   const { account } = useAuth();
 
-  if (account) {
+  const canManage = Boolean(
+    account?.is_platform_owner
+    || account?.management_permissions.some((permission) => permission.startsWith('properties.')
+      || permission.startsWith('viewings.')
+      || permission === 'settings.manage'),
+  );
+
+  if (canManage) {
     return <Outlet />;
   }
 

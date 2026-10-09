@@ -37,8 +37,11 @@ class PropertyForm(forms.ModelForm):
 
     def clean_images(self):
         files = self.files.getlist('images')
-        if len(files) > 10:
-            raise forms.ValidationError('You can upload up to 10 photos per property.')
+        existing_images = self.instance.images.count() if self.instance and self.instance.pk else 0
+        if existing_images + len(files) > 10:
+            raise forms.ValidationError(
+                'A property can have up to 10 photos in total. Remove existing photos before adding more.'
+            )
         return files
 
 

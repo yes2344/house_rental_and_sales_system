@@ -245,7 +245,7 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
                       <span className="manager-row-secondary">{request.phone}</span>
                     </td>
                     <td>
-                      <Link className="manager-row-property" to={`/owner/listings/${request.property.id}/edit`}>{request.property.title}</Link>
+                      <Link className="manager-row-property" to={`/management/listings/${request.property.id}/edit`}>{request.property.title}</Link>
                       <span className="manager-row-secondary">{request.property.location}</span>
                     </td>
                     <td>{preferredDate(request)}</td>
@@ -289,7 +289,7 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
             <div>
               <p className="eyebrow eyebrow-muted"><span className="eyebrow-dot" />{text('privateRequestDetails')}</p>
               <h2 id="request-review-title">{selected.full_name}</h2>
-              <Link to={`/owner/listings/${selected.property.id}/edit`}>{selected.property.title}</Link>
+              <Link to={`/management/listings/${selected.property.id}/edit`}>{selected.property.title}</Link>
             </div>
             <span className={`manager-badge request-${selected.status}`}>{text(requestStatusMessage(selected.status))}</span>
           </div>

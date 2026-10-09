@@ -35,6 +35,7 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     currency = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     primary_image = serializers.SerializerMethodField()
+    images = PropertyImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Property
@@ -55,6 +56,7 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
             'rental_frequency',
             'status',
             'primary_image',
+            'images',
             'created_at',
         ]
 
@@ -89,20 +91,8 @@ class PublicPropertyDetailSerializer(PublicPropertyListSerializer):
             'description',
             'features',
             'amenities',
-            'images',
-            'contact_name',
-            'contact_phone',
-            'contact_email',
             'updated_at',
         ]
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        if not instance.contact_publicly_visible:
-            representation.pop('contact_name', None)
-            representation.pop('contact_phone', None)
-            representation.pop('contact_email', None)
-        return representation
 
 
 class PropertyManagementSerializer(serializers.ModelSerializer):
@@ -146,7 +136,6 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         choices=Property.PublicationStatus.choices,
         read_only=True,
     )
-    owner_id = serializers.IntegerField(read_only=True, allow_null=True)
     submitted_by_id = serializers.IntegerField(read_only=True, allow_null=True)
     moderation_note = serializers.CharField(read_only=True)
 
@@ -172,10 +161,7 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'status',
             'publication_status',
             'is_featured',
-            'owner_id',
             'submitted_by_id',
-            'advertising_authorized',
-            'contact_publicly_visible',
             'moderation_note',
             'amenities',
             'contact_name',
@@ -189,7 +175,6 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'slug',
             'publication_status',
             'is_featured',
-            'owner_id',
             'submitted_by_id',
             'moderation_note',
             'created_at',
@@ -224,44 +209,18 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'rental_frequency': 'Rental frequency can only be set for rental listings.'}
             )
-        advertising_authorized = attrs.get(
-            'advertising_authorized',
-            self.instance.advertising_authorized if self.instance else False,
-        )
-        contact_publicly_visible = attrs.get(
-            'contact_publicly_visible',
-            self.instance.contact_publicly_visible if self.instance else False,
-        )
-        if contact_publicly_visible:
-            if not advertising_authorized:
-                raise serializers.ValidationError(
-                    {'contact_publicly_visible': 'Advertising authorization is required.'}
-                )
-            contact_phone = attrs.get(
-                'contact_phone',
-                self.instance.contact_phone if self.instance else '',
-            )
-            contact_email = attrs.get(
-                'contact_email',
-                self.instance.contact_email if self.instance else '',
-            )
-            if not contact_phone and not contact_email:
-                raise serializers.ValidationError(
-                    {'contact_publicly_visible': 'Add a public phone number or email address.'}
-                )
         return attrs
 
     @transaction.atomic
     def create(self, validated_data):
         amenities = validated_data.pop('amenities', [])
         user = self.context['request'].user
-        owner = user if Profile.objects.filter(user=user, role=Profile.Role.OWNER).exists() else None
         if 'area_sqft' in validated_data and 'area_value' not in validated_data:
             area_sqft = validated_data['area_sqft']
             validated_data['area_value'] = Decimal(area_sqft) if area_sqft > 0 else None
             validated_data['area_unit'] = Property.AreaUnit.SQUARE_FEET if area_sqft > 0 else ''
         property_obj = Property.objects.create(
-            owner=owner,
+            owner=None,
             submitted_by=user,
             publication_status=Property.PublicationStatus.DRAFT,
             **validated_data,

@@ -3,13 +3,12 @@ import re
 import secrets
 
 from django.db import transaction
-from django.db.models import Q
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
-from rest_framework.throttling import ScopedRateThrottle
 
+from admin.models import BrokerageSettings
 from .forms import ViewingRequestForm
 from .models import Property, ViewingRequest
 from viewings.models import ViewingRequestEvent
@@ -23,15 +22,29 @@ STOPWORDS = {
 }
 
 
+def _public_properties():
+    return Property.objects.filter(
+        publication_status=Property.PublicationStatus.PUBLISHED,
+        status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+    )
+
+
+def _public_context(**context):
+    return {
+        **context,
+        'brokerage_contact': BrokerageSettings.objects.filter(pk=1).first(),
+    }
+
+
 def _smart_search(query):
     if not query:
-        return Property.objects.filter(status='active').order_by('-is_featured', '-created_at')
+        return _public_properties().order_by('-is_featured', '-created_at')
 
     terms = [word.lower() for word in re.findall(r"[a-zA-Z0-9]+", query) if len(word) > 2 and word.lower() not in STOPWORDS]
     if not terms:
-        return Property.objects.filter(status='active').order_by('-is_featured', '-created_at')
+        return _public_properties().order_by('-is_featured', '-created_at')
 
-    queryset = Property.objects.filter(status='active')
+    queryset = _public_properties()
     scored = []
 
     for property_obj in queryset:
@@ -62,21 +75,28 @@ def _smart_search(query):
 
 
 def home(request):
-    featured = Property.objects.filter(status='active').order_by('-is_featured', '-created_at')[:6]
-    return render(request, 'user/home.html', {'featured': featured})
+    featured = _public_properties().order_by('-is_featured', '-created_at')[:6]
+    return render(request, 'user/home.html', _public_context(featured=featured))
 
 
 def listings(request):
     query = request.GET.get('q', '').strip()
     properties = _smart_search(query)
-    context = {'properties': properties, 'query': query}
-    return render(request, 'user/listings.html', context)
+    return render(
+        request,
+        'user/listings.html',
+        _public_context(properties=properties, query=query),
+    )
 
 
 def property_detail(request, slug):
-    property_obj = get_object_or_404(Property, slug=slug, status='active')
+    property_obj = get_object_or_404(_public_properties(), slug=slug)
     images = property_obj.images.all().order_by('id')
-    return render(request, 'user/property_detail.html', {'property': property_obj, 'images': images})
+    return render(
+        request,
+        'user/property_detail.html',
+        _public_context(property=property_obj, images=images),
+    )
 
 
 @never_cache
@@ -93,18 +113,6 @@ def viewing_request(request, property_id=None):
 
     if request.method == 'POST':
         form = ViewingRequestForm(request.POST)
-        throttle = ScopedRateThrottle()
-        throttle.scope = 'public_viewing_request'
-        if not throttle.allow_request(request, None):
-            form.add_error(None, 'Too many viewing requests. Please try again later.')
-            return render(request, 'user/viewing_request.html', {
-                'form': form,
-                'property': property_obj,
-                'property_list': Property.objects.filter(
-                    publication_status=Property.PublicationStatus.PUBLISHED,
-                    status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
-                ).order_by('-created_at'),
-            }, status=429)
         if form.is_valid():
             selected = request.POST.get('property_id') or (property_obj.pk if property_obj else None)
             if isinstance(selected, str) and not selected.isdecimal():
@@ -130,21 +138,26 @@ def viewing_request(request, property_id=None):
                         event_type=ViewingRequestEvent.Type.SUBMITTED,
                         to_status=viewing.status,
                     )
-                return render(request, 'user/viewing_request_receipt.html', {
-                    'viewing': viewing,
-                    'receipt_token': receipt_token,
-                })
+                return render(
+                    request,
+                    'user/viewing_request_receipt.html',
+                    _public_context(viewing=viewing, receipt_token=receipt_token),
+                )
     else:
         form = ViewingRequestForm(initial={'property_id': property_obj.id if property_obj else None})
 
-    return render(request, 'user/viewing_request.html', {
-        'form': form,
-        'property': property_obj,
-        'property_list': Property.objects.filter(
-            publication_status=Property.PublicationStatus.PUBLISHED,
-            status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
-        ).order_by('-created_at'),
-    })
+    return render(
+        request,
+        'user/viewing_request.html',
+        _public_context(
+            form=form,
+            property=property_obj,
+            property_list=Property.objects.filter(
+                publication_status=Property.PublicationStatus.PUBLISHED,
+                status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+            ).order_by('-created_at'),
+        ),
+    )
 
 
 @never_cache
@@ -155,16 +168,6 @@ def viewing_request_status(request):
     error = ''
     if request.method == 'POST':
         receipt_token = request.POST.get('receipt_token', '').strip()
-        throttle = ScopedRateThrottle()
-        throttle.scope = 'public_viewing_receipt'
-        if not throttle.allow_request(request, None):
-            error = 'Too many receipt lookups. Please try again later.'
-            return render(request, 'user/viewing_request_status.html', {
-                'receipt_token': receipt_token,
-                'viewing': None,
-                'error': error,
-                'appointment_timezone': timezone.get_current_timezone_name(),
-            }, status=429)
         if receipt_token and len(receipt_token) <= 200:
             digest = hashlib.sha256(receipt_token.encode()).hexdigest()
             decision = request.POST.get('decision')
@@ -213,9 +216,13 @@ def viewing_request_status(request):
         if viewing is None and not error:
             error = 'The request could not be found. Check the private receipt token and try again.'
 
-    return render(request, 'user/viewing_request_status.html', {
-        'receipt_token': receipt_token,
-        'viewing': viewing,
-        'error': error,
-        'appointment_timezone': timezone.get_current_timezone_name(),
-    })
+    return render(
+        request,
+        'user/viewing_request_status.html',
+        _public_context(
+            receipt_token=receipt_token,
+            viewing=viewing,
+            error=error,
+            appointment_timezone=timezone.get_current_timezone_name(),
+        ),
+    )

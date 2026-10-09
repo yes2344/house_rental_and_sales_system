@@ -10,6 +10,8 @@ export interface Account {
   last_name: string;
   role: AccountRole;
   phone: string;
+  management_permissions: string[];
+  is_platform_owner: boolean;
 }
 
 export interface RegistrationPayload {

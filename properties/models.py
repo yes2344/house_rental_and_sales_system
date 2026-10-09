@@ -1,8 +1,9 @@
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils.text import slugify
 
@@ -223,6 +224,7 @@ class PropertyImage(models.Model):
 
     class Meta:
         db_table = 'user_propertyimage'
+        ordering = ['pk']
         constraints = [
             models.UniqueConstraint(
                 fields=['property'],
@@ -230,6 +232,15 @@ class PropertyImage(models.Model):
                 name='property_image_one_primary_per_property',
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.property_id:
+            with transaction.atomic():
+                Property.objects.select_for_update().get(pk=self.property_id)
+                if PropertyImage.objects.filter(property_id=self.property_id).count() >= 10:
+                    raise ValidationError({'image': 'A property can have at most 10 images.'})
+                return super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.property.title} image'

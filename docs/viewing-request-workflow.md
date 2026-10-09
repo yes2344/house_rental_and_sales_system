@@ -3,7 +3,7 @@
 ## Lifecycle
 
 1. A visitor submits a viewing request with a preferred date and optional time. An account is not required.
-2. The property owner, submitting user, or an explicitly authorized assigned broker can propose a date and time, or reject the request.
+2. Only the platform broker or explicitly authorized staff can propose a date and time, or reject the request. Assigned brokers can act only on requests for their assigned properties.
 3. A proposal is not a confirmed appointment. Only the visitor holding the private receipt token can accept or decline it.
 4. Acceptance copies the proposal into the confirmed appointment fields. A visitor may decline a proposal; a manager can then offer a revised time.
 5. Each submission, proposal, revision, rejection, and visitor decision is recorded in `ViewingRequestEvent`. Internal notes and contact details are not copied into the event history.
@@ -23,13 +23,13 @@ Receipt responses are sent with `Cache-Control: no-store` and `Referrer-Policy: 
 
 ## Management access
 
-- Property owners and registered listing submitters can review viewing requests for their own listings.
-- Brokers need an active approval, `viewings.manage_assigned`, and an assignment to the matching property.
+- Property owners and listing submitters do not receive viewing-request access from ownership or submission alone.
+- Brokers need active approval, `viewings.manage_assigned`, and an assignment to the matching property.
 - Delegated staff need `viewings.view_all` to read all requests or `viewings.manage_all` to make changes across all requests.
 - Property permissions alone do not grant access to private requester details.
 - The platform superuser retains owner-level access.
 
-API management endpoints are `GET /api/v1/owner/viewing-requests/` and `GET/PATCH /api/v1/owner/viewing-requests/{id}/`. A manager PATCH can provide `proposed_date` and `proposed_time`, or `status: "rejected"`; it cannot set `status: "confirmed"` or write the confirmed schedule fields.
+API management endpoints are `GET /api/v1/management/viewing-requests/` and `GET/PATCH /api/v1/management/viewing-requests/{id}/`. A manager PATCH can provide `proposed_date` and `proposed_time`, or `status: "rejected"`; it cannot set `status: "confirmed"` or write the confirmed schedule fields.
 
 ## Notifications and deployment
 

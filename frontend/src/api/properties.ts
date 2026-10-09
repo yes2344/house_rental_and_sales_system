@@ -17,6 +17,7 @@ export interface PropertySummary {
   area_sqft: number;
   status: string;
   primary_image: string | null;
+  images: { id: number; url: string | null; caption: string; is_primary: boolean }[];
   created_at: string;
 }
 
@@ -24,10 +25,6 @@ export interface PropertyDetail extends PropertySummary {
   description: string;
   features: string;
   amenities: { id: number; name: string; name_am: string; slug: string }[];
-  images: { id: number; url: string | null; caption: string; is_primary: boolean }[];
-  contact_name: string;
-  contact_phone: string;
-  contact_email: string;
   updated_at: string;
 }
 

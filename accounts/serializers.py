@@ -28,11 +28,23 @@ class ProfilePhoneField(serializers.CharField):
 class AccountSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     phone = ProfilePhoneField(required=False, allow_blank=True)
+    management_permissions = serializers.SerializerMethodField()
+    is_platform_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone']
-        read_only_fields = ['id', 'username', 'role']
+        fields = [
+            'id',
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'role',
+            'phone',
+            'management_permissions',
+            'is_platform_owner',
+        ]
+        read_only_fields = ['id', 'username', 'role', 'management_permissions', 'is_platform_owner']
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_role(self, obj):
@@ -42,6 +54,17 @@ class AccountSerializer(serializers.ModelSerializer):
             return 'administrator'
         profile = getattr(obj, 'profile', None)
         return profile.role if profile else None
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_management_permissions(self, obj):
+        if obj.is_superuser:
+            return [permission for permission, _ in Profile.Permission.choices]
+        profile = getattr(obj, 'profile', None)
+        return profile.management_permissions if profile else []
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_platform_owner(self, obj):
+        return bool(obj.is_active and obj.is_superuser)
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -123,7 +146,6 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
 
     def validate_management_permissions(self, permissions):
         owner_only = {
-            Profile.Permission.SETTINGS_MANAGE,
             Profile.Permission.STAFF_MANAGE,
         }
         if owner_only.intersection(permissions):

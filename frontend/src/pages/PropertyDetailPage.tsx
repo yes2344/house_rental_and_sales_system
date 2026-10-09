@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { ArrowLeft, ArrowRight, Bath, BedDouble, CalendarDays, Check, Mail, MapPin, Phone, Ruler, Share2 } from 'lucide-react';
+import { ArrowLeft, Bath, BedDouble, CalendarDays, Check, Mail, MapPin, Phone, Ruler, Send, Share2 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
 import { getProperty, type PropertyDetail } from '../api/properties';
 import { FavoriteButton } from '../components/FavoriteButton';
-import { PropertyPhoto } from '../components/PropertyPhoto';
+import { PropertyGallery } from '../components/PropertyGallery';
+import { useBrokerageContact } from '../BrokerageContactContext';
 import type { MessageKey } from '../i18n';
 import type { HomePageProps } from './HomePage';
 
 export function PropertyDetailPage({ locale, text }: HomePageProps) {
   const { slug = '' } = useParams();
+  const { contact, error: contactError } = useBrokerageContact();
   const [property, setProperty] = useState<PropertyDetail | null>(null);
-  const [selectedImage, setSelectedImage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notFound, setNotFound] = useState(false);
@@ -25,7 +26,6 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
     setProperty(null);
     setError('');
     setNotFound(false);
-    setSelectedImage(0);
     getProperty(slug, controller.signal)
       .then(setProperty)
       .catch((requestError: unknown) => {
@@ -38,17 +38,6 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
       });
     return () => controller.abort();
   }, [slug]);
-
-  const galleryImages = useMemo(() => {
-    if (!property) return [];
-    const listedImages = property.images.filter((image) => image.url);
-    const orderedImages = [...listedImages].sort((first, second) => Number(second.is_primary) - Number(first.is_primary));
-    if (orderedImages.length) return orderedImages;
-    if (property.primary_image) {
-      return [{ id: property.id, url: property.primary_image, caption: '', is_primary: true }];
-    }
-    return [];
-  }, [property]);
 
   const formatPrice = (price: string) => new Intl.NumberFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
     maximumFractionDigits: 0,
@@ -88,7 +77,6 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
     land: 'land',
     commercial: 'commercial',
   };
-  const image = galleryImages[selectedImage];
   const formattedUpdatedDate = new Intl.DateTimeFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
     dateStyle: 'medium',
   }).format(new Date(property.updated_at));
@@ -108,48 +96,7 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
         {shareMessage && <p className="share-feedback" role="status">{shareMessage}</p>}
       </section>
 
-      <section className="container detail-gallery-section" aria-label={text('photos')}>
-        {galleryImages.length ? (
-          <div className="detail-gallery">
-            <div className="detail-main-image">
-              <PropertyPhoto
-                src={image?.url}
-                alt={`${image?.caption || text('propertyImage')}: ${property.title}`}
-                className="detail-property-image"
-                fallbackClassName="detail-main-image-placeholder"
-                fallbackLabel={text('noPhoto')}
-              />
-              <span className={`listing-type ${property.listing_type === 'rent' ? 'is-rent' : ''}`}>
-                {property.listing_type === 'rent' ? text('forRent') : text('forSale')}
-              </span>
-              {galleryImages.length > 1 && (
-                <>
-                  <button className="gallery-arrow gallery-previous" type="button" aria-label={text('previousPage')} onClick={() => setSelectedImage((selectedImage - 1 + galleryImages.length) % galleryImages.length)}><ArrowLeft size={19} /></button>
-                  <button className="gallery-arrow gallery-next" type="button" aria-label={text('nextPage')} onClick={() => setSelectedImage((selectedImage + 1) % galleryImages.length)}><ArrowRight size={19} /></button>
-                  <span className="gallery-count">{selectedImage + 1} / {galleryImages.length}</span>
-                </>
-              )}
-            </div>
-            {galleryImages.length > 1 && (
-              <div className="gallery-thumbnails">
-                {galleryImages.map((galleryImage, index) => (
-                  <button className={`gallery-thumbnail${selectedImage === index ? ' is-selected' : ''}`} key={galleryImage.id} type="button" aria-label={`${text('photoNumber')} ${index + 1}`} aria-pressed={selectedImage === index} onClick={() => setSelectedImage(index)}>
-                    <PropertyPhoto
-                      src={galleryImage.url}
-                      alt=""
-                      className="gallery-thumbnail-image"
-                      fallbackClassName="gallery-thumbnail-placeholder"
-                      fallbackLabel={text('emptyImageLabel')}
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="detail-no-photo"><span>{text('noPhoto')}</span></div>
-        )}
-      </section>
+      <PropertyGallery property={property} text={text} />
 
       <section className="container detail-content-layout">
         <div className="detail-primary-content">
@@ -184,16 +131,24 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
 
         <aside className="contact-card">
           <p className="eyebrow eyebrow-muted">{text('contactHeading')}</p>
-          <h2>{text('contactPerson')}</h2>
-          {property.contact_name && <p className="contact-name">{property.contact_name}</p>}
-          {property.contact_phone && (
-            <a className="contact-method" href={`tel:${property.contact_phone}`}><Phone size={17} aria-hidden="true" /><span><small>{text('contactByPhone')}</small><strong>{property.contact_phone}</strong></span></a>
+          <h2>{contact.business_name || text('contactPerson')}</h2>
+          {contact.phone && (
+            <a className="contact-method" href={`tel:${contact.phone}`}><Phone size={17} aria-hidden="true" /><span><small>{text('contactByPhone')}</small><strong>{contact.phone}</strong></span></a>
           )}
-          {property.contact_email && (
-            <a className="contact-method" href={`mailto:${property.contact_email}`}><Mail size={17} aria-hidden="true" /><span><small>{text('contactByEmail')}</small><strong>{property.contact_email}</strong></span></a>
+          {contact.whatsapp_url && (
+            <a className="contact-method" href={contact.whatsapp_url} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>WhatsApp</small><strong>{text('contactBroker')}</strong></span></a>
+          )}
+          {contact.telegram_url && (
+            <a className="contact-method" href={contact.telegram_url} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>Telegram</small><strong>{text('contactBroker')}</strong></span></a>
+          )}
+          {contact.email && (
+            <a className="contact-method" href={`mailto:${contact.email}`}><Mail size={17} aria-hidden="true" /><span><small>{text('contactByEmail')}</small><strong>{contact.email}</strong></span></a>
           )}
           <Link className="button button-primary viewing-cta" to={`/viewing-requests/new?property_id=${property.id}&property_slug=${encodeURIComponent(property.slug)}`}><CalendarDays size={16} aria-hidden="true" />{text('requestViewing')}</Link>
-          <p className="contact-note">{text('viewingNoAccount')}</p>
+          <p className="contact-note">{contactError ? text('brokerContactUnavailable') : text('viewingNoAccount')}</p>
+          {!contactError && !contact.phone && !contact.email && !contact.whatsapp_url && !contact.telegram_url && (
+            <p className="contact-note">{text('brokerContactNotConfigured')}</p>
+          )}
         </aside>
       </section>
     </main>

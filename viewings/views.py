@@ -3,7 +3,6 @@ import secrets
 
 from django.db import transaction
 from django.db.models import Q
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
@@ -170,7 +169,7 @@ def manageable_viewing_requests(user):
     ) or has_management_permission(user, Profile.Permission.VIEWING_MANAGE_ALL):
         return ViewingRequest.objects.all()
 
-    scope = Q(property__owner=user) | Q(property__submitted_by=user)
+    scope = Q(pk__in=[])
     if has_management_permission(user, Profile.Permission.VIEWING_MANAGE_ASSIGNED):
         scope |= Q(property__assigned_brokers=user)
     return ViewingRequest.objects.filter(scope).distinct()
@@ -181,7 +180,7 @@ class ManagedViewingRequestListView(generics.ListAPIView):
     serializer_class = ManagedViewingRequestSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status']
-    ordering_fields = ['created_at', 'preferred_date', 'proposed_date', 'scheduled_date']
+    ordering_fields = ['created_at', 'preferred_date', 'scheduled_date']
     ordering = ['-created_at']
 
     def get_queryset(self):
@@ -212,12 +211,10 @@ class ManagedViewingRequestDetailView(generics.RetrieveUpdateAPIView):
     @transaction.atomic
     def perform_update(self, serializer):
         viewing_request = (
-            ViewingRequest.objects
-            .select_related('property')
+            self.get_queryset()
             .select_for_update()
             .get(pk=serializer.instance.pk)
         )
-        self.check_object_permissions(self.request, viewing_request)
         serializer.instance = viewing_request
         serializer.save()
 

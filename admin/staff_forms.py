@@ -11,7 +11,6 @@ BROKER_PERMISSIONS = [
     (Profile.Permission.VIEWING_MANAGE_ASSIGNED, 'Manage assigned viewing requests'),
 ]
 OWNER_ONLY_PERMISSIONS = {
-    Profile.Permission.SETTINGS_MANAGE,
     Profile.Permission.STAFF_MANAGE,
 }
 
@@ -49,7 +48,7 @@ class DelegatedAccountCreateForm(forms.Form):
         if OWNER_ONLY_PERMISSIONS.intersection(permissions):
             self.add_error(
                 'management_permissions',
-                'Platform settings and delegated-account control remain owner-only.',
+                'Delegated-account control remains owner-only.',
             )
         if role == Profile.Role.BROKER and permissions - {
             Profile.Permission.PROPERTY_MANAGE_ASSIGNED,

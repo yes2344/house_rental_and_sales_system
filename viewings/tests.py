@@ -185,8 +185,18 @@ class PublicViewingRequestApiTests(APITestCase):
         request = ViewingRequest.objects.get(pk=created.data['id'])
         owner = get_user_model().objects.create_user(username='proposal-owner')
         Profile.objects.create(user=owner, role=Profile.Role.OWNER)
+        manager = get_user_model().objects.create_user(
+            username='proposal-manager',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=manager,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.VIEWING_MANAGE_ALL],
+        )
         request.property.owner = owner
         request.property.save(update_fields=['owner'])
+        self.client.force_authenticate(user=manager)
         proposal = self.client.patch(
             reverse('api:managed-viewing-detail', kwargs={'pk': request.pk}),
             {
@@ -196,9 +206,8 @@ class PublicViewingRequestApiTests(APITestCase):
             },
             format='json',
         )
-        self.assertEqual(proposal.status_code, 403)
+        self.assertEqual(proposal.status_code, 400)
 
-        self.client.force_authenticate(user=owner)
         direct_confirmation = self.client.patch(
             reverse('api:managed-viewing-detail', kwargs={'pk': request.pk}),
             {'status': 'confirmed'},
@@ -331,32 +340,25 @@ class ManagedViewingRequestApiTests(APITestCase):
             preferred_date=timezone.localdate() + timedelta(days=4),
         )
 
-    def test_owner_sees_and_updates_only_requests_for_owned_listings(self):
+    def test_property_owner_cannot_manage_requests_from_ownership_alone(self):
         self.client.force_authenticate(user=self.owner)
 
         listed = self.client.get(reverse('api:managed-viewing-list'))
-        updated = self.client.patch(
+        denied_update = self.client.patch(
             reverse('api:managed-viewing-detail', kwargs={'pk': self.viewing.pk}),
             {
                 'proposed_date': (timezone.localdate() + timedelta(days=5)).isoformat(),
                 'proposed_time': '15:00',
-                'agent_notes': 'Confirmed by the owner.',
+                'agent_notes': 'Unauthorized update.',
                 'email': 'attacker@example.com',
             },
             format='json',
         )
-        hidden = self.client.get(
-            reverse('api:managed-viewing-detail', kwargs={'pk': self.other_viewing.pk})
-        )
 
-        self.assertEqual(listed.status_code, 200)
-        self.assertEqual(listed.data['count'], 1)
-        self.assertEqual(listed.data['results'][0]['email'], 'visitor@example.com')
-        self.assertEqual(updated.status_code, 200)
-        self.assertEqual(updated.data['status'], ViewingRequest.Status.PROPOSED)
-        self.assertEqual(updated.data['proposed_date'], (timezone.localdate() + timedelta(days=5)).isoformat())
-        self.assertEqual(updated.data['email'], 'visitor@example.com')
-        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(listed.status_code, 403)
+        self.assertEqual(denied_update.status_code, 403)
+        self.viewing.refresh_from_db()
+        self.assertEqual(self.viewing.status, ViewingRequest.Status.PENDING)
 
     def test_assigned_property_permission_does_not_grant_viewing_request_access(self):
         broker = get_user_model().objects.create_user(username='property-only-broker')
@@ -423,7 +425,7 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.assertEqual(readable.status_code, 200)
         self.assertEqual(forbidden.status_code, 403)
 
-    def test_registered_submitter_can_manage_requests_for_their_own_property(self):
+    def test_registered_submitter_cannot_manage_requests_for_their_own_property(self):
         self.client.force_authenticate(user=self.customer)
 
         listed = self.client.get(reverse('api:managed-viewing-list'))
@@ -431,10 +433,8 @@ class ManagedViewingRequestApiTests(APITestCase):
             reverse('api:managed-viewing-detail', kwargs={'pk': self.submitted_viewing.pk})
         )
 
-        self.assertEqual(listed.status_code, 200)
-        self.assertEqual(listed.data['count'], 1)
-        self.assertEqual(detail.status_code, 200)
-        self.assertEqual(detail.data['property']['id'], self.submitted_property.pk)
+        self.assertEqual(listed.status_code, 403)
+        self.assertEqual(detail.status_code, 403)
 
     def test_approved_assigned_broker_can_manage_but_unapproved_broker_cannot(self):
         self.client.force_authenticate(user=self.broker)

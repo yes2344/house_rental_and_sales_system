@@ -8,9 +8,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts.permissions import (
-    IsActiveAuthenticated,
+    HasManagementPermission,
     IsAuthenticatedPropertyManagerOrAdministrator,
+    IsListingManager,
 )
+from accounts.models import Profile
 from admin.audit import record_admin_action
 from properties.access import editable_properties, managed_properties
 from properties.filters import PublicPropertyFilter
@@ -110,7 +112,7 @@ class PublicPropertyDetailView(generics.RetrieveAPIView):
 
 
 class ManagedPropertyListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsActiveAuthenticated]
+    permission_classes = [IsAuthenticatedPropertyManagerOrAdministrator]
     serializer_class = PropertyManagementSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'publication_status', 'listing_type', 'property_type']
@@ -193,65 +195,51 @@ class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
         instance.delete()
 
 
-class ManagedPropertySubmitView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticatedPropertyManagerOrAdministrator]
+class ManagedPropertyPublicationView(generics.GenericAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.PROPERTY_MODERATE
     serializer_class = PropertyManagementSerializer
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        managed_property = get_object_or_404(
-            managed_properties(request.user),
-            pk=kwargs['pk'],
-        )
         property_obj = get_object_or_404(
             Property.objects.select_for_update(),
-            pk=managed_property.pk,
+            pk=kwargs['pk'],
         )
         self.check_object_permissions(request, property_obj)
-
-        errors = {}
-        if not property_obj.advertising_authorized:
-            errors['advertising_authorized'] = 'Confirm that you are authorized to advertise this property.'
-        if not property_obj.contact_name.strip():
-            errors['contact_name'] = 'Enter the responsible property contact name.'
-        if not property_obj.contact_phone.strip() and not property_obj.contact_email.strip():
-            errors['contact_phone'] = 'Provide a phone number or email for the responsible contact.'
-        if property_obj.listing_type == Property.ListingType.RENT and not property_obj.rental_frequency:
-            errors['rental_frequency'] = 'Choose a rental price frequency.'
-        if property_obj.status not in (Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE):
-            errors['status'] = 'Only available properties can be submitted for review.'
-        if errors:
-            raise ValidationError(errors)
-
-        if property_obj.publication_status not in (
+        publication_status = request.data.get('publication_status')
+        if publication_status not in (
+            Property.PublicationStatus.PUBLISHED,
             Property.PublicationStatus.DRAFT,
-            Property.PublicationStatus.REJECTED,
         ):
-            raise ValidationError(
-                {'publication_status': 'Only a draft or rejected listing can be submitted.'}
-            )
-
+            raise ValidationError({
+                'publication_status': 'Choose published or draft.'
+            })
+        if (
+            publication_status == Property.PublicationStatus.PUBLISHED
+            and property_obj.status not in (Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE)
+        ):
+            raise ValidationError({
+                'publication_status': 'Only available properties can be published.'
+            })
         old_status = property_obj.publication_status
-        property_obj.publication_status = Property.PublicationStatus.PENDING_REVIEW
-        property_obj.moderation_note = ''
+        property_obj.publication_status = publication_status
+        if publication_status == Property.PublicationStatus.PUBLISHED:
+            property_obj.moderation_note = ''
         property_obj.save(update_fields=['publication_status', 'moderation_note', 'updated_at'])
-        record_admin_action(
-            request.user,
-            action='property_submitted',
-            object_type='property',
-            object_id=property_obj.pk,
-            changes={
-                'publication_status': {
-                    'from': old_status,
-                    'to': Property.PublicationStatus.PENDING_REVIEW,
-                },
-            },
-        )
+        if old_status != publication_status:
+            record_admin_action(
+                request.user,
+                action='property_publication_changed',
+                object_type='property',
+                object_id=property_obj.pk,
+                changes={'publication_status': {'from': old_status, 'to': publication_status}},
+            )
         return Response(self.get_serializer(property_obj).data)
 
 
 class ManagedPropertyImageListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsActiveAuthenticated]
+    permission_classes = [IsListingManager]
     serializer_class = PropertyImageManagementSerializer
     queryset = PropertyImage.objects.none()
 
@@ -288,7 +276,7 @@ class ManagedPropertyImageListCreateView(generics.ListCreateAPIView):
 
 
 class ManagedPropertyImageDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsActiveAuthenticated]
+    permission_classes = [IsListingManager]
     serializer_class = PropertyImageManagementSerializer
     http_method_names = ['get', 'patch', 'delete', 'head', 'options']
 

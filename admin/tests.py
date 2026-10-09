@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from accounts.models import DelegatedAccountInvitation, Profile
-from admin.models import AdminAuditEvent
+from admin.models import AdminAuditEvent, BrokerageSettings
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
 
@@ -63,6 +63,51 @@ class AdminApiTests(APITestCase):
         ).order_by('-pk').first()
         self.assertEqual(contact_event.changes['email'], 'updated')
         self.assertNotIn('updated-customer@example.com', str(contact_event.changes))
+
+    def test_brokerage_contact_is_public_but_only_authorized_staff_can_update_it(self):
+        public = self.client.get(reverse('api:brokerage-contact'))
+        self.assertEqual(public.status_code, 200)
+        self.assertEqual(public.data['business_name'], '')
+
+        self.client.force_authenticate(user=self.customer)
+        forbidden = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {'phone': '+251900000000'},
+            format='json',
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertFalse(BrokerageSettings.objects.exists())
+
+        contact_manager = User.objects.create_user(
+            username='brokerage-contact-manager',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=contact_manager,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.SETTINGS_MANAGE],
+        )
+        self.client.force_authenticate(user=contact_manager)
+        updated = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {
+                'business_name': 'Brokerage contact',
+                'phone': '+251900000000',
+                'email': 'contact@example.com',
+            },
+            format='json',
+        )
+
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.data['phone'], '+251900000000')
+        settings_obj = BrokerageSettings.objects.get(pk=1)
+        self.assertEqual(settings_obj.platform_owner, self.admin_user)
+        audit = AdminAuditEvent.objects.get(action='brokerage_settings_updated')
+        self.assertEqual(
+            audit.changes['fields'],
+            ['business_name', 'phone', 'email'],
+        )
+        self.assertNotIn('+251900000000', str(audit.changes))
 
     def test_user_management_cannot_grant_staff_privileges_or_self_deactivate(self):
         self.client.force_authenticate(user=self.admin_user)
@@ -370,8 +415,7 @@ class AdminApiTests(APITestCase):
         owner_view = self.client.get(
             reverse('api:managed-property-detail', kwargs={'pk': self.property.pk})
         )
-        self.assertEqual(owner_view.status_code, 200)
-        self.assertEqual(owner_view.data['moderation_note'], 'Listing details need correction.')
+        self.assertEqual(owner_view.status_code, 403)
 
     def test_admin_must_record_a_reason_when_suspending_a_listing(self):
         self.client.force_authenticate(user=self.admin_user)

@@ -2,9 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { useAuth } from '../AuthContext';
 import { getErrorMessage } from '../api/client';
 import {
   getManagedProperties,
+  updateManagedPropertyPublication,
   type ManagedProperty,
   type ManagedPropertyFilters,
   type PublicationStatus,
@@ -34,6 +36,10 @@ function propertyStatusMessage(status: ManagedProperty['status']): MessageKey {
 }
 
 export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
+  const { account } = useAuth();
+  const permissions = account?.management_permissions ?? [];
+  const canCreate = Boolean(account?.is_platform_owner || permissions.includes('properties.edit_all'));
+  const canModerate = Boolean(account?.is_platform_owner || permissions.includes('properties.moderate'));
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState(searchParams.get('status') ?? '');
@@ -41,6 +47,8 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
   const [result, setResult] = useState<{ count: number; next: string | null; previous: string | null; results: ManagedProperty[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [publicationBusyId, setPublicationBusyId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const pageValue = Number(searchParams.get('page') ?? 1);
   const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
@@ -101,6 +109,25 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
     setSearchParams(next);
   };
 
+  const togglePublication = async (property: ManagedProperty) => {
+    setPublicationBusyId(property.id);
+    setActionError('');
+    try {
+      const updated = await updateManagedPropertyPublication(
+        property.id,
+        property.publication_status === 'published' ? 'draft' : 'published',
+      );
+      setResult((current) => current && ({
+        ...current,
+        results: current.results.map((item) => item.id === updated.id ? updated : item),
+      }));
+    } catch (requestError: unknown) {
+      setActionError(`${text('publicationUpdateError')} ${getErrorMessage(requestError)}`);
+    } finally {
+      setPublicationBusyId(null);
+    }
+  };
+
   return (
     <main className="manager-page" id="main-content">
       <section className="manager-heading">
@@ -109,9 +136,11 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
           <h1>{text('managerListings')}</h1>
           <p>{text('managerListingsIntro')}</p>
         </div>
-        <Link className="button button-primary" to="/owner/listings/new">
-          <Plus size={17} aria-hidden="true" />{text('createListing')}
-        </Link>
+        {canCreate && (
+          <Link className="button button-primary" to="/management/listings/new">
+            <Plus size={17} aria-hidden="true" />{text('createListing')}
+          </Link>
+        )}
       </section>
 
       <form className="manager-filter-bar" onSubmit={applyFilters}>
@@ -158,6 +187,7 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
         </div>
       ) : result?.results.length ? (
         <>
+          {actionError && <p className="manager-inline-error" role="alert">{actionError}</p>}
           <div className="manager-table-wrap">
             <table className="manager-table">
               <thead>
@@ -181,7 +211,21 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
                     <td>{text('ethiopianBirr')} {Number(property.price).toLocaleString(locale === 'am' ? 'am-ET' : 'en-ET')}</td>
                     <td><span className={`manager-badge status-${property.status}`}>{text(propertyStatusMessage(property.status))}</span></td>
                     <td><span className={`manager-badge publication-${property.publication_status}`}>{text(publicationMessage[property.publication_status])}</span></td>
-                    <td><Link className="manager-row-action" to={`/owner/listings/${property.id}/edit`}>{text('editListing')}</Link></td>
+                    <td className="manager-row-actions">
+                      <Link className="manager-row-action" to={`/management/listings/${property.id}/edit`}>{text('editListing')}</Link>
+                      {canModerate && (property.publication_status === 'published' || property.publication_status === 'draft' || property.publication_status === 'rejected') && (
+                        <button
+                          className="manager-row-action"
+                          type="button"
+                          disabled={publicationBusyId === property.id || (property.publication_status !== 'published' && property.status !== 'available')}
+                          onClick={() => void togglePublication(property)}
+                        >
+                          {publicationBusyId === property.id
+                            ? text('publishingListing')
+                            : text(property.publication_status === 'published' ? 'unpublishListing' : 'publishListing')}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -204,7 +248,7 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
         <div className="manager-state">
           <h2>{text('managerNoListings')}</h2>
           <p>{text('managerNoListingsBody')}</p>
-          <Link className="button button-primary" to="/owner/listings/new"><Plus size={16} aria-hidden="true" />{text('createListing')}</Link>
+          {canCreate && <Link className="button button-primary" to="/management/listings/new"><Plus size={16} aria-hidden="true" />{text('createListing')}</Link>}
         </div>
       )}
     </main>

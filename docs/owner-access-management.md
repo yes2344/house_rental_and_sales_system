@@ -2,7 +2,7 @@
 
 ## Initial owner account
 
-The platform owner is the Django superuser. Provision or recover that account locally with Django's built-in commands:
+The platform owner is the Django superuser and the only principal with platform-owner authority. Property owner accounts do not automatically manage listings, viewing requests, or brokerage settings. Provision or recover the platform-owner account locally with Django's built-in commands:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py createsuperuser
@@ -23,7 +23,9 @@ The project does not currently send invitation emails. Until an email provider i
 
 ## Permission behavior
 
-Permissions are a predefined list in `accounts.models.Profile.Permission`. A delegated account does not receive access just because `is_staff` is true. API operations check the specific permission and, for brokers, the property assignment. Only the owner can create delegated accounts or change their role, permissions, or active state.
+Permissions are a predefined list in `accounts.models.Profile.Permission`. A delegated account does not receive access just because `is_staff` is true. API operations check the specific permission and, for brokers, the property assignment. Listing and viewing-request operations are restricted to the platform broker and explicitly authorized staff; property ownership or listing submission alone does not grant management access. The public marketplace displays only brokerage contact channels, not seller or landlord contact information. Only the platform owner can create delegated accounts or change their role, permissions, or active state.
+
+The brokerage contact page at `/management/brokerage` updates the centrally displayed business name, phone, email, messaging, and social links. Configure only channels the brokerage actually controls.
 
 Deactivating an account or removing its permissions takes effect on subsequent authenticated requests. Permission changes and account invitations are written to the audit log without recording passwords or invitation tokens.
 
