@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.db import transaction
@@ -18,6 +19,12 @@ def owner_required(view_func):
         lambda user: user.is_authenticated and user.is_active and user.is_superuser,
         login_url='/admin/login/',
     )(view_func)
+
+
+@require_POST
+def portal_logout(request):
+    logout(request)
+    return redirect('/admin/login/')
 
 
 @owner_required

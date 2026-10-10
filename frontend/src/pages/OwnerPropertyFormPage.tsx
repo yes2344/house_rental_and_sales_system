@@ -476,7 +476,6 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               <select value={values.category} onChange={(event) => updateValue('category', event.target.value as ManagedPropertyType)}>
                 <option value="house">{text('house')}</option>
                 <option value="villa">{text('villa')}</option>
-                <option value="villa">{text('house')}</option>
                 <option value="apartment">{text('apartment')}</option>
                 <option value="condominium">Condominium</option>
                 <option value="land">{text('land')}</option>
@@ -497,7 +496,11 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('listing_type')}
             </label>
             <label className="manager-field">
-              <span>{text('priceLabel')} (ETB) *</span>
+              <span>
+                {values.listing_type === 'rent' && values.rental_frequency
+                  ? text('priceWithPeriod').replace('{period}', text(values.rental_frequency))
+                  : `${text('priceLabel')} (${text('ethiopianBirr')})`} *
+              </span>
               <input type="number" required min="0.01" step="0.01" value={values.price} onChange={(event) => updateValue('price', event.target.value)} />
               {fieldError('price')}
             </label>
@@ -535,7 +538,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
             {values.listing_type === 'rent' && (
               <label className="manager-field">
                 <span>{text('rentalFrequency')} *</span>
-                <select value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
+                <select required value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
                   <option value="">{text('selectOption')}</option>
                   <option value="daily">{text('daily')}</option>
                   <option value="monthly">{text('monthly')}</option>

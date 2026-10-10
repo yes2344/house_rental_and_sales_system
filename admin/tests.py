@@ -708,6 +708,34 @@ class AdminApiTests(APITestCase):
 
 
 class AdminPortalMethodTests(TestCase):
+    def test_portal_logout_requires_post_and_ends_session(self):
+        owner = User.objects.create_superuser(
+            username='portal-logout-owner',
+            password='SecurePass123!value',
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(owner)
+
+        page = client.get(reverse('admin_property_list'))
+        self.assertContains(page, 'Log out')
+        self.assertEqual(
+            client.get(reverse('admin_portal_logout')).status_code,
+            405,
+        )
+        self.assertEqual(
+            client.post(reverse('admin_portal_logout')).status_code,
+            403,
+        )
+
+        response = client.post(
+            reverse('admin_portal_logout'),
+            HTTP_X_CSRFTOKEN=client.cookies['csrftoken'].value,
+        )
+
+        self.assertRedirects(response, '/admin/login/')
+        self.assertNotIn('_auth_user_id', client.session)
+        self.assertEqual(client.get(reverse('admin_dashboard')).status_code, 302)
+
     def test_owner_can_create_delegated_account_invitation_from_portal(self):
         owner = User.objects.create_superuser(
             username='portal-owner',
