@@ -68,7 +68,13 @@
                   <h3>{{ property.title }}</h3>
                   <div class="price">{{ property.formatted_price }}</div>
                   <p>{{ property.bedrooms }} Bed · {{ property.bathrooms }} Bath · {{ property.area_sqft }} sq ft</p>
-                  <div class="meta"><span>{{ property.location }}</span><span>⭐ 4.8</span></div>
+                  <div class="meta">
+                    {% include "user/_property_location.html" %}
+                    {% if property.has_public_coordinates %}
+                      <a class="location-map-link" href="https://www.openstreetmap.org/?mlat={{ property.latitude }}&amp;mlon={{ property.longitude }}#map=17/{{ property.latitude }}/{{ property.longitude }}" target="_blank" rel="noopener noreferrer" aria-label="View map for {{ property.title }}">View on map</a>
+                    {% endif %}
+                    <span>⭐ 4.8</span>
+                  </div>
                   <div style="margin-top: 16px;"><a class="btn btn-secondary" href="{% url 'user_property_detail' property.slug %}">View details</a></div>
                 </div>
               </article>

@@ -120,7 +120,15 @@ class IsAuthenticatedPropertyManagerOrAdministrator(IsPropertyManagerOrAdministr
         if not super().has_permission(request, view):
             return False
         if request.method == 'POST':
-            return has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL)
+            can_create_globally = (
+                has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL)
+                and has_management_permission(user, Profile.Permission.PROPERTY_MODERATE)
+            )
+            can_create_as_broker = (
+                has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
+                and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
+            )
+            return can_create_globally or can_create_as_broker
         return True
 
 

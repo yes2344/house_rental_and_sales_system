@@ -109,6 +109,32 @@ class AdminApiTests(APITestCase):
         )
         self.assertNotIn('+251900000000', str(audit.changes))
 
+    def test_legacy_admin_property_registration_publishes_available_listing(self):
+        browser_client = Client()
+        browser_client.force_login(self.admin_user)
+
+        response = browser_client.post(
+            reverse('admin_property_form'),
+            {
+                'title': 'Legacy admin published listing',
+                'location': 'Verified area',
+                'property_type': 'house',
+                'listing_type': 'sale',
+                'price': '250000',
+                'bedrooms': 2,
+                'bathrooms': 1,
+                'area_sqft': 900,
+                'description': 'Created by the protected administrator portal.',
+                'status': Property.Status.AVAILABLE,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created = Property.objects.get(title='Legacy admin published listing')
+        self.assertEqual(created.publication_status, Property.PublicationStatus.PUBLISHED)
+        public_response = self.client.get(reverse('api:property-list'))
+        self.assertIn(created.slug, [item['slug'] for item in public_response.data['results']])
+
     def test_user_management_cannot_grant_staff_privileges_or_self_deactivate(self):
         self.client.force_authenticate(user=self.admin_user)
         escalation = self.client.patch(

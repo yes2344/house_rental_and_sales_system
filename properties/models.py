@@ -2,7 +2,11 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator, MinValueValidator
+from django.core.validators import (
+    FileExtensionValidator,
+    MaxValueValidator,
+    MinValueValidator,
+)
 from django.db import models, transaction
 from django.db.models import Q
 from django.utils.text import slugify
@@ -73,6 +77,21 @@ class Property(models.Model):
     title = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, blank=True)
     location = models.CharField(max_length=200, db_index=True)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('-90')), MaxValueValidator(Decimal('90'))],
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('-180')), MaxValueValidator(Decimal('180'))],
+    )
+    exact_location_is_public = models.BooleanField(default=False)
     property_type = models.CharField(max_length=50, choices=PROPERTY_TYPES, default='house')
     listing_type = models.CharField(max_length=20, choices=LISTING_TYPE_CHOICES, default=ListingType.SALE)
     price = models.DecimalField(max_digits=12, decimal_places=2)
@@ -179,6 +198,21 @@ class Property(models.Model):
             ),
             models.CheckConstraint(
                 condition=(
+                    Q(latitude__isnull=True, longitude__isnull=True)
+                    | Q(latitude__isnull=False, longitude__isnull=False)
+                ),
+                name='property_coordinates_paired',
+            ),
+            models.CheckConstraint(
+                condition=Q(latitude__isnull=True) | Q(latitude__gte=-90, latitude__lte=90),
+                name='property_latitude_in_range',
+            ),
+            models.CheckConstraint(
+                condition=Q(longitude__isnull=True) | Q(longitude__gte=-180, longitude__lte=180),
+                name='property_longitude_in_range',
+            ),
+            models.CheckConstraint(
+                condition=(
                     Q(area_value__isnull=True, area_unit='')
                     | Q(area_value__gt=0, area_unit__in=['sqm', 'sqft'])
                 ),
@@ -210,6 +244,14 @@ class Property(models.Model):
     @property
     def formatted_price(self):
         return f'ETB {self.price:,.2f}'
+
+    @property
+    def has_public_coordinates(self):
+        return (
+            self.exact_location_is_public
+            and self.latitude is not None
+            and self.longitude is not None
+        )
 
 
 class PropertyImage(models.Model):

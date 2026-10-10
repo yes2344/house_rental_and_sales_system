@@ -1,8 +1,9 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { ArrowLeft, ImagePlus, Star, Trash2, Upload } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { ArrowLeft, ImagePlus, LocateFixed, Star, Trash2, Upload } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
+import type { PropertyCoordinates } from '../components/LocationMap';
 import {
   createManagedProperty,
   deleteManagedImage,
@@ -25,6 +26,10 @@ import {
 } from '../api/management';
 import type { Locale, MessageKey } from '../i18n';
 
+const LocationMap = lazy(() =>
+  import('../components/LocationMap').then((module) => ({ default: module.LocationMap })),
+);
+
 interface OwnerPropertyFormPageProps {
   locale: Locale;
   text: (key: MessageKey) => string;
@@ -33,6 +38,9 @@ interface OwnerPropertyFormPageProps {
 interface PropertyFormValues {
   title: string;
   location: string;
+  latitude: string;
+  longitude: string;
+  exact_location_is_public: boolean;
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
   price: string;
@@ -54,6 +62,9 @@ interface PropertyFormValues {
 const initialValues: PropertyFormValues = {
   title: '',
   location: '',
+  latitude: '',
+  longitude: '',
+  exact_location_is_public: false,
   category: 'house',
   listing_type: 'sale',
   price: '',
@@ -76,6 +87,9 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
   return {
     title: property.title,
     location: property.location,
+    latitude: property.latitude === null ? '' : String(property.latitude),
+    longitude: property.longitude === null ? '' : String(property.longitude),
+    exact_location_is_public: property.exact_location_is_public,
     category: property.category,
     listing_type: property.listing_type,
     price: property.price,
@@ -95,9 +109,9 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
   };
 }
 
-function isCreatedNavigationState(state: unknown): boolean {
+function isCreatedNavigationState(state: unknown): state is { created: true; available: boolean } {
   return typeof state === 'object' && state !== null && 'created' in state
-    && (state as { created?: unknown }).created === true;
+    && state.created === true && 'available' in state && typeof state.available === 'boolean';
 }
 
 function statusText(status: ManagedPropertyStatus, text: (key: MessageKey) => string): string {
@@ -140,6 +154,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const [imageCaption, setImageCaption] = useState('');
   const [makePrimary, setMakePrimary] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [gpsMessage, setGpsMessage] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -203,6 +218,36 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
     );
   };
 
+  const updateCoordinates = (coordinates: PropertyCoordinates) => {
+    updateValue('latitude', coordinates.latitude.toFixed(6));
+    updateValue('longitude', coordinates.longitude.toFixed(6));
+  };
+
+  const useCurrentLocation = () => {
+    setGpsMessage('');
+    if (!navigator.geolocation) {
+      setGpsMessage(text('gpsUnavailable'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        updateCoordinates({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+        setGpsMessage(text('gpsLocationLoaded'));
+      },
+      (error) => {
+        setGpsMessage(
+          error.code === error.PERMISSION_DENIED
+            ? text('gpsPermissionDenied')
+            : text('gpsUnavailable'),
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  };
+
   const submitProperty = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
@@ -211,6 +256,8 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
     setFieldErrors({});
     const payload: ManagedPropertyPayload = {
       ...values,
+      latitude: values.latitude.trim() || null,
+      longitude: values.longitude.trim() || null,
       price: values.price.trim(),
       bedrooms: values.bedrooms ? Number(values.bedrooms) : 0,
       bathrooms: values.bathrooms ? Number(values.bathrooms) : 0,
@@ -229,7 +276,10 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         setSaveSuccess(text('listingSaved'));
       } else {
         const created = await createManagedProperty(payload);
-        navigate(`/management/listings/${created.id}/edit`, { replace: true, state: { created: true } });
+        navigate(`/management/listings/${created.id}/edit`, {
+          replace: true,
+          state: { created: true, available: created.status === 'available' },
+        });
       }
     } catch (error: unknown) {
       setFieldErrors(getApiFieldErrors(error));
@@ -369,6 +419,13 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const allowedStatuses: ManagedPropertyStatus[] = values.listing_type === 'rent'
     ? ['available', 'rented', 'inactive']
     : ['available', 'sold', 'inactive'];
+  const latitude = Number(values.latitude);
+  const longitude = Number(values.longitude);
+  const selectedCoordinates = values.latitude.trim() && values.longitude.trim()
+    && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90
+    && Number.isFinite(longitude) && longitude >= -180 && longitude <= 180
+    ? { latitude, longitude }
+    : null;
 
   return (
     <main className="manager-page" id="main-content">
@@ -391,7 +448,11 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         </section>
       )}
 
-      {isCreatedNavigationState(location.state) && <div className="manager-success" role="status">{text('listingCreated')}</div>}
+      {isCreatedNavigationState(location.state) && (
+        <div className="manager-success" role="status">
+          {text(location.state.available ? 'listingCreated' : 'listingCreatedUnavailable')}
+        </div>
+      )}
       {saveSuccess && <div className="manager-success" role="status">{saveSuccess}</div>}
       {saveError && <div className="manager-form-error" role="alert">{saveError}</div>}
 
@@ -488,6 +549,78 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('features')}
             </label>
           </div>
+        </section>
+
+        <section className="manager-form-section">
+          <h2>{text('propertyLocation')}</h2>
+          <p className="manager-hint">{text('propertyLocationHint')}</p>
+          <div className="location-picker-actions">
+            <button className="button button-outline button-small" type="button" onClick={useCurrentLocation}>
+              <LocateFixed size={15} aria-hidden="true" />{text('useCurrentLocation')}
+            </button>
+            <button
+              className="button button-outline button-small"
+              type="button"
+              onClick={() => {
+                updateValue('latitude', '');
+                updateValue('longitude', '');
+                setGpsMessage('');
+              }}
+              disabled={!values.latitude && !values.longitude}
+            >
+              {text('clearLocation')}
+            </button>
+          </div>
+          {gpsMessage && <p className="location-gps-message" role="status">{gpsMessage}</p>}
+          <Suspense fallback={<div className="property-map map-loading" role="status">{text('loadingMap')}</div>}>
+            <LocationMap
+              coordinates={selectedCoordinates}
+              interactive
+              onCoordinatesChange={updateCoordinates}
+              markerLabel={text('selectedPropertyLocation')}
+            />
+          </Suspense>
+          <p className="manager-hint location-map-hint">{text('mapSelectionHint')}</p>
+          <div className="manager-form-grid">
+            <label className="manager-field">
+              <span>{text('latitude')}</span>
+              <input
+                type="number"
+                step="0.000001"
+                min="-90"
+                max="90"
+                value={values.latitude}
+                onChange={(event) => updateValue('latitude', event.target.value)}
+              />
+              {fieldError('latitude')}
+            </label>
+            <label className="manager-field">
+              <span>{text('longitude')}</span>
+              <input
+                type="number"
+                step="0.000001"
+                min="-180"
+                max="180"
+                value={values.longitude}
+                onChange={(event) => updateValue('longitude', event.target.value)}
+              />
+              {fieldError('longitude')}
+            </label>
+          </div>
+          <p className="location-coordinate-preview" aria-live="polite">
+            {selectedCoordinates
+              ? `${text('selectedCoordinates')}: ${selectedCoordinates.latitude.toFixed(6)}, ${selectedCoordinates.longitude.toFixed(6)}`
+              : text('noLocationSelected')}
+          </p>
+          <label className="amenity-choice location-visibility-choice">
+            <input
+              type="checkbox"
+              checked={values.exact_location_is_public}
+              onChange={(event) => updateValue('exact_location_is_public', event.target.checked)}
+            />
+            <span>{text('showExactLocation')}</span>
+          </label>
+          <p className="manager-hint location-map-hint">{text('exactLocationPrivacyHint')}</p>
         </section>
 
         <section className="manager-form-section">

@@ -1,6 +1,8 @@
 import hashlib
 import re
 import secrets
+from decimal import Decimal
+from urllib.parse import urlencode
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404, render
@@ -34,6 +36,26 @@ def _public_context(**context):
         **context,
         'brokerage_contact': BrokerageSettings.objects.filter(pk=1).first(),
     }
+
+
+def _public_map_embed_url(property_obj):
+    if not property_obj.has_public_coordinates:
+        return ''
+    latitude = property_obj.latitude
+    longitude = property_obj.longitude
+    offset = Decimal('0.004')
+    bounds = (
+        max(Decimal('-180'), longitude - offset),
+        max(Decimal('-90'), latitude - offset),
+        min(Decimal('180'), longitude + offset),
+        min(Decimal('90'), latitude + offset),
+    )
+    query = urlencode({
+        'bbox': ','.join(f'{coordinate:.6f}' for coordinate in bounds),
+        'layer': 'mapnik',
+        'marker': f'{latitude:.6f},{longitude:.6f}',
+    })
+    return f'https://www.openstreetmap.org/export/embed.html?{query}'
 
 
 def _smart_search(query):
@@ -95,7 +117,11 @@ def property_detail(request, slug):
     return render(
         request,
         'user/property_detail.html',
-        _public_context(property=property_obj, images=images),
+        _public_context(
+            property=property_obj,
+            images=images,
+            property_map_embed_url=_public_map_embed_url(property_obj),
+        ),
     )
 
 

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { PropertySummary } from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
+import { hasPublicCoordinates, openStreetMapUrl } from './propertyLocation';
 import { PropertySlideshow } from './PropertySlideshow';
 
 interface PropertyCardProps {
@@ -29,6 +30,9 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
     inactive: 'statusInactive',
   };
   const statusKey = statusMessage[property.status] ?? 'available';
+  const mapUrl = hasPublicCoordinates(property.latitude, property.longitude)
+    ? openStreetMapUrl(Number(property.latitude), Number(property.longitude))
+    : null;
 
   return (
     <article className="listing-card">
@@ -51,7 +55,11 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
         </span>
       </div>
       <div className="listing-card-content">
-        <div className="listing-location"><MapPin size={14} aria-hidden="true" />{property.location}</div>
+        <div className="listing-location">
+          <MapPin size={14} aria-hidden="true" />
+          <span>{property.location}</span>
+          {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer">{text('viewOnMap')}</a>}
+        </div>
         <h3><Link to={`/properties/${property.slug}`}>{property.title}</Link></h3>
         <div className="listing-specs" aria-label={`${category} specifications`}>
           {property.bedrooms > 0 && <span><BedDouble size={15} aria-hidden="true" />{property.bedrooms} {text('bedrooms')}</span>}

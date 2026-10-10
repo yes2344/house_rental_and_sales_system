@@ -21,6 +21,9 @@ export interface ManagedProperty {
   title: string;
   slug: string;
   location: string;
+  latitude: number | string | null;
+  longitude: number | string | null;
+  exact_location_is_public: boolean;
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
   price: string;
@@ -50,6 +53,9 @@ export interface ManagedProperty {
 export interface ManagedPropertyPayload {
   title: string;
   location: string;
+  latitude: string | null;
+  longitude: string | null;
+  exact_location_is_public: boolean;
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
   price: string;

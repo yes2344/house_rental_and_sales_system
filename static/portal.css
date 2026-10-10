@@ -80,6 +80,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid rgba(28, 133, 94,
 .property-body { padding: 18px; }
 .price { color: #0d5338; font-weight: 800; font-size: 1.2rem; }
 .meta { display: flex; justify-content: space-between; margin-top: 16px; color: #516562; }
+.property-location { display: inline-flex; min-width: 0; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.property-location-icon { width: 16px; height: 16px; flex: 0 0 auto; color: #1d8d63; }
+.location-map-link { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; color: #135d45; font-size: .86rem; font-weight: 700; }
+.location-map-link:hover { text-decoration: underline; }
+.detail-property-location { display: flex; margin: 8px 0; }
+.legacy-property-location-section { margin-top: 22px; }
+.legacy-property-location-section h2 { margin-top: 0; }
+.legacy-property-map { width: 100%; height: 320px; border: 1px solid #d8e4df; border-radius: 10px; }
+.location-not-provided { color: #516562; font-size: .95rem; }
 section { padding: 52px 0; }
 .section-title { display: flex; justify-content: space-between; align-items: end; margin-bottom: 18px; }
 .stats {

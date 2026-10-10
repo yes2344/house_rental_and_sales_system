@@ -36,6 +36,8 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     primary_image = serializers.SerializerMethodField()
     images = PropertyImageSerializer(many=True, read_only=True)
+    latitude = serializers.SerializerMethodField()
+    longitude = serializers.SerializerMethodField()
 
     class Meta:
         model = Property
@@ -44,6 +46,8 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
             'title',
             'slug',
             'location',
+            'latitude',
+            'longitude',
             'category',
             'listing_type',
             'price',
@@ -69,6 +73,14 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
         if obj.status == Property.Status.LEGACY_ACTIVE:
             return Property.Status.AVAILABLE
         return obj.status
+
+    @extend_schema_field(serializers.DecimalField(max_digits=9, decimal_places=6, allow_null=True))
+    def get_latitude(self, obj):
+        return obj.latitude if obj.has_public_coordinates else None
+
+    @extend_schema_field(serializers.DecimalField(max_digits=9, decimal_places=6, allow_null=True))
+    def get_longitude(self, obj):
+        return obj.longitude if obj.has_public_coordinates else None
 
     @extend_schema_field(serializers.URLField(allow_null=True))
     def get_primary_image(self, obj):
@@ -126,6 +138,22 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
     )
+    latitude = serializers.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        min_value=Decimal('-90'),
+        max_value=Decimal('90'),
+        required=False,
+        allow_null=True,
+    )
+    longitude = serializers.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        min_value=Decimal('-180'),
+        max_value=Decimal('180'),
+        required=False,
+        allow_null=True,
+    )
     amenities = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Amenity.objects.all(),
@@ -146,6 +174,9 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'title',
             'slug',
             'location',
+            'latitude',
+            'longitude',
+            'exact_location_is_public',
             'category',
             'listing_type',
             'price',
@@ -209,6 +240,12 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'rental_frequency': 'Rental frequency can only be set for rental listings.'}
             )
+        latitude = attrs.get('latitude', self.instance.latitude if self.instance else None)
+        longitude = attrs.get('longitude', self.instance.longitude if self.instance else None)
+        if (latitude is None) != (longitude is None):
+            raise serializers.ValidationError(
+                {'latitude': 'Provide both latitude and longitude, or leave both empty.'}
+            )
         return attrs
 
     @transaction.atomic
@@ -222,7 +259,7 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         property_obj = Property.objects.create(
             owner=None,
             submitted_by=user,
-            publication_status=Property.PublicationStatus.DRAFT,
+            publication_status=Property.PublicationStatus.PUBLISHED,
             **validated_data,
         )
         if Profile.objects.filter(
@@ -241,9 +278,6 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             area_sqft = validated_data['area_sqft']
             validated_data['area_value'] = Decimal(area_sqft) if area_sqft > 0 else None
             validated_data['area_unit'] = Property.AreaUnit.SQUARE_FEET if area_sqft > 0 else ''
-        if any(getattr(instance, field) != value for field, value in validated_data.items()):
-            if instance.publication_status != Property.PublicationStatus.DRAFT:
-                instance.publication_status = Property.PublicationStatus.DRAFT
         property_obj = super().update(instance, validated_data)
         if amenities is not None:
             property_obj.amenities.set(amenities)

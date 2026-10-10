@@ -29,26 +29,6 @@ from properties.serializers import (
 PUBLIC_STATUSES = [Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE]
 
 
-def return_property_to_draft(property_obj, actor):
-    if property_obj.publication_status == Property.PublicationStatus.DRAFT:
-        return
-    previous_status = property_obj.publication_status
-    property_obj.publication_status = Property.PublicationStatus.DRAFT
-    property_obj.save(update_fields=['publication_status', 'updated_at'])
-    record_admin_action(
-        actor,
-        action='property_changed',
-        object_type='property',
-        object_id=property_obj.pk,
-        changes={
-            'publication_status': {
-                'from': previous_status,
-                'to': Property.PublicationStatus.DRAFT,
-            },
-        },
-    )
-
-
 class PublicAmenityListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = AmenitySerializer
@@ -132,7 +112,7 @@ class ManagedPropertyListCreateView(generics.ListCreateAPIView):
         property_obj = serializer.save()
         record_admin_action(
             self.request.user,
-            action='property_draft_created',
+            action='property_created',
             object_type='property',
             object_id=property_obj.pk,
             changes={'publication_status': property_obj.publication_status},
@@ -154,12 +134,14 @@ class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     @transaction.atomic
     def perform_update(self, serializer):
         instance = serializer.instance
+        before_coordinates = (instance.latitude, instance.longitude)
         before = {
             field: getattr(instance, field)
             for field in (
                 'status',
                 'listing_type',
                 'publication_status',
+                'exact_location_is_public',
                 'contact_publicly_visible',
                 'advertising_authorized',
                 'area_value',
@@ -179,6 +161,8 @@ class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
                 changes[field] = {'from': str(old_value), 'to': str(new_value)}
             else:
                 changes[field] = {'from': str(old_value), 'to': str(new_value)}
+        if before_coordinates != (updated.latitude, updated.longitude):
+            changes['coordinates_updated'] = True
         if changes:
             record_admin_action(
                 self.request.user,
@@ -272,7 +256,6 @@ class ManagedPropertyImageListCreateView(generics.ListCreateAPIView):
         if is_primary:
             property_obj.images.update(is_primary=False)
         serializer.save(property=property_obj, is_primary=is_primary)
-        return_property_to_draft(property_obj, self.request.user)
 
 
 class ManagedPropertyImageDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -300,7 +283,6 @@ class ManagedPropertyImageDetailView(generics.RetrieveUpdateDestroyAPIView):
         if serializer.validated_data.get('is_primary', image.is_primary):
             property_obj.images.exclude(pk=image.pk).update(is_primary=False)
         serializer.save()
-        return_property_to_draft(property_obj, self.request.user)
 
     @transaction.atomic
     def perform_destroy(self, instance):
@@ -310,4 +292,3 @@ class ManagedPropertyImageDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
         instance.image.delete(save=False)
         instance.delete()
-        return_property_to_draft(property_obj, self.request.user)

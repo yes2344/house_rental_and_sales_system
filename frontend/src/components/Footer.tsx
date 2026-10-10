@@ -1,6 +1,7 @@
 import { ArrowUpRight, Mail, Phone, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { useAuth } from '../AuthContext';
 import type { BrokerageContact } from '../api/brokerage';
 import type { MessageKey } from '../i18n';
 
@@ -43,6 +44,7 @@ function SocialMark({ name }: {
 }
 
 export function Footer({ contact, contactError, text }: FooterProps) {
+  const { account } = useAuth();
   const configuredSocial = socialLinks.filter(([field]) => contact[field]);
 
   return (
@@ -63,7 +65,9 @@ export function Footer({ contact, contactError, text }: FooterProps) {
         </div>
         <div className="footer-links">
           <Link to="/properties">{text('footerBrowse')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to="/login">{text('footerAccount')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to={account ? '/account' : '/login'}>
+            {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
         </div>
         <section className="footer-contact" aria-label={text('brokerContactTitle')}>
           <h2>{text('brokerContactTitle')}</h2>

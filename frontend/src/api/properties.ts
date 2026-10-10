@@ -8,6 +8,8 @@ export interface PropertySummary {
   title: string;
   slug: string;
   location: string;
+  latitude: number | string | null;
+  longitude: number | string | null;
   category: string;
   listing_type: ListingType;
   price: string;

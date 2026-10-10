@@ -43,12 +43,16 @@ def property_list(request):
 
 
 @owner_required
+@transaction.atomic
 def property_form(request, pk=None):
     property_obj = get_object_or_404(Property, id=pk) if pk else None
     if request.method == 'POST':
         form = PropertyForm(request.POST, request.FILES, instance=property_obj)
         if form.is_valid():
             property_instance = form.save()
+            if pk is None:
+                property_instance.publication_status = Property.PublicationStatus.PUBLISHED
+                property_instance.save(update_fields=['publication_status', 'updated_at'])
             action = 'property_updated' if pk else 'property_created'
             record_admin_action(
                 request.user,

@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -98,6 +99,29 @@ class PropertyConstraintTests(TestCase):
 
         self.assertEqual(property_obj.publication_status, Property.PublicationStatus.SUSPENDED)
 
+    def test_coordinates_are_optional_but_must_be_paired(self):
+        property_obj = self.make_property()
+        self.assertIsNone(property_obj.latitude)
+        self.assertIsNone(property_obj.longitude)
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.make_property(latitude=Decimal('10.300000'))
+
+    def test_database_rejects_coordinates_outside_geographic_ranges(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.make_property(
+                    latitude=Decimal('91.000000'),
+                    longitude=Decimal('37.000000'),
+                )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.make_property(
+                    latitude=Decimal('10.000000'),
+                    longitude=Decimal('181.000000'),
+                )
+
 
 class PublicPropertyApiTests(APITestCase):
     def setUp(self):
@@ -192,6 +216,24 @@ class PublicPropertyApiTests(APITestCase):
             status=Property.Status.AVAILABLE,
             publication_status=Property.PublicationStatus.PENDING_REVIEW,
         )
+        Property.objects.create(
+            title='Inactive listing',
+            slug='inactive-listing-api',
+            location='Submitted location',
+            price=250000,
+            description='Not currently available.',
+            status=Property.Status.INACTIVE,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        Property.objects.create(
+            title='Suspended listing',
+            slug='suspended-listing-api',
+            location='Submitted location',
+            price=300000,
+            description='Temporarily suspended.',
+            status=Property.Status.AVAILABLE,
+            publication_status=Property.PublicationStatus.SUSPENDED,
+        )
 
         response = self.client.get(reverse('api:property-list'))
 
@@ -229,6 +271,27 @@ class PublicPropertyApiTests(APITestCase):
         self.assertNotIn('contact_name', response.data)
         self.assertNotIn('contact_phone', response.data)
         self.assertNotIn('contact_email', response.data)
+
+    def test_public_coordinates_are_hidden_until_exact_location_is_enabled(self):
+        self.property.latitude = Decimal('10.340000')
+        self.property.longitude = Decimal('37.740000')
+        self.property.save(update_fields=['latitude', 'longitude'])
+
+        hidden = self.client.get(reverse('api:property-detail', kwargs={'slug': self.property.slug}))
+        self.assertIsNone(hidden.data['latitude'])
+        self.assertIsNone(hidden.data['longitude'])
+
+        self.property.exact_location_is_public = True
+        self.property.save(update_fields=['exact_location_is_public'])
+        visible = self.client.get(reverse('api:property-detail', kwargs={'slug': self.property.slug}))
+
+        public_data = json.loads(visible.content)
+        self.assertEqual(Decimal(str(public_data['latitude'])), Decimal('10.340000'))
+        self.assertEqual(Decimal(str(public_data['longitude'])), Decimal('37.740000'))
+        public_list = self.client.get(reverse('api:property-list'))
+        listed_location = public_list.data['results'][0]
+        self.assertEqual(Decimal(str(listed_location['latitude'])), Decimal('10.340000'))
+        self.assertEqual(Decimal(str(listed_location['longitude'])), Decimal('37.740000'))
 
     def test_detail_does_not_expose_unavailable_property(self):
         self.property.status = Property.Status.RENTED
@@ -357,7 +420,75 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(valid.status_code, 200)
         self.property.refresh_from_db()
         self.assertEqual(self.property.status, Property.Status.RENTED)
-        self.assertEqual(self.property.publication_status, Property.PublicationStatus.DRAFT)
+        self.assertEqual(self.property.publication_status, Property.PublicationStatus.PUBLISHED)
+        public_detail = self.client.get(
+            reverse('api:property-detail', kwargs={'slug': self.property.slug})
+        )
+        self.assertEqual(public_detail.status_code, 404)
+
+    def test_authorized_manager_can_save_coordinates_and_public_visibility(self):
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.patch(
+            reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
+            {
+                'latitude': '10.340000',
+                'longitude': '37.740000',
+                'exact_location_is_public': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.property.refresh_from_db()
+        self.assertEqual(self.property.latitude, Decimal('10.340000'))
+        self.assertEqual(self.property.longitude, Decimal('37.740000'))
+        self.assertTrue(self.property.exact_location_is_public)
+
+    def test_manager_api_rejects_invalid_and_partial_coordinates(self):
+        self.client.force_authenticate(user=self.manager)
+        url = reverse('api:managed-property-detail', kwargs={'pk': self.property.pk})
+
+        invalid_latitude = self.client.patch(
+            url,
+            {'latitude': '90.000001', 'longitude': '37.740000'},
+            format='json',
+        )
+        invalid_longitude = self.client.patch(
+            url,
+            {'latitude': '10.340000', 'longitude': '180.000001'},
+            format='json',
+        )
+        partial_coordinates = self.client.patch(
+            url,
+            {'latitude': '10.340000'},
+            format='json',
+        )
+
+        self.assertEqual(invalid_latitude.status_code, 400)
+        self.assertIn('latitude', invalid_latitude.data['error']['details'])
+        self.assertEqual(invalid_longitude.status_code, 400)
+        self.assertIn('longitude', invalid_longitude.data['error']['details'])
+        self.assertEqual(partial_coordinates.status_code, 400)
+        self.assertIn('latitude', partial_coordinates.data['error']['details'])
+
+    def test_unauthorized_owner_cannot_edit_property_location(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
+            {
+                'latitude': '10.340000',
+                'longitude': '37.740000',
+                'exact_location_is_public': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.property.refresh_from_db()
+        self.assertIsNone(self.property.latitude)
+        self.assertIsNone(self.property.longitude)
 
     def test_only_listing_moderators_can_publish_available_properties(self):
         self.property.publication_status = Property.PublicationStatus.DRAFT
@@ -402,6 +533,57 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertIn('price', response.data['error']['details'])
         self.assertFalse(Property.objects.filter(title='New owner listing').exists())
 
+    def test_authorized_staff_can_create_property_without_coordinates(self):
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(publication_status='draft'),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        created = Property.objects.get(pk=response.data['id'])
+        self.assertIsNone(created.latitude)
+        self.assertIsNone(created.longitude)
+        self.assertEqual(created.publication_status, Property.PublicationStatus.PUBLISHED)
+        public_list = self.client.get(reverse('api:property-list'))
+        self.assertIn(created.slug, [item['slug'] for item in public_list.data['results']])
+
+        unavailable = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(title='Inactive manager listing', status='inactive'),
+            format='json',
+        )
+        self.assertEqual(unavailable.status_code, 201)
+        self.assertEqual(unavailable.data['publication_status'], Property.PublicationStatus.PUBLISHED)
+        refreshed_public_list = self.client.get(reverse('api:property-list'))
+        self.assertNotIn(
+            unavailable.data['slug'],
+            [item['slug'] for item in refreshed_public_list.data['results']],
+        )
+
+    def test_administrator_without_publication_permission_cannot_create_listing(self):
+        restricted_admin = get_user_model().objects.create_user(
+            username='listing-editor-without-moderation',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=restricted_admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.PROPERTY_EDIT_ALL],
+        )
+        self.client.force_authenticate(user=restricted_admin)
+
+        response = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(title='Must not be published'),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Property.objects.filter(title='Must not be published').exists())
+
     def test_broker_can_create_and_manage_only_assigned_property(self):
         broker = get_user_model().objects.create_user(username='crud-broker')
         Profile.objects.create(
@@ -428,7 +610,10 @@ class ManagedPropertyApiTests(APITestCase):
         )
 
         self.assertEqual(update.status_code, 200)
-        self.assertEqual(created.status_code, 403)
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data['publication_status'], Property.PublicationStatus.PUBLISHED)
+        public_list = self.client.get(reverse('api:property-list'))
+        self.assertIn(created.data['slug'], [item['slug'] for item in public_list.data['results']])
 
     def test_registered_customer_cannot_create_or_manage_submitted_listings(self):
         self.client.force_authenticate(user=self.customer)
@@ -448,6 +633,16 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(created.status_code, 403)
         self.assertEqual(response.status_code, 403)
         self.assertEqual(denied.status_code, 403)
+
+    def test_public_visitor_cannot_create_or_publish_a_property(self):
+        response = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(title='Public visitor listing'),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Property.objects.filter(title='Public visitor listing').exists())
 
     def test_delete_removes_managed_property(self):
         self.client.force_authenticate(user=self.manager)
@@ -517,7 +712,7 @@ class PropertyImageApiTests(APITestCase):
         self.assertTrue(image.is_primary)
         self.assertTrue(Path(image.image.path).is_file())
 
-    def test_changing_images_takes_a_published_property_out_of_publication(self):
+    def test_changing_images_keeps_a_published_property_public(self):
         self.property.publication_status = Property.PublicationStatus.PUBLISHED
         self.property.save(update_fields=['publication_status'])
 
@@ -529,7 +724,11 @@ class PropertyImageApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 201)
         self.property.refresh_from_db()
-        self.assertEqual(self.property.publication_status, Property.PublicationStatus.DRAFT)
+        self.assertEqual(self.property.publication_status, Property.PublicationStatus.PUBLISHED)
+        public_detail = self.client.get(
+            reverse('api:property-detail', kwargs={'slug': self.property.slug})
+        )
+        self.assertEqual(public_detail.status_code, 200)
 
     def test_invalid_file_extension_is_rejected(self):
         response = self.client.post(

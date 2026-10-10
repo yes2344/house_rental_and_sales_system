@@ -36,7 +36,7 @@
       <div class="section-title">
         <div>
           <h1>{{ property.title }}</h1>
-          <p>📍 {{ property.location }}</p>
+          <p class="detail-property-location">{% include "user/_property_location.html" %}</p>
         </div>
         <a href="{% url 'user_listings' %}" class="btn btn-secondary">Back to listings</a>
       </div>
@@ -83,6 +83,23 @@
           <a href="{% url 'user_property_request' property.id %}" class="btn btn-primary" style="width:100%;">Request a visit</a>
         </aside>
       </div>
+
+      <section class="panel legacy-property-location-section">
+        <h2>Property location</h2>
+        <p class="detail-property-location">{% include "user/_property_location.html" %}</p>
+        {% if property_map_embed_url %}
+          <iframe
+            class="legacy-property-map"
+            title="Map showing {{ property.location }}"
+            src="{{ property_map_embed_url }}"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+          ></iframe>
+          <a class="location-map-link" href="https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&amp;route=%3B{{ property.latitude }}%2C{{ property.longitude }}" target="_blank" rel="noopener noreferrer">Get directions</a>
+        {% else %}
+          <p class="location-not-provided">A precise map location has not been provided.</p>
+        {% endif %}
+      </section>
     </main>
 
     {% include "user/_brokerage_footer.html" %}
