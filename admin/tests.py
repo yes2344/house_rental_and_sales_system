@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
@@ -780,6 +780,92 @@ class AdminPortalMethodTests(TestCase):
                 object_id=str(invited.pk),
             ).exists()
         )
+
+    @override_settings(DEBUG=True)
+    def test_local_opaque_origin_invitation_requires_valid_csrf_token(self):
+        owner = User.objects.create_superuser(
+            username='opaque-origin-owner',
+            password='SecurePass123!value',
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(owner)
+        form_page = client.get(reverse('admin_delegated_accounts'))
+        self.assertEqual(form_page.status_code, 200)
+        csrf_token = client.cookies['csrftoken'].value
+        payload = {
+            'username': 'opaque-origin-broker',
+            'email': 'opaque-origin-broker@example.com',
+            'role': Profile.Role.BROKER,
+            'management_permissions': [Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
+        }
+
+        invalid = client.post(
+            reverse('admin_delegated_accounts'),
+            payload,
+            HTTP_ORIGIN='null',
+            HTTP_X_CSRFTOKEN='invalid',
+        )
+        self.assertEqual(invalid.status_code, 403)
+        self.assertFalse(User.objects.filter(username='opaque-origin-broker').exists())
+
+        accepted = client.post(
+            reverse('admin_delegated_accounts'),
+            {
+                **payload,
+                'username': 'valid-opaque-origin-broker',
+                'email': 'valid-opaque@example.com',
+                'csrfmiddlewaretoken': csrf_token,
+            },
+            HTTP_ORIGIN='null',
+        )
+        self.assertEqual(
+            accepted.status_code,
+            200,
+            accepted.wsgi_request.META.get('CSRF_FAILURE_REASON', ''),
+        )
+        self.assertTrue(User.objects.filter(username='valid-opaque-origin-broker').exists())
+
+    def test_null_origin_is_not_allowed_on_other_portal_post_routes(self):
+        owner = User.objects.create_superuser(
+            username='other-origin-owner',
+            password='SecurePass123!value',
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(owner)
+        client.get(reverse('admin_property_list'))
+
+        response = client.post(
+            reverse('admin_portal_logout'),
+            HTTP_ORIGIN='null',
+            HTTP_X_CSRFTOKEN=client.cookies['csrftoken'].value,
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    @override_settings(DEBUG=False)
+    def test_null_origin_is_not_allowed_for_invitation_form_outside_debug(self):
+        owner = User.objects.create_superuser(
+            username='production-origin-owner',
+            password='SecurePass123!value',
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(owner)
+        client.get(reverse('admin_delegated_accounts'))
+
+        response = client.post(
+            reverse('admin_delegated_accounts'),
+            {
+                'username': 'production-origin-broker',
+                'email': 'production-origin-broker@example.com',
+                'role': Profile.Role.BROKER,
+                'management_permissions': [Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
+                'csrfmiddlewaretoken': client.cookies['csrftoken'].value,
+            },
+            HTTP_ORIGIN='null',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(username='production-origin-broker').exists())
 
     def test_owner_portal_can_revoke_delegated_account_access(self):
         owner = User.objects.create_superuser(
