@@ -109,6 +109,8 @@ section { padding: 52px 0; }
 .tag.yellow { background: #fff4db; color: #a57200; }
 .tag.red { background: #fde9e9; color: #9f3d3d; }
 .table { width: 100%; border-collapse: collapse; }
+.table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.table-scroll .table { min-width: 640px; }
 th, td { padding: 12px 10px; border-bottom: 1px solid #e6ece9; text-align: left; }
 tr:hover td { background: rgba(17, 61, 46, 0.02); }
 form .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -262,8 +264,12 @@ footer { background: #0d1d1a; color: rgba(255,255,255,0.8); padding: 34px 0; mar
 .social-platform-mark { display: block; width: 18px; height: 18px; }
 @media (max-width: 760px) {
   .hero-inner, .card-grid, .stats, .layout-2, form .two-col { grid-template-columns: 1fr; }
-  .nav-links { display: none; }
-  .navbar { flex-wrap: wrap; }
+  .section-title { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .navbar { flex-wrap: wrap; gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+  .header-left { flex: 1 1 100%; }
+  .nav-links { display: flex; order: 2; width: 100%; flex-wrap: wrap; gap: 6px 14px; }
+  .nav-links a { padding: 5px 0; }
+  .navbar > form { margin-left: auto; }
   .property-gallery { height: 260px; }
   .admin-property-map { height: 320px; }
   .admin-image-preview-photo { height: 240px; }

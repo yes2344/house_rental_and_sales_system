@@ -74,31 +74,33 @@
       </div>
 
       <section class="panel" style="margin-top: 28px;">
-        <h2>Current delegated accounts</h2>
-        <table class="table">
-          <thead>
-            <tr><th>Account</th><th>Role</th><th>Active</th><th>Permissions</th><th>Action</th></tr>
-          </thead>
-          <tbody>
-            {% for profile in profiles %}
-              <tr>
-                <td>{{ profile.user.username }}<br /><span>{{ profile.user.email }}</span></td>
-                <td>{{ profile.get_role_display }}</td>
-                <td>{% if profile.user.is_active %}Active{% else %}Inactive{% endif %}</td>
-                <td>
-                  {% for permission in profile.management_permissions %}
-                    <span class="tag green">{{ permission }}</span>
-                  {% empty %}
-                    No management permissions
-                  {% endfor %}
-                </td>
-                <td><a href="?account_id={{ profile.user_id }}">Manage</a></td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="5">No delegated accounts have been created.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <h2 id="delegated-account-list-heading">Current delegated accounts</h2>
+        <div class="table-scroll" role="region" aria-labelledby="delegated-account-list-heading" tabindex="0">
+          <table class="table">
+            <thead>
+              <tr><th>Account</th><th>Role</th><th>Active</th><th>Permissions</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              {% for profile in profiles %}
+                <tr>
+                  <td>{{ profile.user.username }}<br /><span>{{ profile.user.email }}</span></td>
+                  <td>{{ profile.get_role_display }}</td>
+                  <td>{% if profile.user.is_active %}Active{% else %}Inactive{% endif %}</td>
+                  <td>
+                    {% for permission in profile.management_permissions %}
+                      <span class="tag green">{{ permission }}</span>
+                    {% empty %}
+                      No management permissions
+                    {% endfor %}
+                  </td>
+                  <td><a href="?account_id={{ profile.user_id }}">Manage</a></td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5">No delegated accounts have been created.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
 

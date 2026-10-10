@@ -1057,7 +1057,8 @@ img { display: block; max-width: 100%; }
   .settings-panel-heading { gap: 10px; }
   .settings-control, .settings-toggle { gap: 10px; }
   .settings-account-actions { gap: 10px; }
-  .settings-footer .button { width: 100%; }
+  .settings-footer { align-items: stretch; flex-direction: column; }
+  .settings-footer .button { width: 100%; flex: 1 1 auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

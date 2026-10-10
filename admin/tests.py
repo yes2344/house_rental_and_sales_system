@@ -974,6 +974,21 @@ class AdminApiTests(APITestCase):
 
 
 class AdminPortalMethodTests(TestCase):
+    def test_admin_tables_use_scrollable_regions_on_small_screens(self):
+        owner = User.objects.create_superuser(
+            username='responsive-admin-owner',
+            password='SecurePass123!value',
+        )
+        client = Client()
+        client.force_login(owner)
+
+        for url in (reverse('admin_property_list'), reverse('admin_delegated_accounts')):
+            with self.subTest(url=url):
+                response = client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'class="table-scroll" role="region"')
+                self.assertContains(response, 'class="table"')
+
     def test_server_rendered_portal_forms_include_csrf_tokens(self):
         owner = User.objects.create_superuser(
             username='csrf-form-owner',
