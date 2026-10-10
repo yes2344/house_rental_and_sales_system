@@ -101,15 +101,15 @@ class OwnerAnnouncementWorkflowTests(APITestCase):
             broker_approved=True,
             management_permissions=[Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW],
         )
-        broker_without_review_access = User.objects.create_user(
-            username='broker-without-review-access',
+        unapproved_broker = User.objects.create_user(
+            username='unapproved-broker',
             password='secure-password-123',
         )
         Profile.objects.create(
-            user=broker_without_review_access,
+            user=unapproved_broker,
             role=Profile.Role.BROKER,
-            broker_approved=True,
-            management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
+            broker_approved=False,
+            management_permissions=[Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW],
         )
 
         announcement = self.submit_announcement()
@@ -169,7 +169,7 @@ class OwnerAnnouncementWorkflowTests(APITestCase):
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         announcement.property.refresh_from_db()
         self.assertEqual(
             announcement.property.publication_status,

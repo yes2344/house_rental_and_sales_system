@@ -35,7 +35,8 @@ interface LocationMapProps {
   zoom?: number;
 }
 
-const DEBRE_MARKOS_MAP_VIEW: L.LatLngTuple = [10.333, 37.733];
+// Approximate city center returned by OpenStreetMap Nominatim.
+const ADDIS_ABABA_MAP_VIEW: L.LatLngTuple = [9.0358119, 38.7524315];
 
 function formatCoordinates(coordinates: PropertyCoordinates): string {
   return `${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}`;
@@ -79,7 +80,7 @@ export function LocationMap({
   const markerRef = useRef<L.Marker>(null);
   const center: L.LatLngExpression = coordinates
     ? [coordinates.latitude, coordinates.longitude]
-    : DEBRE_MARKOS_MAP_VIEW;
+    : ADDIS_ABABA_MAP_VIEW;
 
   return (
     <MapContainer

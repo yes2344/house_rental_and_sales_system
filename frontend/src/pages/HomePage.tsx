@@ -68,7 +68,7 @@ export function HomePage({ locale, text }: HomePageProps) {
             </a>
           </div>
           <div className="hero-visual">
-            <img src="/debre-markos-hills.svg" alt={text('heroArt')} />
+            <img src="/addis-ababa-hills.svg" alt={text('heroArt')} />
             <div className="hero-note">
               <span className="hero-note-icon"><MapPin size={16} aria-hidden="true" /></span>
               <span><strong>{text('illustrationCity')}</strong><small>Ethiopia · ኢትዮጵያ</small></span>
@@ -280,7 +280,7 @@ export function HomePage({ locale, text }: HomePageProps) {
 
       <section className="closing-section">
         <div className="container closing-inner">
-          <div><span className="closing-kicker">HABESHA HOMES · DEBRE MARKOS</span><h2>{text('closingTitle')}</h2><p>{text('closingBody')}</p></div>
+          <div><span className="closing-kicker">HABESHA HOMES · ADDIS ABABA</span><h2>{text('closingTitle')}</h2><p>{text('closingBody')}</p></div>
           <Link className="button button-light" to="/properties">{text('explore')} <ArrowRight size={16} aria-hidden="true" /></Link>
         </div>
       </section>

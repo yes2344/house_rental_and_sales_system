@@ -60,7 +60,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             </span>
             <span className="brand-copy">
               <strong>habesha<span>homes</span></strong>
-              <small>DEBRE MARKOS</small>
+              <small>ADDIS ABABA</small>
             </span>
           </Link>
 

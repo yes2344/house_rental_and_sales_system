@@ -13,7 +13,7 @@
       <div class="container navbar">
         <div class="header-left">
           <a class="header-back" href="#" onclick="history.back(); return false;" aria-label="Go back">←</a>
-          <div class="brand"><span class="brand-mark">D</span> Debre Markos Admin</div>
+          <div class="brand"><span class="brand-mark">D</span> Addis Ababa Admin</div>
         </div>
         <nav class="nav-links">
           <a href="/admin-portal/">Dashboard</a>
@@ -83,7 +83,7 @@
     </main>
 
     <footer>
-      <div class="container">Debre Markos Homes · Listing editor</div>
+      <div class="container">Addis Ababa Homes · Listing editor</div>
     </footer>
 
     <script src="{% static 'leaflet.js' %}"></script>
@@ -100,7 +100,7 @@
       let mapMarker = null;
 
       if (mapElement && window.L) {
-        const map = window.L.map(mapElement).setView([10.333, 37.733], 12);
+        const map = window.L.map(mapElement).setView([9.035812, 38.752432], 12);
         const satellite = window.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
           maxNativeZoom: 19,
           maxZoom: 20,

@@ -8,7 +8,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
     DEBUG=(bool, True),
-    USE_POSTGRES=(bool, False),
 )
 env_file = BASE_DIR / '.env'
 if env_file.is_file():
@@ -100,14 +99,20 @@ WSGI_APPLICATION = 'house.wsgi.application'
 
 database_url = env('DATABASE_URL', default='')
 if database_url:
+    database_config = env.db_url_config(database_url)
+    if database_config['ENGINE'] != 'django.db.backends.postgresql':
+        raise ImproperlyConfigured('DATABASE_URL must use PostgreSQL.')
     DATABASES = {
         'default': {
-            **env.db_url_config(database_url),
+            **database_config,
             'CONN_MAX_AGE': 60,
             'CONN_HEALTH_CHECKS': True,
+            'TEST': {
+                'NAME': env('POSTGRES_TEST_DB', default=None),
+            },
         }
     }
-elif env.bool('USE_POSTGRES', default=False):
+else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -118,13 +123,9 @@ elif env.bool('USE_POSTGRES', default=False):
             'PORT': env('POSTGRES_PORT', default='5432'),
             'CONN_MAX_AGE': 60,
             'CONN_HEALTH_CHECKS': True,
-        }
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'TEST': {
+                'NAME': env('POSTGRES_TEST_DB', default=None),
+            },
         }
     }
 

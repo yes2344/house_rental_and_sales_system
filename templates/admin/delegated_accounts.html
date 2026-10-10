@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
-    <title>Delegated account access | Debre Markos Homes</title>
+    <title>Delegated account access | Addis Ababa Homes</title>
     <link rel="stylesheet" href="{% static 'portal.css' %}" />
   </head>
   <body>
@@ -13,7 +13,7 @@
       <div class="container navbar">
         <div class="header-left">
           <a class="header-back" href="{% if is_platform_owner %}/admin-portal/{% else %}/admin-portal/delegated-accounts/{% endif %}" aria-label="{% if is_platform_owner %}Back to dashboard{% else %}Broker accounts{% endif %}">←</a>
-          <div class="brand"><span class="brand-mark">D</span> Debre Markos Admin</div>
+          <div class="brand"><span class="brand-mark">D</span> Addis Ababa Admin</div>
         </div>
         <nav class="nav-links">
           {% if is_platform_owner %}
@@ -102,6 +102,6 @@
       </section>
     </main>
 
-    <footer><div class="container">Debre Markos Homes · {% if is_platform_owner %}Owner-controlled access{% else %}Broker account management{% endif %}</div></footer>
+    <footer><div class="container">Addis Ababa Homes · {% if is_platform_owner %}Owner-controlled access{% else %}Broker account management{% endif %}</div></footer>
   </body>
 </html>

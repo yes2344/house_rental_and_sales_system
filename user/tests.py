@@ -4,12 +4,11 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from admin.models import BrokerageSettings
 from user.models import Property, ViewingRequest
-from viewings.models import ViewingRequestEvent
 
 
 class ViewingRequestApprovalTests(TestCase):
@@ -22,7 +21,6 @@ class ViewingRequestApprovalTests(TestCase):
         )
         self.client.force_login(admin_user)
         self.receipt_token = 'visitor-private-receipt-token'
-        self.proposed_date = timezone.localdate() + timedelta(days=5)
         self.property = Property.objects.create(
             title='Approval Test Property',
             slug='approval-test-property',
@@ -49,43 +47,9 @@ class ViewingRequestApprovalTests(TestCase):
             receipt_token_digest=hashlib.sha256(self.receipt_token.encode()).hexdigest(),
         )
 
-    def test_admin_proposes_date_and_visitor_must_accept_to_confirm(self):
-        url = reverse('admin_viewing_update', args=[self.request_obj.pk])
-        response = self.client.post(
-            url,
-            {
-                'status': 'confirmed',
-                'scheduled_date': self.proposed_date.isoformat(),
-                'scheduled_time': '14:45:00',
-                'proposed_date': self.proposed_date.isoformat(),
-                'proposed_time': '14:45:00',
-                'agent_notes': 'Proposed by the owner',
-            },
-            follow=True,
-        )
-
-        self.request_obj.refresh_from_db()
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.request_obj.status, ViewingRequest.Status.PROPOSED)
-        self.assertIsNone(self.request_obj.scheduled_date)
-        self.assertEqual(self.request_obj.proposed_date, self.proposed_date)
-        self.assertEqual(str(self.request_obj.proposed_time), '14:45:00')
-        self.assertTrue(
-            ViewingRequestEvent.objects.filter(
-                viewing_request=self.request_obj,
-                event_type=ViewingRequestEvent.Type.PROPOSAL_SENT,
-            ).exists()
-        )
-
-        visitor_response = self.client.post(
-            reverse('user_viewing_request_status'),
-            {'receipt_token': self.receipt_token, 'decision': 'accept'},
-        )
-        self.request_obj.refresh_from_db()
-        self.assertEqual(visitor_response.status_code, 200)
-        self.assertEqual(self.request_obj.status, ViewingRequest.Status.CONFIRMED)
-        self.assertEqual(self.request_obj.scheduled_date, self.proposed_date)
-        self.assertEqual(str(self.request_obj.scheduled_time), '14:45:00')
+    def test_legacy_admin_portal_has_no_viewing_request_management_route(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse('admin_viewing_update', args=[self.request_obj.pk])
 
     def test_legacy_public_form_returns_a_one_time_receipt_token(self):
         response = self.client.post(
@@ -170,8 +134,8 @@ class ViewingRequestApprovalTests(TestCase):
         self.assertEqual(detail_response.status_code, 404)
 
     def test_legacy_public_pages_only_link_or_embed_opted_in_coordinates(self):
-        self.property.latitude = Decimal('10.340000')
-        self.property.longitude = Decimal('37.740000')
+        self.property.latitude = Decimal('9.035812')
+        self.property.longitude = Decimal('38.752432')
         self.property.save(update_fields=['latitude', 'longitude'])
 
         private_home = self.client.get(reverse('user_home'))
@@ -194,10 +158,10 @@ class ViewingRequestApprovalTests(TestCase):
             reverse('user_property_detail', args=[self.property.slug])
         )
 
-        self.assertContains(public_home, 'mlat=10.340000')
-        self.assertContains(public_listings, 'mlon=37.740000')
+        self.assertContains(public_home, 'mlat=9.035812')
+        self.assertContains(public_listings, 'mlon=38.752432')
         self.assertContains(public_detail, 'export/embed.html')
-        self.assertContains(public_detail, '10.340000%2C37.740000')
+        self.assertContains(public_detail, '9.035812%2C38.752432')
         self.assertContains(public_home, 'Listed')
         self.assertContains(public_listings, 'Listed')
         self.assertContains(public_detail, 'Listed')

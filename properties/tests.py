@@ -328,8 +328,8 @@ class PublicPropertyApiTests(APITestCase):
         self.assertNotIn('contact_email', response.data)
 
     def test_public_coordinates_are_hidden_until_exact_location_is_enabled(self):
-        self.property.latitude = Decimal('10.340000')
-        self.property.longitude = Decimal('37.740000')
+        self.property.latitude = Decimal('9.035812')
+        self.property.longitude = Decimal('38.752432')
         self.property.save(update_fields=['latitude', 'longitude'])
 
         hidden = self.client.get(reverse('api:property-detail', kwargs={'slug': self.property.slug}))
@@ -341,12 +341,12 @@ class PublicPropertyApiTests(APITestCase):
         visible = self.client.get(reverse('api:property-detail', kwargs={'slug': self.property.slug}))
 
         public_data = json.loads(visible.content)
-        self.assertEqual(Decimal(str(public_data['latitude'])), Decimal('10.340000'))
-        self.assertEqual(Decimal(str(public_data['longitude'])), Decimal('37.740000'))
+        self.assertEqual(Decimal(str(public_data['latitude'])), Decimal('9.035812'))
+        self.assertEqual(Decimal(str(public_data['longitude'])), Decimal('38.752432'))
         public_list = self.client.get(reverse('api:property-list'))
         listed_location = public_list.data['results'][0]
-        self.assertEqual(Decimal(str(listed_location['latitude'])), Decimal('10.340000'))
-        self.assertEqual(Decimal(str(listed_location['longitude'])), Decimal('37.740000'))
+        self.assertEqual(Decimal(str(listed_location['latitude'])), Decimal('9.035812'))
+        self.assertEqual(Decimal(str(listed_location['longitude'])), Decimal('38.752432'))
 
     def test_detail_does_not_expose_unavailable_property(self):
         self.property.status = Property.Status.RENTED
@@ -491,8 +491,8 @@ class ManagedPropertyApiTests(APITestCase):
         response = self.client.patch(
             reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
             {
-                'latitude': '10.340000',
-                'longitude': '37.740000',
+                'latitude': '9.035812',
+                'longitude': '38.752432',
                 'exact_location_is_public': True,
             },
             format='json',
@@ -500,8 +500,8 @@ class ManagedPropertyApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.property.refresh_from_db()
-        self.assertEqual(self.property.latitude, Decimal('10.340000'))
-        self.assertEqual(self.property.longitude, Decimal('37.740000'))
+        self.assertEqual(self.property.latitude, Decimal('9.035812'))
+        self.assertEqual(self.property.longitude, Decimal('38.752432'))
         self.assertTrue(self.property.exact_location_is_public)
 
     def test_manager_api_rejects_invalid_and_partial_coordinates(self):
@@ -510,17 +510,17 @@ class ManagedPropertyApiTests(APITestCase):
 
         invalid_latitude = self.client.patch(
             url,
-            {'latitude': '90.000001', 'longitude': '37.740000'},
+            {'latitude': '90.000001', 'longitude': '38.752432'},
             format='json',
         )
         invalid_longitude = self.client.patch(
             url,
-            {'latitude': '10.340000', 'longitude': '180.000001'},
+            {'latitude': '9.035812', 'longitude': '180.000001'},
             format='json',
         )
         partial_coordinates = self.client.patch(
             url,
-            {'latitude': '10.340000'},
+            {'latitude': '9.035812'},
             format='json',
         )
 
@@ -537,8 +537,8 @@ class ManagedPropertyApiTests(APITestCase):
         response = self.client.patch(
             reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
             {
-                'latitude': '10.340000',
-                'longitude': '37.740000',
+                'latitude': '9.035812',
+                'longitude': '38.752432',
                 'exact_location_is_public': True,
             },
             format='json',

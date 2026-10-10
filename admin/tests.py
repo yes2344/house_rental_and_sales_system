@@ -196,8 +196,8 @@ class AdminApiTests(APITestCase):
             {
                 'title': 'Admin map listing',
                 'location': 'Verified area',
-                'latitude': '10.333000',
-                'longitude': '37.733000',
+                'latitude': '9.035812',
+                'longitude': '38.752432',
                 'exact_location_is_public': 'on',
                 'property_type': 'house',
                 'listing_type': 'sale',
@@ -212,8 +212,8 @@ class AdminApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 302)
         created = Property.objects.get(title='Admin map listing')
-        self.assertEqual(str(created.latitude), '10.333000')
-        self.assertEqual(str(created.longitude), '37.733000')
+        self.assertEqual(str(created.latitude), '9.035812')
+        self.assertEqual(str(created.longitude), '38.752432')
         self.assertTrue(created.exact_location_is_public)
 
     def test_legacy_admin_property_registration_rejects_partial_coordinates(self):
@@ -225,7 +225,7 @@ class AdminApiTests(APITestCase):
             {
                 'title': 'Admin partial map listing',
                 'location': 'Verified area',
-                'latitude': '10.333000',
+                'latitude': '9.035812',
                 'longitude': '',
                 'property_type': 'house',
                 'listing_type': 'sale',

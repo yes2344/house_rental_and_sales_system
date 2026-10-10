@@ -31,7 +31,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
                 <path d="M15 20h6v9h-6z" fill="#153F35" />
               </svg>
             </span>
-            <span className="brand-copy"><strong>{contact.business_name || 'Habesha Homes'}</strong><small>DEBRE MARKOS</small></span>
+            <span className="brand-copy"><strong>{contact.business_name || 'Habesha Homes'}</strong><small>ADDIS ABABA</small></span>
           </Link>
           <p>{text('footerNote')}</p>
         </div>
