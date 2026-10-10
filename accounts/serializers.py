@@ -8,7 +8,7 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import DelegatedAccountInvitation, Profile, UserPreferences
-from accounts.permissions import effective_management_permissions
+from accounts.permissions import broker_work_permissions, effective_management_permissions
 from favorites.models import Favorite
 from properties.models import Property
 from viewings.models import ViewingRequest
@@ -161,12 +161,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             self.instance.profile.role if self.instance else None,
         )
         if role == Profile.Role.BROKER:
-            broker_permissions = {
-                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
-                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
-                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
-            }
-            unsupported = set(permissions) - broker_permissions
+            unsupported = set(permissions) - set(broker_work_permissions())
             if unsupported:
                 raise serializers.ValidationError(
                     'Brokers can only receive broker-work permissions.'
@@ -206,8 +201,10 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
                 else self.instance.profile.management_permissions if self.instance else []
             ),
         )
+        if role == Profile.Role.BROKER:
+            profile_data['management_permissions'] = broker_work_permissions()
+            permissions = profile_data['management_permissions']
         owner_only = {
-            Profile.Permission.SETTINGS_MANAGE,
             Profile.Permission.STAFF_MANAGE,
         }
         if owner_only.intersection(permissions):
@@ -215,11 +212,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
                 {'management_permissions': 'These permissions are reserved for the platform owner.'}
             )
         if role == Profile.Role.BROKER:
-            allowed = {
-                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
-                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
-                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
-            }
+            allowed = set(broker_work_permissions())
             if set(permissions) - allowed:
                 raise serializers.ValidationError(
                     {'management_permissions': 'Brokers may receive only broker-work permissions.'}
@@ -289,12 +282,10 @@ class DelegatedAccountCreateSerializer(serializers.Serializer):
             attrs['management_permissions'] = (
                 [Profile.Permission.USERS_MANAGE]
                 if attrs['role'] == Profile.Role.ADMINISTRATOR
-                else [
-                    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
-                    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
-                    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
-                ]
+                else broker_work_permissions()
             )
+        if attrs['role'] == Profile.Role.BROKER:
+            attrs['management_permissions'] = broker_work_permissions()
         return attrs
 
     def validate_management_permissions(self, permissions):

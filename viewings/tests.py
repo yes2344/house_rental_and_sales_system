@@ -359,7 +359,7 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.viewing.refresh_from_db()
         self.assertEqual(self.viewing.status, ViewingRequest.Status.PENDING)
 
-    def test_assigned_property_permission_does_not_grant_viewing_request_access(self):
+    def test_approved_broker_role_grants_citywide_viewing_request_access(self):
         broker = get_user_model().objects.create_user(username='property-only-broker')
         Profile.objects.create(
             user=broker,
@@ -375,10 +375,10 @@ class ManagedViewingRequestApiTests(APITestCase):
         )
         listed = self.client.get(reverse('api:managed-viewing-list'))
 
-        self.assertEqual(detail.status_code, 403)
-        self.assertEqual(listed.status_code, 403)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(listed.status_code, 200)
 
-    def test_viewing_permission_alone_scopes_assigned_broker_access(self):
+    def test_approved_broker_can_view_requests_outside_a_specific_assignment(self):
         broker = get_user_model().objects.create_user(username='viewing-only-broker')
         Profile.objects.create(
             user=broker,
@@ -395,10 +395,10 @@ class ManagedViewingRequestApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['email'], 'visitor@example.com')
-        hidden = self.client.get(
+        visible = self.client.get(
             reverse('api:managed-viewing-detail', kwargs={'pk': self.other_viewing.pk})
         )
-        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(visible.status_code, 200)
 
     def test_delegated_administrator_cannot_view_or_update_requests(self):
         delegated_admin = get_user_model().objects.create_user(

@@ -475,7 +475,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(invited_user.profile.role, Profile.Role.BROKER)
         self.assertEqual(replay.status_code, 400)
 
-    def test_owner_can_assign_invited_broker_and_scope_access_to_that_listing(self):
+    def test_owner_can_assign_invited_broker_and_broker_receives_marketplace_access(self):
         self.client.force_authenticate(user=self.admin_user)
         created = self.client.post(
             reverse('api:admin-delegated-account-list'),
@@ -515,8 +515,19 @@ class AdminApiTests(APITestCase):
         self.assertEqual(assigned_properties.status_code, 200)
         self.assertEqual(assigned_properties.data['count'], 1)
         self.assertEqual(assigned_properties.data['results'][0]['id'], self.property.pk)
+        self.assertEqual(
+            set(broker.profile.management_permissions),
+            {
+                permission
+                for permission, _ in Profile.Permission.choices
+                if permission not in {
+                    Profile.Permission.USERS_MANAGE,
+                    Profile.Permission.STAFF_MANAGE,
+                }
+            },
+        )
 
-    def test_broker_cannot_receive_global_permissions_or_owner_only_permissions(self):
+    def test_broker_invitation_grants_all_marketplace_permissions_but_not_account_control(self):
         self.client.force_authenticate(user=self.admin_user)
         response = self.client.post(
             reverse('api:admin-delegated-account-list'),
@@ -529,8 +540,32 @@ class AdminApiTests(APITestCase):
             format='json',
         )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(User.objects.filter(username='overprivileged-broker').exists())
+        self.assertEqual(response.status_code, 201)
+        broker = User.objects.get(username='overprivileged-broker')
+        self.assertEqual(
+            set(broker.profile.management_permissions),
+            {
+                permission
+                for permission, _ in Profile.Permission.choices
+                if permission not in {
+                    Profile.Permission.USERS_MANAGE,
+                    Profile.Permission.STAFF_MANAGE,
+                }
+            },
+        )
+        self.assertEqual(
+            self.client.post(
+                reverse('api:admin-delegated-account-list'),
+                {
+                    'username': 'owner-control-broker',
+                    'email': 'owner-control@example.com',
+                    'role': Profile.Role.BROKER,
+                    'management_permissions': [Profile.Permission.STAFF_MANAGE],
+                },
+                format='json',
+            ).status_code,
+            400,
+        )
 
     def test_delegated_administrators_cannot_manage_listings_even_if_legacy_permissions_exist(self):
         delegated = User.objects.create_user(
@@ -646,12 +681,15 @@ class AdminApiTests(APITestCase):
         self.assertEqual(created.status_code, 201)
         created_broker = User.objects.get(username='new-delegated-broker')
         self.assertEqual(
-            created_broker.profile.management_permissions,
-            [
-                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
-                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
-                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
-            ],
+            set(created_broker.profile.management_permissions),
+            {
+                permission
+                for permission, _ in Profile.Permission.choices
+                if permission not in {
+                    Profile.Permission.USERS_MANAGE,
+                    Profile.Permission.STAFF_MANAGE,
+                }
+            },
         )
         self.assertEqual(cannot_create_admin.status_code, 400)
 
@@ -1029,10 +1067,17 @@ class AdminPortalMethodTests(TestCase):
         self.assertEqual(response['Cache-Control'], 'no-store')
         self.assertFalse(invited.is_active)
         self.assertEqual(invited.profile.role, Profile.Role.BROKER)
-        self.assertEqual(invited.profile.management_permissions, [
-            Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
-            Profile.Permission.VIEWING_MANAGE_ASSIGNED,
-        ])
+        self.assertEqual(
+            set(invited.profile.management_permissions),
+            {
+                permission
+                for permission, _ in Profile.Permission.choices
+                if permission not in {
+                    Profile.Permission.USERS_MANAGE,
+                    Profile.Permission.STAFF_MANAGE,
+                }
+            },
+        )
         invitation_token = response.context['invitation_token']
         self.assertEqual(
             invitation.token_digest,
@@ -1165,7 +1210,8 @@ class AdminPortalMethodTests(TestCase):
         delegated.refresh_from_db()
         profile.refresh_from_db()
         self.assertFalse(delegated.is_active)
-        self.assertEqual(profile.management_permissions, [])
+        self.assertTrue(profile.management_permissions)
+        self.assertNotIn(Profile.Permission.STAFF_MANAGE, profile.management_permissions)
         self.assertTrue(
             AdminAuditEvent.objects.filter(
                 action='delegated_account_updated',

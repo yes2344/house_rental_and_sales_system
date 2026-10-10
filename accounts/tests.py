@@ -5,7 +5,12 @@ from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
 from accounts.models import Profile, UserPreferences
-from accounts.permissions import IsPropertyManagerOrAdministrator, IsViewingRequestManager
+from accounts.permissions import (
+    BROKER_WORK_PERMISSIONS,
+    IsPropertyManagerOrAdministrator,
+    IsViewingRequestManager,
+    effective_management_permissions,
+)
 from favorites.models import Favorite
 from properties.models import Property, PropertyBrokerAssignment
 from viewings.models import ViewingRequest
@@ -20,6 +25,20 @@ class ProfileConstraintTests(TestCase):
 
 
 class AccountApiTests(APITestCase):
+    def test_approved_broker_role_has_all_marketplace_permissions_except_account_control(self):
+        broker = get_user_model().objects.create_user(username='full-access-broker')
+        profile = Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
+        )
+
+        self.assertEqual(set(effective_management_permissions(broker)), BROKER_WORK_PERMISSIONS)
+        self.assertNotIn(Profile.Permission.USERS_MANAGE, effective_management_permissions(broker))
+        self.assertNotIn(Profile.Permission.STAFF_MANAGE, effective_management_permissions(broker))
+        self.assertNotIn(Profile.Permission.USERS_MANAGE, profile.management_permissions)
+
     def test_registration_creates_customer_and_ignores_client_role(self):
         response = self.client.post(
             reverse('api:register'),
@@ -93,6 +112,8 @@ class AccountApiTests(APITestCase):
             HTTP_X_CSRFTOKEN=response.data['csrf_token'],
         )
         self.assertEqual(logout_response.status_code, 204)
+        account_after_logout = client.get(reverse('api:me'))
+        self.assertIn(account_after_logout.status_code, [401, 403])
 
     def test_profile_update_cannot_change_role(self):
         user = get_user_model().objects.create_user(
@@ -153,14 +174,23 @@ class ListingObjectPermissionTests(TestCase):
         PropertyBrokerAssignment.objects.create(property=self.property, broker=self.broker)
         PropertyBrokerAssignment.objects.create(property=self.property, broker=self.unapproved_broker)
 
-    def test_only_owner_or_approved_assigned_broker_can_manage_property(self):
+    def test_approved_broker_can_manage_citywide_but_unapproved_broker_cannot(self):
         permission = IsPropertyManagerOrAdministrator()
 
         def request_for(user):
             return type('Request', (), {'user': user})()
 
-        self.assertTrue(permission.has_object_permission(request_for(self.owner), None, self.property))
+        self.assertFalse(permission.has_object_permission(request_for(self.owner), None, self.property))
         self.assertTrue(permission.has_object_permission(request_for(self.broker), None, self.property))
+        unassigned_property = Property.objects.create(
+            title='Unassigned marketplace property',
+            location='Another area',
+            price=120000,
+            description='Managed within the same marketplace.',
+        )
+        self.assertTrue(
+            permission.has_object_permission(request_for(self.broker), None, unassigned_property)
+        )
         self.assertFalse(
             permission.has_object_permission(request_for(self.unapproved_broker), None, self.property)
         )

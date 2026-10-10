@@ -74,7 +74,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
       </div>
       <div className="container footer-bottom">
         <span>© {new Date().getFullYear()} {contact.business_name || 'Habesha Homes'}</span>
-        <span>Debre Markos, Ethiopia</span>
+        <span>Addis Ababa, Ethiopia</span>
       </div>
     </footer>
   );

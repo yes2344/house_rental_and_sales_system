@@ -190,7 +190,7 @@ else:
     }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Debre Markos Property Marketplace API',
+    'TITLE': 'Addis Ababa Property Marketplace API',
     'DESCRIPTION': 'Versioned API for verified property listings and viewing requests.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,

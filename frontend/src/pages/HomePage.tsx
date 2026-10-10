@@ -21,7 +21,7 @@ export function HomePage({ locale, text }: HomePageProps) {
   const { contact } = useBrokerageContact();
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [propertyType, setPropertyType] = useState('');
-  const [location, setLocation] = useState('Debre Markos');
+  const [location, setLocation] = useState('Addis Ababa');
   const [properties, setProperties] = useState<PropertySummary[]>([]);
   const [listingsLoading, setListingsLoading] = useState(true);
   const [listingsError, setListingsError] = useState('');

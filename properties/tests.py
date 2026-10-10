@@ -908,7 +908,7 @@ class PropertyImageApiTests(APITestCase):
         self.assertFalse(PropertyImage.objects.get(pk=first.data['id']).is_primary)
         self.assertTrue(PropertyImage.objects.get(pk=second.data['id']).is_primary)
 
-    def test_upload_to_another_owners_property_is_not_found(self):
+    def test_approved_broker_can_manage_images_on_any_broker_managed_property(self):
         other_property = Property.objects.create(
             title='Other image property',
             location='Submitted location',
@@ -923,7 +923,7 @@ class PropertyImageApiTests(APITestCase):
             format='multipart',
         )
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 201)
 
     def test_image_can_be_deleted_with_its_stored_file(self):
         upload = self.client.post(

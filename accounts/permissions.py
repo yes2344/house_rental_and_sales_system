@@ -3,11 +3,22 @@ from rest_framework.permissions import BasePermission
 from accounts.models import Profile
 
 
-BROKER_WORK_PERMISSIONS = frozenset({
-    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
-    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
-    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
-})
+BROKER_WORK_PERMISSIONS = frozenset(
+    permission
+    for permission, _ in Profile.Permission.choices
+    if permission not in {
+        Profile.Permission.USERS_MANAGE,
+        Profile.Permission.STAFF_MANAGE,
+    }
+)
+
+
+def broker_work_permissions():
+    return [
+        permission
+        for permission, _ in Profile.Permission.choices
+        if permission in BROKER_WORK_PERMISSIONS
+    ]
 
 
 def is_platform_administrator(user):
@@ -23,11 +34,7 @@ def effective_management_permissions(user):
     if profile.role == Profile.Role.ADMINISTRATOR:
         return [Profile.Permission.USERS_MANAGE] if user.is_staff else []
     if profile.role == Profile.Role.BROKER and profile.broker_approved:
-        return [
-            permission
-            for permission in profile.management_permissions
-            if permission in BROKER_WORK_PERMISSIONS
-        ]
+        return broker_work_permissions()
     return []
 
 
@@ -42,11 +49,7 @@ def has_management_permission(user, permission):
     if profile.role == Profile.Role.ADMINISTRATOR:
         return bool(user.is_staff and permission == Profile.Permission.USERS_MANAGE)
     if profile.role == Profile.Role.BROKER:
-        return bool(
-            profile.broker_approved
-            and permission in BROKER_WORK_PERMISSIONS
-            and permission in profile.management_permissions
-        )
+        return profile.broker_approved and permission in BROKER_WORK_PERMISSIONS
     return False
 
 
