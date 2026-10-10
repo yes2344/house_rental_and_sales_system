@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'viewings.apps.ViewingsConfig',
     'user.apps.UserConfig',
     'admin.apps.AdminConfig',
+    'owner_announcements.apps.OwnerAnnouncementsConfig',
 ]
 
 MIDDLEWARE = [

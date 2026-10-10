@@ -1,6 +1,7 @@
 import django_filters
 
 from properties.models import Property
+from properties.models import Location
 
 
 class PublicPropertyFilter(django_filters.FilterSet):
@@ -20,6 +21,7 @@ class PublicPropertyFilter(django_filters.FilterSet):
     max_size = django_filters.NumberFilter(field_name='area_sqft', lookup_expr='lte')
     location = django_filters.CharFilter(field_name='location', lookup_expr='icontains')
     amenities = django_filters.CharFilter(method='filter_amenities')
+    location_id = django_filters.NumberFilter(method='filter_location')
 
     class Meta:
         model = Property
@@ -30,3 +32,21 @@ class PublicPropertyFilter(django_filters.FilterSet):
         for slug in slugs:
             queryset = queryset.filter(amenities__slug=slug)
         return queryset.distinct()
+
+    def filter_location(self, queryset, name, value):
+        root_id = int(value)
+        if not Location.objects.filter(pk=root_id, is_active=True).exists():
+            return queryset.none()
+
+        matching_ids = {root_id}
+        frontier = {root_id}
+        while frontier:
+            child_ids = set(
+                Location.objects.filter(
+                    parent_id__in=frontier,
+                    is_active=True,
+                ).values_list('id', flat=True)
+            )
+            frontier = child_ids - matching_ids
+            matching_ids.update(frontier)
+        return queryset.filter(administrative_location_id__in=matching_ids)

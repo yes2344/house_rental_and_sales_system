@@ -1,0 +1,7 @@
+from django.apps import AppConfig
+
+
+class OwnerAnnouncementsConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'owner_announcements'
+    verbose_name = 'Owner announcements'

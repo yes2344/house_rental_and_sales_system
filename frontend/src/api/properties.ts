@@ -1,7 +1,9 @@
 import { apiClient } from './client';
 
 export type ListingType = 'sale' | 'rent';
-export type PropertyType = 'house' | 'apartment' | 'land' | 'commercial' | 'villa';
+export type PropertyType =
+  | 'house' | 'villa' | 'apartment' | 'condominium' | 'land'
+  | 'office' | 'shop' | 'warehouse' | 'commercial' | 'other';
 
 export interface PropertySummary {
   id: number;
@@ -19,6 +21,10 @@ export interface PropertySummary {
   bathrooms: number;
   area_sqft: number;
   status: 'available' | 'rented' | 'sold' | 'inactive';
+  service_type: 'broker_managed' | 'owner_announced';
+  public_contact_name: string;
+  public_contact_phone: string;
+  public_contact_email: string;
   primary_image: string | null;
   images: { id: number; url: string | null; caption: string; is_primary: boolean }[];
   created_at: string;
@@ -36,6 +42,7 @@ export interface PropertyFilters {
   listing_type?: ListingType;
   property_type?: PropertyType;
   location?: string;
+  location_id?: number;
   min_price?: string;
   max_price?: string;
   min_bedrooms?: string;

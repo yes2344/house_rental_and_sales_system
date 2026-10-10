@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from accounts.models import Profile
 from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
+from properties.access import public_properties
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
 
@@ -262,10 +263,7 @@ class AdminPropertySerializer(serializers.ModelSerializer):
 class PublicListingReportSerializer(serializers.ModelSerializer):
     property_id = serializers.PrimaryKeyRelatedField(
         source='property',
-        queryset=Property.objects.filter(
-            publication_status=Property.PublicationStatus.PUBLISHED,
-            status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
-        ),
+        queryset=public_properties(),
         write_only=True,
     )
 

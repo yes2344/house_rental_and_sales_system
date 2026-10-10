@@ -476,9 +476,15 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               <select value={values.category} onChange={(event) => updateValue('category', event.target.value as ManagedPropertyType)}>
                 <option value="house">{text('house')}</option>
                 <option value="villa">{text('villa')}</option>
+                <option value="villa">{text('house')}</option>
                 <option value="apartment">{text('apartment')}</option>
+                <option value="condominium">Condominium</option>
                 <option value="land">{text('land')}</option>
+                <option value="office">Office</option>
+                <option value="shop">Shop</option>
+                <option value="warehouse">Warehouse</option>
                 <option value="commercial">{text('commercial')}</option>
+                <option value="other">Other</option>
               </select>
               {fieldError('category')}
             </label>

@@ -20,6 +20,8 @@ import { InvitationAcceptPage } from './pages/InvitationAcceptPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { OwnerListingsPage } from './pages/OwnerListingsPage';
 import { OwnerPropertyFormPage } from './pages/OwnerPropertyFormPage';
+import { OwnerAnnouncementsPage } from './pages/OwnerAnnouncementsPage';
+import { BrokerAnnouncementsPage } from './pages/BrokerAnnouncementsPage';
 import { OwnerViewingRequestsPage } from './pages/OwnerViewingRequestsPage';
 import { BrokerageSettingsPage } from './pages/BrokerageSettingsPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -62,12 +64,14 @@ export default function App() {
         <Route element={<RequireAuth text={text} />}>
           <Route path="account" element={<AccountPage locale={locale} text={text} />} />
           <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
+          <Route path="owner/announcements" element={<OwnerAnnouncementsPage />} />
           <Route element={<RequireListingManager text={text} />}>
             <Route element={<OwnerDashboardLayout text={text} />}>
           <Route path="management/listings" element={<OwnerListingsPage locale={locale} text={text} />} />
           <Route path="management/listings/new" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
           <Route path="management/listings/:id/edit" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
           <Route path="management/viewing-requests" element={<OwnerViewingRequestsPage text={text} />} />
+          <Route path="management/owner-announcements" element={<BrokerAnnouncementsPage />} />
           <Route path="management/brokerage" element={<BrokerageSettingsPage text={text} />} />
             </Route>
           </Route>

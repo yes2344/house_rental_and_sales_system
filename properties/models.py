@@ -12,6 +12,104 @@ from django.db.models import Q
 from django.utils.text import slugify
 
 
+class Location(models.Model):
+    class Type(models.TextChoices):
+        COUNTRY = 'country', 'Country'
+        REGION = 'region', 'Region'
+        CITY_ADMINISTRATION = 'city_administration', 'City administration'
+        CITY = 'city', 'City or town'
+        SUBCITY = 'subcity', 'Sub-city / kifle ketema'
+        WOREDA = 'woreda', 'Woreda'
+        NEIGHBORHOOD = 'neighborhood', 'Neighborhood / local area'
+
+    name = models.CharField(max_length=120)
+    name_am = models.CharField(max_length=120, blank=True)
+    slug = models.SlugField(max_length=140)
+    location_type = models.CharField(max_length=24, choices=Type.choices)
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.PROTECT,
+        related_name='children',
+        null=True,
+        blank=True,
+    )
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('-90')), MaxValueValidator(Decimal('90'))],
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('-180')), MaxValueValidator(Decimal('180'))],
+    )
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['parent', 'slug'],
+                name='location_unique_sibling_slug',
+            ),
+            models.UniqueConstraint(
+                fields=['slug'],
+                condition=models.Q(parent__isnull=True),
+                name='location_unique_root_slug',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(latitude__isnull=True, longitude__isnull=True)
+                    | models.Q(latitude__isnull=False, longitude__isnull=False)
+                ),
+                name='location_coordinates_paired',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(latitude__isnull=True) | models.Q(latitude__gte=-90, latitude__lte=90),
+                name='location_latitude_in_range',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(longitude__isnull=True) | models.Q(longitude__gte=-180, longitude__lte=180),
+                name='location_longitude_in_range',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['parent', 'is_active', 'display_order'], name='location_parent_active_idx'),
+        ]
+
+    def clean(self):
+        super().clean()
+        allowed_parent_types = {
+            self.Type.COUNTRY: {None},
+            self.Type.REGION: {self.Type.COUNTRY},
+            self.Type.CITY_ADMINISTRATION: {self.Type.COUNTRY},
+            self.Type.CITY: {self.Type.COUNTRY, self.Type.REGION, self.Type.CITY_ADMINISTRATION},
+            self.Type.SUBCITY: {self.Type.CITY, self.Type.CITY_ADMINISTRATION},
+            self.Type.WOREDA: {self.Type.CITY, self.Type.CITY_ADMINISTRATION, self.Type.SUBCITY},
+            self.Type.NEIGHBORHOOD: {self.Type.CITY, self.Type.CITY_ADMINISTRATION, self.Type.SUBCITY, self.Type.WOREDA},
+        }
+        parent_type = self.parent.location_type if self.parent_id and self.parent else None
+        allowed_types = allowed_parent_types.get(self.location_type)
+        if allowed_types is None:
+            raise ValidationError({'location_type': 'Choose a supported location type.'})
+        if parent_type not in allowed_types:
+            raise ValidationError({'parent': 'Choose a parent location compatible with this location type.'})
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
 class Amenity(models.Model):
     name = models.CharField(max_length=100, unique=True)
     name_am = models.CharField(max_length=100, blank=True)
@@ -47,6 +145,12 @@ class Property(models.Model):
         PUBLISHED = 'published', 'Published'
         REJECTED = 'rejected', 'Rejected'
         SUSPENDED = 'suspended', 'Suspended'
+        EXPIRED = 'expired', 'Expired'
+        WITHDRAWN = 'withdrawn', 'Withdrawn'
+
+    class ServiceType(models.TextChoices):
+        BROKER_MANAGED = 'broker_managed', 'Broker-managed'
+        OWNER_ANNOUNCED = 'owner_announced', 'Owner-announced'
 
     class AreaUnit(models.TextChoices):
         SQUARE_METRES = 'sqm', 'Square metres'
@@ -70,13 +174,25 @@ class Property(models.Model):
         ('house', 'House'),
         ('villa', 'Villa'),
         ('apartment', 'Apartment'),
+        ('condominium', 'Condominium'),
         ('land', 'Land'),
+        ('office', 'Office'),
+        ('shop', 'Shop'),
+        ('warehouse', 'Warehouse'),
         ('commercial', 'Commercial'),
+        ('other', 'Other'),
     ]
 
     title = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, blank=True)
     location = models.CharField(max_length=200, db_index=True)
+    administrative_location = models.ForeignKey(
+        Location,
+        on_delete=models.PROTECT,
+        related_name='properties',
+        null=True,
+        blank=True,
+    )
     latitude = models.DecimalField(
         max_digits=9,
         decimal_places=6,
@@ -125,6 +241,11 @@ class Property(models.Model):
         choices=PublicationStatus.choices,
         default=PublicationStatus.PENDING_REVIEW,
     )
+    service_type = models.CharField(
+        max_length=20,
+        choices=ServiceType.choices,
+        default=ServiceType.BROKER_MANAGED,
+    )
     is_featured = models.BooleanField(default=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -165,12 +286,19 @@ class Property(models.Model):
                 fields=['publication_status', 'status', 'listing_type', '-created_at'],
                 name='property_public_search_idx',
             ),
+            models.Index(
+                fields=['administrative_location', 'publication_status', 'status'],
+                name='property_location_public_idx',
+            ),
         ]
         constraints = [
             models.CheckConstraint(condition=Q(price__gt=0), name='property_price_positive'),
             models.CheckConstraint(
                 condition=Q(
-                    property_type__in=['house', 'villa', 'apartment', 'land', 'commercial']
+                    property_type__in=[
+                        'house', 'villa', 'apartment', 'condominium', 'land',
+                        'office', 'shop', 'warehouse', 'commercial', 'other',
+                    ]
                 ),
                 name='property_valid_category',
             ),
@@ -189,6 +317,7 @@ class Property(models.Model):
             models.CheckConstraint(
                 condition=Q(publication_status__in=[
                     'draft', 'pending_review', 'published', 'rejected', 'suspended',
+                    'expired', 'withdrawn',
                 ]),
                 name='property_valid_publication_status',
             ),

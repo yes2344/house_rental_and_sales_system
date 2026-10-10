@@ -3,6 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from properties.models import Property
+from properties.access import public_properties
 from viewings.models import ViewingRequest, ViewingRequestEvent
 
 
@@ -18,10 +19,7 @@ def appointment_is_in_past(appointment_date, appointment_time):
 class PublicViewingRequestCreateSerializer(serializers.ModelSerializer):
     property_id = serializers.PrimaryKeyRelatedField(
         source='property',
-        queryset=Property.objects.filter(
-            publication_status=Property.PublicationStatus.PUBLISHED,
-            status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
-        ),
+        queryset=public_properties(),
         write_only=True,
     )
     full_name = serializers.CharField(max_length=200, trim_whitespace=True, write_only=True)

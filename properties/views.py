@@ -14,15 +14,16 @@ from accounts.permissions import (
 )
 from accounts.models import Profile
 from admin.audit import record_admin_action
-from properties.access import editable_properties, managed_properties
+from properties.access import editable_properties, managed_properties, public_properties
 from properties.filters import PublicPropertyFilter
-from properties.models import Amenity, Property, PropertyImage
+from properties.models import Amenity, Location, Property, PropertyImage
 from properties.serializers import (
     AmenitySerializer,
     PropertyImageManagementSerializer,
     PropertyManagementSerializer,
     PublicPropertyDetailSerializer,
     PublicPropertyListSerializer,
+    LocationSerializer,
 )
 
 
@@ -39,6 +40,53 @@ class PublicAmenityListView(generics.ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
+class PublicLocationListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = LocationSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = Location.objects.filter(is_active=True)
+        if self.request.query_params.get('all') == '1':
+            return queryset.order_by('display_order', 'name')
+        parent_id = self.request.query_params.get('parent_id')
+        if parent_id:
+            if not Location.objects.filter(pk=parent_id, is_active=True).exists():
+                return queryset.none()
+            queryset = queryset.filter(parent_id=parent_id)
+        else:
+            queryset = queryset.filter(parent__isnull=True)
+        location_type = self.request.query_params.get('type')
+        if location_type:
+            queryset = queryset.filter(location_type=location_type)
+        return queryset.order_by('display_order', 'name')
+
+
+class ManagedLocationListCreateView(generics.ListCreateAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    serializer_class = LocationSerializer
+
+    def get_queryset(self):
+        queryset = Location.objects.all()
+        parent_id = self.request.query_params.get('parent_id')
+        return queryset.filter(parent_id=parent_id) if parent_id else queryset.filter(parent__isnull=True)
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    serializer_class = LocationSerializer
+    queryset = Location.objects.all()
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+
 class PublicPropertyListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublicPropertyListSerializer
@@ -50,11 +98,8 @@ class PublicPropertyListView(generics.ListAPIView):
 
     def get_queryset(self):
         return (
-            Property.objects.filter(
-                publication_status=Property.PublicationStatus.PUBLISHED,
-                status__in=PUBLIC_STATUSES,
-            )
-            .prefetch_related('images', 'amenities')
+            public_properties()
+            .prefetch_related('images', 'amenities', 'owner_announcement__agreements')
             .order_by(*self.ordering)
         )
 
@@ -78,12 +123,8 @@ class PublicPropertyDetailView(generics.RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublicPropertyDetailSerializer
     lookup_field = 'slug'
-    queryset = (
-        Property.objects.filter(
-            publication_status=Property.PublicationStatus.PUBLISHED,
-            status__in=PUBLIC_STATUSES,
-        )
-        .prefetch_related('images', 'amenities')
+    queryset = public_properties().prefetch_related(
+        'images', 'amenities', 'owner_announcement__agreements',
     )
 
     @extend_schema(summary='Retrieve a published available property')
@@ -187,7 +228,7 @@ class ManagedPropertyPublicationView(generics.GenericAPIView):
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         property_obj = get_object_or_404(
-            Property.objects.select_for_update(),
+            managed_properties(request.user).select_for_update(),
             pk=kwargs['pk'],
         )
         self.check_object_permissions(request, property_obj)

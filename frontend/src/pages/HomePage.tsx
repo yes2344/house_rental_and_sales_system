@@ -112,9 +112,15 @@ export function HomePage({ locale, text }: HomePageProps) {
                 <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
                   <option value="">{text('anyType')}</option>
                   <option value="house">{text('house')}</option>
+                  <option value="villa">{text('house')}</option>
                   <option value="apartment">{text('apartment')}</option>
+                  <option value="condominium">Condominium</option>
                   <option value="land">{text('land')}</option>
+                  <option value="office">Office</option>
+                  <option value="shop">Shop</option>
+                  <option value="warehouse">Warehouse</option>
                   <option value="commercial">{text('commercial')}</option>
+                  <option value="other">Other</option>
                 </select>
               </label>
               <button className="button button-primary search-submit" type="submit">
@@ -133,6 +139,17 @@ export function HomePage({ locale, text }: HomePageProps) {
           <div className="trust-item"><span className="trust-icon"><UsersRound size={18} aria-hidden="true" /></span>{text('promiseContact')}</div>
           <span className="trust-divider" aria-hidden="true" />
           <div className="trust-item"><span className="trust-icon"><Check size={18} aria-hidden="true" /></span>{text('promiseViewing')}</div>
+        </div>
+      </section>
+
+      <section className="section owner-announcement-cta">
+        <div className="container owner-announcement-cta-inner">
+          <div>
+            <p className="eyebrow eyebrow-muted">For property owners</p>
+            <h2>Want to advertise your property?</h2>
+            <p className="section-description">Submit your property details to the brokerage for review and an advertising agreement.</p>
+          </div>
+          <Link className="button button-primary" to="/owner/announcements">Announce your property <ArrowUpRight size={16} aria-hidden="true" /></Link>
         </div>
       </section>
 

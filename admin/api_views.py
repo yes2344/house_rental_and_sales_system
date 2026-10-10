@@ -324,7 +324,9 @@ class AdminPropertyListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Property.objects.none()
-        return Property.objects.select_related('owner', 'submitted_by').order_by(*self.ordering)
+        return Property.objects.filter(
+            service_type=Property.ServiceType.BROKER_MANAGED,
+        ).select_related('owner', 'submitted_by').order_by(*self.ordering)
 
 
 class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
@@ -343,7 +345,9 @@ class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return Property.objects.none()
-        return Property.objects.select_related('owner', 'submitted_by')
+        return Property.objects.filter(
+            service_type=Property.ServiceType.BROKER_MANAGED,
+        ).select_related('owner', 'submitted_by')
 
     @transaction.atomic
     def perform_update(self, serializer):
@@ -404,14 +408,19 @@ class AdminBrokerAssignmentListCreateView(generics.ListCreateAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return PropertyBrokerAssignment.objects.none()
         return PropertyBrokerAssignment.objects.filter(
-            property_id=self.kwargs['property_id']
+            property_id=self.kwargs['property_id'],
+            property__service_type=Property.ServiceType.BROKER_MANAGED,
         ).select_related('broker', 'granted_by')
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        property_obj = get_object_or_404(Property.objects.select_for_update(), pk=self.kwargs['property_id'])
+        property_obj = get_object_or_404(
+            Property.objects.select_for_update(),
+            pk=self.kwargs['property_id'],
+            service_type=Property.ServiceType.BROKER_MANAGED,
+        )
         broker = serializer.validated_data['broker']
         assignment, created = PropertyBrokerAssignment.objects.get_or_create(
             property=property_obj,
@@ -443,7 +452,8 @@ class AdminBrokerAssignmentDetailView(generics.DestroyAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return PropertyBrokerAssignment.objects.none()
         return PropertyBrokerAssignment.objects.filter(
-            property_id=self.kwargs['property_id']
+            property_id=self.kwargs['property_id'],
+            property__service_type=Property.ServiceType.BROKER_MANAGED,
         ).select_related('broker')
 
     @transaction.atomic

@@ -23,7 +23,7 @@ The project does not currently send invitation emails. Until an email provider i
 
 ## Permission behavior
 
-Permissions are a predefined list in `accounts.models.Profile.Permission`. A delegated account does not receive access just because `is_staff` is true. API operations check the specific permission and, for brokers, the property assignment. Listing and viewing-request operations are restricted to the platform broker and explicitly authorized staff; property ownership or listing submission alone does not grant management access. The public marketplace displays only brokerage contact channels, not seller or landlord contact information. Only the platform owner can create delegated accounts or change their role, permissions, or active state.
+Permissions are a predefined list in `accounts.models.Profile.Permission`. A delegated account does not receive access just because `is_staff` is true. API operations check the specific permission and, for brokers, the property assignment. Listing and viewing-request operations are restricted to the platform broker and explicitly authorized staff; property ownership or listing submission alone does not grant management access. Broker-managed listings display brokerage contact channels only. Owner-announced listings use the separate agreement-controlled public contact workflow described in [owner-announcements.md](./owner-announcements.md). Only the platform owner can create delegated accounts or change their role, permissions, or active state.
 
 The brokerage contact page at `/management/brokerage` updates the centrally displayed business name, phone, email, messaging, and social links. Configure only channels the brokerage actually controls.
 

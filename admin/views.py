@@ -38,14 +38,20 @@ def dashboard(request):
 
 @owner_required
 def property_list(request):
-    properties = Property.objects.all().order_by('-created_at')
+    properties = Property.objects.filter(
+        service_type=Property.ServiceType.BROKER_MANAGED,
+    ).order_by('-created_at')
     return render(request, 'admin/property_list.html', {'properties': properties})
 
 
 @owner_required
 @transaction.atomic
 def property_form(request, pk=None):
-    property_obj = get_object_or_404(Property, id=pk) if pk else None
+    property_obj = get_object_or_404(
+        Property,
+        id=pk,
+        service_type=Property.ServiceType.BROKER_MANAGED,
+    ) if pk else None
     if request.method == 'POST':
         form = PropertyForm(request.POST, request.FILES, instance=property_obj)
         if form.is_valid():

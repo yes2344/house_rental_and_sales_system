@@ -1,11 +1,49 @@
 from decimal import Decimal
-
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
+from django.utils.text import slugify
 from django.db import transaction
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import Profile
-from properties.models import Amenity, Property, PropertyBrokerAssignment, PropertyImage
+from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
+from owner_announcements.models import OwnerAnnouncement, OwnerAnnouncementAgreement
+
+
+class LocationSerializer(serializers.ModelSerializer):
+    parent_id = serializers.IntegerField(read_only=True, allow_null=True)
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+
+    class Meta:
+        model = Location
+        fields = [
+            'id', 'name', 'name_am', 'slug', 'location_type', 'parent_id', 'parent',
+            'is_active', 'display_order', 'latitude', 'longitude',
+        ]
+        extra_kwargs = {'slug': {'required': False}}
+
+    def validate_parent(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError('An active location must have an active parent.')
+        return value
+
+    def validate(self, attrs):
+        location = self.instance or Location()
+        for field, value in attrs.items():
+            setattr(location, field, value)
+        if not location.slug:
+            location.slug = slugify(location.name)
+        try:
+            location.full_clean()
+        except DjangoValidationError as error:
+            raise serializers.ValidationError(error.message_dict if hasattr(error, 'message_dict') else error.messages) from error
+        return attrs
 
 
 class AmenitySerializer(serializers.ModelSerializer):
@@ -38,6 +76,11 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     images = PropertyImageSerializer(many=True, read_only=True)
     latitude = serializers.SerializerMethodField()
     longitude = serializers.SerializerMethodField()
+    location_name = serializers.SerializerMethodField()
+    service_type = serializers.CharField(read_only=True)
+    public_contact_name = serializers.SerializerMethodField()
+    public_contact_phone = serializers.SerializerMethodField()
+    public_contact_email = serializers.SerializerMethodField()
 
     class Meta:
         model = Property
@@ -46,6 +89,8 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
             'title',
             'slug',
             'location',
+            'administrative_location',
+            'location_name',
             'latitude',
             'longitude',
             'category',
@@ -59,6 +104,10 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
             'area_unit',
             'rental_frequency',
             'status',
+            'service_type',
+            'public_contact_name',
+            'public_contact_phone',
+            'public_contact_email',
             'primary_image',
             'images',
             'created_at',
@@ -81,6 +130,41 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.DecimalField(max_digits=9, decimal_places=6, allow_null=True))
     def get_longitude(self, obj):
         return obj.longitude if obj.has_public_coordinates else None
+
+    @extend_schema_field(serializers.CharField(allow_blank=True))
+    def get_location_name(self, obj):
+        return obj.administrative_location.name if obj.administrative_location_id else ''
+
+    def _public_announcement(self, obj):
+        if obj.service_type != Property.ServiceType.OWNER_ANNOUNCED:
+            return None
+        try:
+            announcement = obj.owner_announcement
+        except OwnerAnnouncement.DoesNotExist:
+            return None
+        today = timezone.localdate()
+        valid_agreement = any(
+            agreement.status == OwnerAnnouncementAgreement.Status.ACTIVE
+            and agreement.start_date <= today <= agreement.end_date
+            and agreement.public_contact_visible
+            for agreement in announcement.agreements.all()
+        )
+        return announcement if announcement.public_contact_visible and valid_agreement else None
+
+    @extend_schema_field(serializers.CharField(allow_blank=True))
+    def get_public_contact_name(self, obj):
+        announcement = self._public_announcement(obj)
+        return announcement.public_contact_name if announcement else ''
+
+    @extend_schema_field(serializers.CharField(allow_blank=True))
+    def get_public_contact_phone(self, obj):
+        announcement = self._public_announcement(obj)
+        return announcement.public_contact_phone if announcement else ''
+
+    @extend_schema_field(serializers.EmailField(allow_blank=True))
+    def get_public_contact_email(self, obj):
+        announcement = self._public_announcement(obj)
+        return announcement.public_contact_email if announcement else ''
 
     @extend_schema_field(serializers.URLField(allow_null=True))
     def get_primary_image(self, obj):
@@ -108,6 +192,11 @@ class PublicPropertyDetailSerializer(PublicPropertyListSerializer):
 
 
 class PropertyManagementSerializer(serializers.ModelSerializer):
+    administrative_location = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
     category = serializers.ChoiceField(source='property_type', choices=Property.PROPERTY_TYPES)
     listing_type = serializers.ChoiceField(choices=Property.ListingType.choices)
     status = serializers.ChoiceField(
@@ -174,6 +263,7 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'title',
             'slug',
             'location',
+            'administrative_location',
             'latitude',
             'longitude',
             'exact_location_is_public',

@@ -15,6 +15,7 @@ from .forms import ViewingRequestForm
 from .models import Property, ViewingRequest
 from viewings.models import ViewingRequestEvent
 from viewings.serializers import appointment_is_in_past
+from properties.access import public_properties
 
 
 STOPWORDS = {
@@ -25,10 +26,7 @@ STOPWORDS = {
 
 
 def _public_properties():
-    return Property.objects.filter(
-        publication_status=Property.PublicationStatus.PUBLISHED,
-        status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
-    )
+    return public_properties()
 
 
 def _public_context(**context):
@@ -63,6 +61,26 @@ def _public_map_embed_url(property_obj):
         'marker': f'{latitude:.6f},{longitude:.6f}',
     })
     return f'https://www.openstreetmap.org/export/embed.html?{query}'
+
+
+def _public_owner_contact(property_obj):
+    if property_obj.service_type != Property.ServiceType.OWNER_ANNOUNCED:
+        return None
+    announcement = property_obj.owner_announcement
+    today = timezone.localdate()
+    agreement_is_public = any(
+        agreement.status == 'active'
+        and agreement.start_date <= today <= agreement.end_date
+        and agreement.public_contact_visible
+        for agreement in announcement.agreements.all()
+    )
+    if not (announcement.public_contact_visible and agreement_is_public):
+        return None
+    return {
+        'name': announcement.public_contact_name,
+        'phone': announcement.public_contact_phone,
+        'email': announcement.public_contact_email,
+    }
 
 
 def _smart_search(query):
@@ -128,6 +146,7 @@ def property_detail(request, slug):
             property=property_obj,
             images=images,
             property_map_embed_url=_public_map_embed_url(property_obj),
+            public_owner_contact=_public_owner_contact(property_obj),
         ),
     )
 

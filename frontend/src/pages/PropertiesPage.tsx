@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '../api/client';
 import { getProperties, type ListingType, type PaginatedResponse, type PropertyFilters, type PropertySummary, type PropertyType } from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
+import { LocationCascade } from '../components/LocationCascade';
 import type { HomePageProps } from './HomePage';
 
 const PAGE_SIZE = 12;
@@ -14,6 +15,7 @@ interface FilterValues {
   listing_type: string;
   property_type: string;
   location: string;
+  location_id: string;
   min_price: string;
   max_price: string;
   min_bedrooms: string;
@@ -32,6 +34,7 @@ function readFilters(params: URLSearchParams): FilterValues {
     listing_type: params.get('listing_type') ?? '',
     property_type: params.get('property_type') ?? '',
     location: params.get('location') ?? '',
+    location_id: params.get('location_id') ?? '',
     min_price: params.get('min_price') ?? '',
     max_price: params.get('max_price') ?? '',
     min_bedrooms: params.get('min_bedrooms') ?? '',
@@ -57,7 +60,10 @@ function filtersToParams(values: FilterValues): URLSearchParams {
 
 function toApiFilters(params: URLSearchParams): PropertyFilters {
   const validOrderings = ['-created_at', 'price', '-price', '-area_sqft'];
-  const validPropertyTypes = ['house', 'villa', 'apartment', 'land', 'commercial'];
+  const validPropertyTypes = [
+    'house', 'villa', 'apartment', 'condominium', 'land',
+    'office', 'shop', 'warehouse', 'commercial', 'other',
+  ];
   const page = Number(params.get('page') ?? 1);
   const listingType = params.get('listing_type');
   const propertyType = params.get('property_type');
@@ -68,6 +74,7 @@ function toApiFilters(params: URLSearchParams): PropertyFilters {
     listing_type: listingType === 'sale' || listingType === 'rent' ? listingType as ListingType : undefined,
     property_type: validPropertyTypes.includes(propertyType ?? '') ? propertyType as PropertyType : undefined,
     location: params.get('location') || undefined,
+    location_id: Number(params.get('location_id')) > 0 ? Number(params.get('location_id')) : undefined,
     min_price: params.get('min_price') || undefined,
     max_price: params.get('max_price') || undefined,
     min_bedrooms: params.get('min_bedrooms') || undefined,
@@ -226,15 +233,26 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
               <select className="filter-select" id="filter-type" value={formValues.property_type} onChange={(event) => updateValue('property_type', event.target.value)}>
                 <option value="">{text('anyType')}</option>
                 <option value="house">{text('house')}</option>
+                <option value="villa">{text('house')}</option>
                 <option value="apartment">{text('apartment')}</option>
+                <option value="condominium">Condominium</option>
                 <option value="land">{text('land')}</option>
+                <option value="office">Office</option>
+                <option value="shop">Shop</option>
+                <option value="warehouse">Warehouse</option>
                 <option value="commercial">{text('commercial')}</option>
+                <option value="other">Other</option>
               </select>
 
               <label className="filter-label" htmlFor="filter-location">{text('location')}</label>
               <span className="filter-search-wrap"><MapPin size={16} aria-hidden="true" />
                 <input id="filter-location" value={formValues.location} onChange={(event) => updateValue('location', event.target.value)} placeholder={text('locationPlaceholder')} />
               </span>
+              <LocationCascade
+                value={formValues.location_id}
+                locale={locale}
+                onChange={(value) => updateValue('location_id', value)}
+              />
 
               <div className="filter-price-heading">{text('priceLabel')}</div>
               <div className="filter-two-columns">

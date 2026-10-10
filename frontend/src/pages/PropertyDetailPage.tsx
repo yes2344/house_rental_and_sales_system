@@ -169,7 +169,17 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
 
         <aside className="contact-card">
           <p className="eyebrow eyebrow-muted">{text('contactHeading')}</p>
-          <h2>{contact.business_name || text('contactPerson')}</h2>
+          <h2>{property.public_contact_name || contact.business_name || text('contactPerson')}</h2>
+          {property.public_contact_phone && (
+            <a className="contact-method" href={`tel:${property.public_contact_phone}`}>
+              <Phone size={17} aria-hidden="true" /><span><small>{text('contactByPhone')}</small><strong>{property.public_contact_phone}</strong></span>
+            </a>
+          )}
+          {property.public_contact_email && (
+            <a className="contact-method" href={`mailto:${property.public_contact_email}`}>
+              <Mail size={17} aria-hidden="true" /><span><small>{text('contactByEmail')}</small><strong>{property.public_contact_email}</strong></span>
+            </a>
+          )}
           {contact.phone && (
             <a className="contact-method" href={`tel:${contact.phone}`}><Phone size={17} aria-hidden="true" /><span><small>{text('contactByPhone')}</small><strong>{contact.phone}</strong></span></a>
           )}

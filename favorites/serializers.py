@@ -1,17 +1,14 @@
 from rest_framework import serializers
 
 from favorites.models import Favorite
-from properties.models import Property
+from properties.access import public_properties
 from properties.serializers import PublicPropertyListSerializer
 
 
 class FavoriteCreateSerializer(serializers.Serializer):
     property_id = serializers.PrimaryKeyRelatedField(
         source='property',
-        queryset=Property.objects.filter(
-            publication_status=Property.PublicationStatus.PUBLISHED,
-            status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
-        ),
+        queryset=public_properties(),
     )
 
     def create(self, validated_data):

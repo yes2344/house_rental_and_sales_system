@@ -2,7 +2,9 @@ import { apiClient } from './client';
 import type { PaginatedResponse } from './properties';
 
 export type ManagedListingType = 'sale' | 'rent';
-export type ManagedPropertyType = 'house' | 'villa' | 'apartment' | 'land' | 'commercial';
+export type ManagedPropertyType =
+  | 'house' | 'villa' | 'apartment' | 'condominium' | 'land'
+  | 'office' | 'shop' | 'warehouse' | 'commercial' | 'other';
 export type ManagedPropertyStatus = 'available' | 'rented' | 'sold' | 'inactive';
 export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended';
 export type ManagedAreaUnit = 'sqm' | 'sqft' | '';

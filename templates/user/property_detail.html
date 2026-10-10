@@ -84,6 +84,11 @@
         <aside class="panel">
           <h2>Book a viewing</h2>
           <p>Request a private visit and our agent will contact you to confirm the date.</p>
+          {% if public_owner_contact %}
+            <h3>{{ public_owner_contact.name }}</h3>
+            {% if public_owner_contact.phone %}<p><a href="tel:{{ public_owner_contact.phone }}">{{ public_owner_contact.phone }}</a></p>{% endif %}
+            {% if public_owner_contact.email %}<p><a href="mailto:{{ public_owner_contact.email }}">{{ public_owner_contact.email }}</a></p>{% endif %}
+          {% endif %}
           <a href="{% url 'user_property_request' property.id %}" class="btn btn-primary" style="width:100%;">Request a visit</a>
         </aside>
       </div>
