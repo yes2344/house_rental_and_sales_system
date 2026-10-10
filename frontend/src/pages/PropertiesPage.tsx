@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, ListFilter, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { ArrowRight, ChevronDown, ListFilter, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
@@ -93,14 +93,22 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [formValues, setFormValues] = useState(() => readFilters(searchParams));
   const [result, setResult] = useState<PaginatedResponse<PropertySummary> | null>(null);
+  const [additionalProperties, setAdditionalProperties] = useState<PropertySummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [moreError, setMoreError] = useState('');
   const [filterError, setFilterError] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const moreRequestController = useRef<AbortController | null>(null);
   const apiFilters = useMemo(() => toApiFilters(searchParams), [searchParams]);
   const currentPage = apiFilters.page ?? 1;
 
   const loadProperties = useCallback(async (signal?: AbortSignal) => {
+    moreRequestController.current?.abort();
+    setAdditionalProperties([]);
+    setMoreError('');
+    setLoadingMore(false);
     setLoading(true);
     setError('');
     try {
@@ -118,7 +126,10 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
   useEffect(() => {
     const controller = new AbortController();
     void loadProperties(controller.signal);
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      moreRequestController.current?.abort();
+    };
   }, [loadProperties]);
 
   useEffect(() => {
@@ -146,15 +157,24 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
     setSearchParams(filtersToParams(formValues));
   };
 
-  const goToPage = (page: number) => {
-    const nextParams = new URLSearchParams(searchParams);
-    if (page <= 1) nextParams.delete('page');
-    else nextParams.set('page', String(page));
-    setSearchParams(nextParams);
-    window.scrollTo({
-      top: 0,
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-    });
+  const loadMoreProperties = async () => {
+    if (!result?.next || loadingMore) return;
+    const controller = new AbortController();
+    moreRequestController.current?.abort();
+    moreRequestController.current = controller;
+    const page = currentPage + Math.floor(additionalProperties.length / PAGE_SIZE) + 1;
+    setLoadingMore(true);
+    setMoreError('');
+    try {
+      const nextResult = await getProperties({ ...apiFilters, page }, controller.signal);
+      if (!controller.signal.aborted) {
+        setAdditionalProperties((current) => [...current, ...nextResult.results]);
+      }
+    } catch (requestError) {
+      if (!controller.signal.aborted) setMoreError(getErrorMessage(requestError));
+    } finally {
+      if (!controller.signal.aborted) setLoadingMore(false);
+    }
   };
 
   const clearFilters = () => {
@@ -162,9 +182,10 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
     setSearchParams({});
   };
 
-  const totalPages = Math.max(1, Math.ceil((result?.count ?? 0) / PAGE_SIZE));
   const firstResult = result?.count ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
-  const lastResult = result ? Math.min(currentPage * PAGE_SIZE, result.count) : 0;
+  const loadedProperties = [...(result?.results ?? []), ...additionalProperties];
+  const lastResult = result ? Math.min(firstResult + loadedProperties.length - 1, result.count) : 0;
+  const hasMore = result !== null && Boolean(result.next) && lastResult < result.count;
 
   return (
     <main id="main-content" className="results-page">
@@ -322,20 +343,17 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
               <>
                 <div className="results-range">{firstResult}–{lastResult} {text('resultCount')}</div>
                 <div className="listing-grid results-grid">
-                  {result.results.map((property) => (
+                  {loadedProperties.map((property) => (
                     <PropertyCard key={property.id} property={property} locale={locale} text={text} />
                   ))}
                 </div>
-                {totalPages > 1 && (
-                  <nav className="pagination" aria-label={text('pageNavigation')}>
-                    <button type="button" onClick={() => goToPage(currentPage - 1)} disabled={!result.previous}>
-                      <ArrowLeft size={15} aria-hidden="true" />{text('previousPage')}
+                {hasMore && (
+                  <div className="show-more-listings">
+                    {moreError && <p className="listing-error" role="alert">{text('listingsError')} {moreError}</p>}
+                    <button className="button button-outline" type="button" onClick={() => void loadMoreProperties()} disabled={loadingMore}>
+                      {loadingMore ? <><span className="loading-spinner" />{text('loadingListings')}</> : <>{text('showMoreListings')}<ChevronDown size={16} aria-hidden="true" /></>}
                     </button>
-                    <span>{text('pageOf')} <strong>{currentPage}</strong> / {totalPages}</span>
-                    <button type="button" onClick={() => goToPage(currentPage + 1)} disabled={!result.next}>
-                      {text('nextPage')}<ArrowRight size={15} aria-hidden="true" />
-                    </button>
-                  </nav>
+                  </div>
                 )}
               </>
             ) : (

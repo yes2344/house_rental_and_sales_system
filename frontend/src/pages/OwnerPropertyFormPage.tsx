@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState, type ChangeEvent, type FormEvent }
 import { ArrowLeft, ImagePlus, LocateFixed, Star, Trash2, Upload } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
+import { useAuth } from '../AuthContext';
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import type { PropertyCoordinates } from '../components/LocationMap';
 import {
@@ -134,6 +135,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const propertyId = idParam ? Number(idParam) : null;
   const navigate = useNavigate();
   const location = useLocation();
+  const { account } = useAuth();
   const isEditing = propertyId !== null && Number.isInteger(propertyId) && propertyId > 0;
   const invalidEditId = idParam !== undefined && !isEditing;
   const [values, setValues] = useState(initialValues);
@@ -191,6 +193,15 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
     }
     return () => controller.abort();
   }, [isEditing, propertyId]);
+
+  useEffect(() => {
+    if (isEditing || !account) return;
+    setValues((current) => ({
+      ...current,
+      contact_phone: current.contact_phone || account.phone,
+      contact_email: current.contact_email || account.email,
+    }));
+  }, [account, isEditing]);
 
   const updateValue = <K extends keyof PropertyFormValues>(name: K, value: PropertyFormValues[K]) => {
     setValues((current) => ({ ...current, [name]: value }));

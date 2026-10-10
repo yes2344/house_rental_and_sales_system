@@ -181,6 +181,11 @@ img { display: block; max-width: 100%; }
 .listing-specs svg { color: #77877b; }
 .listing-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--line); }
 .listing-registration-date { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--muted); font-size: 10px; }
+.listing-contact { display: flex; flex-wrap: wrap; gap: 7px 12px; margin-top: 10px; }
+.listing-contact a { display: inline-flex; min-width: 0; align-items: center; gap: 5px; color: var(--green-800); font-size: 9px; }
+.listing-contact a:hover { text-decoration: underline; }
+.listing-contact a span { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listing-contact svg { flex: 0 0 auto; }
 .listing-price { font-family: Manrope, sans-serif; font-size: 16px; font-weight: 800; }
 .listing-price span { color: var(--green-800); font-family: 'DM Sans', 'Noto Sans Ethiopic', sans-serif; font-size: 10px; font-weight: 700; }
 .listing-status { display: inline-flex; align-items: center; gap: 5px; color: #55745b; font-size: 9px; font-weight: 600; }
@@ -299,6 +304,9 @@ img { display: block; max-width: 100%; }
 .viewing-success p { margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.65; }
 .viewing-success .viewing-receipt { margin-top: 12px; color: var(--green-800); font-weight: 700; }
 .viewing-success-actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.viewing-token-details { margin: 8px 0; color: var(--green-900); font-size: 11px; }
+.viewing-token-details summary { width: fit-content; cursor: pointer; font-weight: 700; }
+.viewing-submitted-message { padding: 10px 12px; border-left: 3px solid var(--green-700); background: var(--green-100); overflow-wrap: anywhere; }
 .viewing-receipt-token { display: block; margin: 10px 0; padding: 10px; overflow-wrap: anywhere; border: 1px solid var(--line); background: #f3f4ee; color: var(--ink); font-size: 11px; user-select: all; }
 .viewing-status-result { display: grid; gap: 14px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
 .viewing-status-result > p { margin: 0; color: var(--ink-soft); font-size: 12px; }
@@ -741,6 +749,9 @@ img { display: block; max-width: 100%; }
 .manager-row-secondary { margin-top: 4px; color: var(--muted); font-size: 9px; }
 .manager-row-property { color: var(--green-900); font-size: 11px; font-weight: 700; }
 .manager-row-property:hover, .manager-row-action:hover { text-decoration: underline; }
+.manager-public-listing-link { display: inline-flex; align-items: center; margin-left: 7px; color: var(--green-700); vertical-align: middle; }
+.manager-public-listing-link:hover { color: var(--green-900); }
+.manager-request-message { max-width: 240px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.4; }
 .manager-row-action { padding: 0; border: 0; background: none; color: var(--green-800); font-size: 10px; font-weight: 700; white-space: nowrap; cursor: pointer; }
 .manager-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; background: #f0f1ed; color: #59635c; font-size: 9px; font-weight: 700; white-space: nowrap; }
 .status-available, .publication-published, .request-confirmed { background: #e6efe6; color: var(--green-900); }
@@ -749,6 +760,10 @@ img { display: block; max-width: 100%; }
 .manager-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; color: var(--muted); font-size: 10px; }
 .manager-pagination > div { display: flex; align-items: center; gap: 9px; }
 .manager-pagination .button { min-height: 34px; }
+.show-more-listings { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 26px 0 10px; }
+.show-more-listings .button { min-width: 180px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.show-more-listings .listing-error { margin: 0; color: #842d24; font-size: 11px; }
+.show-more-listings .loading-spinner { width: 14px; height: 14px; }
 .manager-state { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 27px; border: 1px solid var(--line); background: var(--paper); color: var(--green-800); text-align: center; }
 .manager-state h1, .manager-state h2, .manager-state p { margin: 0; }
 .manager-state h2 { color: var(--ink); font-family: Manrope, 'Noto Sans Ethiopic', sans-serif; font-size: 17px; }

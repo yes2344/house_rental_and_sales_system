@@ -166,9 +166,11 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
   return (
     <main id="main-content" className="viewing-request-page">
       <div className="viewing-request-container">
-        <Link className="back-link" to={`/properties/${encodeURIComponent(property.slug)}`}>
-          <ArrowLeft size={15} aria-hidden="true" />{text('backToListing')}
-        </Link>
+        {!receipt && (
+          <Link className="back-link" to={`/properties/${encodeURIComponent(property.slug)}`}>
+            <ArrowLeft size={15} aria-hidden="true" />{text('backToListing')}
+          </Link>
+        )}
         <header className="viewing-request-heading">
           <p className="eyebrow eyebrow-muted"><span className="eyebrow-dot" />{text('requestViewing')}</p>
           <h1>{text('viewingRequestTitle')}</h1>
@@ -192,8 +194,12 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
                 <h2 id="viewing-form-title">{text('requestSuccessTitle')}</h2>
                 <p>{text('requestSuccessBody')}</p>
                 <p className="viewing-receipt">{text('requestReference')}: #{receipt.id} · {text('requestPending')}</p>
+                {values.message.trim() && <p className="viewing-submitted-message"><strong>{text('yourMessage')}:</strong> {values.message.trim()}</p>}
                 <p>{text('receiptTokenHelp')}</p>
-                <code className="viewing-receipt-token">{receipt.receipt_token}</code>
+                <details className="viewing-token-details">
+                  <summary>{text('showRequestToken')}</summary>
+                  <code className="viewing-receipt-token">{receipt.receipt_token}</code>
+                </details>
                 <Link
                   className="button button-outline"
                   to="/viewing-requests/status"
@@ -206,7 +212,6 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
                 <Link className="button button-primary" to={`/properties/${encodeURIComponent(property.slug)}`}>
                   {text('backToListing')}
                 </Link>
-                <Link className="button button-outline" to="/properties">{text('backToProperties')}</Link>
               </div>
             </div>
           ) : (

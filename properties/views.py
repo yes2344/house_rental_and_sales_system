@@ -99,7 +99,13 @@ class PublicPropertyListView(generics.ListAPIView):
     def get_queryset(self):
         return (
             public_properties()
-            .prefetch_related('images', 'amenities', 'owner_announcement__agreements')
+            .select_related('submitted_by')
+            .prefetch_related(
+                'images',
+                'amenities',
+                'owner_announcement__agreements',
+                'broker_assignments__broker__profile',
+            )
             .order_by(*self.ordering)
         )
 
@@ -123,8 +129,11 @@ class PublicPropertyDetailView(generics.RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublicPropertyDetailSerializer
     lookup_field = 'slug'
-    queryset = public_properties().prefetch_related(
-        'images', 'amenities', 'owner_announcement__agreements',
+    queryset = public_properties().select_related('submitted_by').prefetch_related(
+        'images',
+        'amenities',
+        'owner_announcement__agreements',
+        'broker_assignments__broker__profile',
     )
 
     @extend_schema(summary='Retrieve a published available property')

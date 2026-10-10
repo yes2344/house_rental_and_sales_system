@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, CalendarClock, RotateCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarClock, ExternalLink, RotateCw } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
@@ -243,9 +243,18 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
                     <td>
                       <strong>{request.full_name}</strong>
                       <span className="manager-row-secondary">{request.phone}</span>
+                      {request.message && <span className="manager-row-secondary manager-request-message">{request.message}</span>}
                     </td>
                     <td>
                       <Link className="manager-row-property" to={`/management/listings/${request.property.id}/edit`}>{request.property.title}</Link>
+                      <Link
+                        className="manager-public-listing-link"
+                        to={`/properties/${encodeURIComponent(request.property.slug)}`}
+                        aria-label={`${text('openPublicListing')}: ${request.property.title}`}
+                        title={text('openPublicListing')}
+                      >
+                        <ExternalLink size={13} aria-hidden="true" />
+                      </Link>
                       <span className="manager-row-secondary">{request.property.location}</span>
                     </td>
                     <td>{preferredDate(request)}</td>

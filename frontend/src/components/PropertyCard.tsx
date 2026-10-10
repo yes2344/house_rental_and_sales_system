@@ -1,4 +1,4 @@
-import { Bath, BedDouble, CalendarDays, MapPin, Ruler } from 'lucide-react';
+import { Bath, BedDouble, CalendarDays, Mail, MapPin, Phone, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { PropertySummary } from '../api/properties';
@@ -76,6 +76,20 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
           <p className="listing-registration-date">
             <CalendarDays size={13} aria-hidden="true" />{text('registeredDate')} {registrationDate}
           </p>
+        )}
+        {(property.public_contact_phone || property.public_contact_email) && (
+          <div className="listing-contact" aria-label={text('contactHeading')}>
+            {property.public_contact_phone && (
+              <a href={`tel:${property.public_contact_phone}`} aria-label={`${text('contactByPhone')}: ${property.public_contact_phone}`}>
+                <Phone size={13} aria-hidden="true" /><span>{property.public_contact_phone}</span>
+              </a>
+            )}
+            {property.public_contact_email && (
+              <a href={`mailto:${property.public_contact_email}`} aria-label={`${text('contactByEmail')}: ${property.public_contact_email}`}>
+                <Mail size={13} aria-hidden="true" /><span>{property.public_contact_email}</span>
+              </a>
+            )}
+          </div>
         )}
         <div className="listing-card-bottom">
           <strong className="listing-price">{price}</strong>

@@ -157,6 +157,50 @@ class PublicPropertyApiTests(APITestCase):
         self.assertIn('rental_frequency', result)
         self.assertIn('created_at', result)
 
+    def test_broker_managed_listing_exposes_the_approved_brokers_public_account_contacts(self):
+        broker = get_user_model().objects.create_user(
+            username='public-listing-broker',
+            email='broker@example.com',
+        )
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            phone='+251911222333',
+        )
+        self.property.submitted_by = broker
+        self.property.contact_phone = '+251911222333'
+        self.property.contact_email = 'broker@example.com'
+        self.property.save(update_fields=['submitted_by', 'contact_phone', 'contact_email'])
+        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+
+        response = self.client.get(reverse('api:property-list'))
+        result = response.data['results'][0]
+
+        self.assertEqual(result['public_contact_phone'], '+251911222333')
+        self.assertEqual(result['public_contact_email'], 'broker@example.com')
+
+    def test_unapproved_broker_contact_is_not_public(self):
+        broker = get_user_model().objects.create_user(
+            username='unapproved-listing-broker',
+            email='private-broker@example.com',
+        )
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=False,
+            phone='+251911222333',
+        )
+        self.property.submitted_by = broker
+        self.property.contact_phone = '+251911222333'
+        self.property.contact_email = 'private-broker@example.com'
+        self.property.save(update_fields=['submitted_by', 'contact_phone', 'contact_email'])
+
+        response = self.client.get(reverse('api:property-list'))
+
+        self.assertEqual(response.data['results'][0]['public_contact_phone'], '')
+        self.assertEqual(response.data['results'][0]['public_contact_email'], '')
+
     def test_formatted_rent_price_includes_period_and_sale_price_does_not(self):
         self.property.listing_type = Property.ListingType.RENT
         self.property.rental_frequency = Property.RentalFrequency.MONTHLY
@@ -665,11 +709,15 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertFalse(Property.objects.filter(title='Must not be published').exists())
 
     def test_broker_can_create_and_manage_only_assigned_property(self):
-        broker = get_user_model().objects.create_user(username='crud-broker')
+        broker = get_user_model().objects.create_user(
+            username='crud-broker',
+            email='crud-broker@example.com',
+        )
         Profile.objects.create(
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            phone='+251911222333',
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
@@ -685,15 +733,19 @@ class ManagedPropertyApiTests(APITestCase):
         )
         created = self.client.post(
             reverse('api:managed-property-list'),
-            self.property_payload(title='Broker listing'),
+            self.property_payload(title='Broker listing', contact_phone='', contact_email=''),
             format='json',
         )
 
         self.assertEqual(update.status_code, 200)
         self.assertEqual(created.status_code, 201)
         self.assertEqual(created.data['publication_status'], Property.PublicationStatus.PUBLISHED)
+        self.assertEqual(created.data['contact_phone'], broker.profile.phone)
+        self.assertEqual(created.data['contact_email'], broker.email)
         public_list = self.client.get(reverse('api:property-list'))
-        self.assertIn(created.data['slug'], [item['slug'] for item in public_list.data['results']])
+        public_listing = next(item for item in public_list.data['results'] if item['slug'] == created.data['slug'])
+        self.assertEqual(public_listing['public_contact_phone'], broker.profile.phone)
+        self.assertEqual(public_listing['public_contact_email'], broker.email)
 
     def test_registered_customer_cannot_create_or_manage_submitted_listings(self):
         self.client.force_authenticate(user=self.customer)

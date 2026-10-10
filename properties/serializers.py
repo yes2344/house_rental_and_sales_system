@@ -151,6 +151,22 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
         )
         return announcement if announcement.public_contact_visible and valid_agreement else None
 
+    def _public_broker_managed_listing(self, obj):
+        broker = obj.submitted_by
+        if (
+            obj.service_type != Property.ServiceType.BROKER_MANAGED
+            or broker is None
+            or not broker.is_active
+        ):
+            return False
+        profile = getattr(broker, 'profile', None)
+        return (
+            profile is not None
+            and profile.role == Profile.Role.BROKER
+            and profile.broker_approved
+            and any(assignment.broker_id == broker.pk for assignment in obj.broker_assignments.all())
+        )
+
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_public_contact_name(self, obj):
         announcement = self._public_announcement(obj)
@@ -158,11 +174,15 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_public_contact_phone(self, obj):
+        if self._public_broker_managed_listing(obj):
+            return obj.contact_phone
         announcement = self._public_announcement(obj)
         return announcement.public_contact_phone if announcement else ''
 
     @extend_schema_field(serializers.EmailField(allow_blank=True))
     def get_public_contact_email(self, obj):
+        if self._public_broker_managed_listing(obj):
+            return obj.contact_email
         announcement = self._public_announcement(obj)
         return announcement.public_contact_email if announcement else ''
 
@@ -355,6 +375,16 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         amenities = validated_data.pop('amenities', [])
         user = self.context['request'].user
+        broker_profile = Profile.objects.filter(
+            user=user,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+        ).first()
+        if broker_profile:
+            if not validated_data.get('contact_phone'):
+                validated_data['contact_phone'] = broker_profile.phone
+            if not validated_data.get('contact_email'):
+                validated_data['contact_email'] = user.email
         if 'area_sqft' in validated_data and 'area_value' not in validated_data:
             area_sqft = validated_data['area_sqft']
             validated_data['area_value'] = Decimal(area_sqft) if area_sqft > 0 else None
@@ -365,11 +395,7 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             publication_status=Property.PublicationStatus.PUBLISHED,
             **validated_data,
         )
-        if Profile.objects.filter(
-            user=user,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
-        ).exists():
+        if broker_profile:
             PropertyBrokerAssignment.objects.create(property=property_obj, broker=user)
         property_obj.amenities.set(amenities)
         return property_obj
