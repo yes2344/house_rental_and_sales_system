@@ -1,3 +1,4 @@
+import re
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
@@ -973,6 +974,33 @@ class AdminApiTests(APITestCase):
 
 
 class AdminPortalMethodTests(TestCase):
+    def test_server_rendered_portal_forms_include_csrf_tokens(self):
+        owner = User.objects.create_superuser(
+            username='csrf-form-owner',
+            password='SecurePass123!value',
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(owner)
+
+        rendered_token = None
+        for url in (reverse('admin_property_form'), reverse('admin_delegated_accounts')):
+            with self.subTest(url=url):
+                response = client.get(url)
+                self.assertEqual(response.status_code, 200)
+                token_match = re.search(
+                    rb'<input[^>]*name="csrfmiddlewaretoken"[^>]*value="([^"]+)"',
+                    response.content,
+                )
+                self.assertIsNotNone(token_match)
+                self.assertNotEqual(token_match.group(1), b'NOTPROVIDED')
+                rendered_token = token_match.group(1).decode('ascii')
+
+        response = client.post(
+            reverse('admin_portal_logout'),
+            HTTP_X_CSRFTOKEN=rendered_token,
+        )
+        self.assertRedirects(response, '/admin/login/')
+
     def test_owner_portal_removes_viewing_management(self):
         owner = User.objects.create_superuser(
             username='viewings-removed-owner',

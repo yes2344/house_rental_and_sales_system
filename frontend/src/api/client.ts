@@ -8,6 +8,37 @@ export const apiClient = axios.create({
   headers: { Accept: 'application/json' },
 });
 
+const tabSessionStorageKey = 'addis-ababa-homes.session-token';
+let csrfTokenInMemory = '';
+let csrfTokenRequest: Promise<string> | null = null;
+
+export function setTabSessionToken(token: string) {
+  window.sessionStorage.setItem(tabSessionStorageKey, token);
+}
+
+export function clearTabSessionToken() {
+  window.sessionStorage.removeItem(tabSessionStorageKey);
+}
+
+export function setCsrfToken(token: string) {
+  csrfTokenInMemory = token;
+}
+
+async function fetchCsrfToken(): Promise<string> {
+  if (!csrfTokenRequest) {
+    csrfTokenRequest = apiClient
+      .get<{ csrf_token: string }>('/auth/csrf/')
+      .then(({ data }) => {
+        setCsrfToken(data.csrf_token);
+        return data.csrf_token;
+      })
+      .finally(() => {
+        csrfTokenRequest = null;
+      });
+  }
+  return csrfTokenRequest;
+}
+
 export function getApiFieldErrors(error: unknown): Record<string, string> {
   if (!axios.isAxiosError(error)) return {};
   const responseData = error.response?.data as
@@ -27,19 +58,39 @@ export function getApiFieldErrors(error: unknown): Record<string, string> {
   return fieldErrors;
 }
 
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
+  const sessionToken = window.sessionStorage.getItem(tabSessionStorageKey);
+  if (sessionToken) config.headers.set('Authorization', `Bearer ${sessionToken}`);
+
   if (config.method && !['get', 'head', 'options'].includes(config.method.toLowerCase())) {
-    const csrfToken = document.cookie
+    const cookieToken = document.cookie
       .split('; ')
       .find((cookie) => cookie.startsWith('csrftoken='))
       ?.split('=')
       .slice(1)
       .join('=');
 
-    if (csrfToken) config.headers.set('X-CSRFToken', decodeURIComponent(csrfToken));
+    const csrfToken = cookieToken
+      ? decodeURIComponent(cookieToken)
+      : csrfTokenInMemory || await fetchCsrfToken();
+    config.headers.set('X-CSRFToken', csrfToken);
   }
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (
+      axios.isAxiosError(error)
+      && [401, 403].includes(error.response?.status ?? 0)
+      && error.config?.url?.replace(/\/+$/, '').endsWith('/auth/me')
+    ) {
+      clearTabSessionToken();
+    }
+    return Promise.reject(error);
+  },
+);
 
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {

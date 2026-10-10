@@ -394,9 +394,10 @@ class CsrfTokenSerializer(serializers.Serializer):
 
 class LoginResponseSerializer(AccountSerializer):
     csrf_token = serializers.CharField()
+    session_token = serializers.CharField()
 
     class Meta(AccountSerializer.Meta):
-        fields = AccountSerializer.Meta.fields + ['csrf_token']
+        fields = AccountSerializer.Meta.fields + ['csrf_token', 'session_token']
 
 
 class EmptySerializer(serializers.Serializer):

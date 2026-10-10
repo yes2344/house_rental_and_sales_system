@@ -86,6 +86,41 @@ class UserPreferences(models.Model):
         return f'Preferences for {self.user}'
 
 
+class TabSessionToken(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='tab_session_tokens',
+    )
+    token_digest = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'expires_at'], name='account_tab_token_user_exp_idx'),
+        ]
+
+    @classmethod
+    def issue(cls, user):
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+        token_digest = hashlib.sha256(token.encode('utf-8')).hexdigest()
+        session_token = cls.objects.create(
+            user=user,
+            token_digest=token_digest,
+            expires_at=timezone.now() + settings.API_TAB_SESSION_LIFETIME,
+        )
+        return session_token, token
+
+    def revoke(self):
+        if self.revoked_at is None:
+            self.revoked_at = timezone.now()
+            self.save(update_fields=['revoked_at'])
+
+
 class DelegatedAccountInvitation(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

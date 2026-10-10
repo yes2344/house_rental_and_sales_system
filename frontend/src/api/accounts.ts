@@ -1,4 +1,9 @@
-import { apiClient } from './client';
+import {
+  apiClient,
+  clearTabSessionToken,
+  setCsrfToken,
+  setTabSessionToken,
+} from './client';
 
 export type AccountRole = 'customer' | 'owner' | 'broker' | 'administrator' | null;
 
@@ -60,6 +65,7 @@ export interface AccountActivity {
 
 export async function getCsrfToken(): Promise<string> {
   const response = await apiClient.get<{ csrf_token: string }>('/auth/csrf/');
+  setCsrfToken(response.data.csrf_token);
   return response.data.csrf_token;
 }
 
@@ -75,16 +81,19 @@ export async function registerAccount(payload: RegistrationPayload): Promise<Acc
 
 export async function startSession(username: string, password: string): Promise<Account> {
   const csrfToken = await getCsrfToken();
-  const response = await apiClient.post<Account & { csrf_token: string }>(
+  const response = await apiClient.post<Account & { csrf_token: string; session_token: string }>(
     '/auth/login/',
     { username, password },
     { headers: { 'X-CSRFToken': csrfToken } },
   );
+  setCsrfToken(response.data.csrf_token);
+  setTabSessionToken(response.data.session_token);
   return response.data;
 }
 
 export async function endSession(): Promise<void> {
   await apiClient.post('/auth/logout/', {});
+  clearTabSessionToken();
 }
 
 export async function updateAccount(payload: AccountUpdatePayload): Promise<Account> {

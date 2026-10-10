@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
-from accounts.models import Profile, UserPreferences
+from accounts.models import Profile, TabSessionToken, UserPreferences
 from accounts.permissions import (
     BROKER_WORK_PERMISSIONS,
     IsPropertyManagerOrAdministrator,
@@ -74,7 +74,7 @@ class AccountApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('password', response.data['error']['details'])
 
-    def test_login_requires_csrf_token_and_establishes_session(self):
+    def test_login_requires_csrf_token_and_returns_tab_session_token(self):
         user = get_user_model().objects.create_user(
             username='csrf-customer',
             email='csrf@example.com',
@@ -102,18 +102,76 @@ class AccountApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['username'], user.username)
-        self.assertIn('sessionid', client.cookies)
+        self.assertNotIn('sessionid', client.cookies)
+        self.assertIn('session_token', response.data)
         self.assertIn('csrf_token', response.data)
 
         logout_response = client.post(
             reverse('api:logout'),
             {},
             format='json',
-            HTTP_X_CSRFTOKEN=response.data['csrf_token'],
+            HTTP_AUTHORIZATION=f"Bearer {response.data['session_token']}",
         )
         self.assertEqual(logout_response.status_code, 204)
         account_after_logout = client.get(reverse('api:me'))
         self.assertIn(account_after_logout.status_code, [401, 403])
+
+    def test_logins_issue_isolated_tokens_and_logout_revokes_only_current_tab(self):
+        user = get_user_model().objects.create_user(
+            username='tab-isolated-customer',
+            password='Evergreen!Place42',
+        )
+        Profile.objects.create(user=user)
+        first_tab = APIClient()
+        second_tab = APIClient()
+        credentials = {'username': user.username, 'password': 'Evergreen!Place42'}
+
+        first_login = first_tab.post(reverse('api:login'), credentials, format='json')
+        second_login = second_tab.post(reverse('api:login'), credentials, format='json')
+
+        self.assertEqual(first_login.status_code, 200)
+        self.assertEqual(second_login.status_code, 200)
+        first_token = first_login.data['session_token']
+        second_token = second_login.data['session_token']
+        self.assertNotEqual(first_token, second_token)
+        self.assertFalse(TabSessionToken.objects.filter(token_digest=first_token).exists())
+
+        first_account = first_tab.get(
+            reverse('api:me'),
+            HTTP_AUTHORIZATION=f'Bearer {first_token}',
+        )
+        second_account = second_tab.get(
+            reverse('api:me'),
+            HTTP_AUTHORIZATION=f'Bearer {second_token}',
+        )
+        self.assertEqual(first_account.status_code, 200)
+        self.assertEqual(second_account.status_code, 200)
+
+        revoked = first_tab.post(
+            reverse('api:logout'),
+            {},
+            format='json',
+            HTTP_AUTHORIZATION=f'Bearer {first_token}',
+        )
+        self.assertEqual(revoked.status_code, 204)
+        self.assertIn(
+            first_tab.get(
+                reverse('api:me'),
+                HTTP_AUTHORIZATION=f'Bearer {first_token}',
+            ).status_code,
+            [401, 403],
+        )
+        self.assertEqual(
+            second_tab.get(
+                reverse('api:me'),
+                HTTP_AUTHORIZATION=f'Bearer {second_token}',
+            ).status_code,
+            200,
+        )
+
+        cookie_only_tab = APIClient()
+        cookie_only_tab.force_login(user)
+        self.assertIn(cookie_only_tab.get(reverse('api:me')).status_code, [401, 403])
 
     def test_profile_update_cannot_change_role(self):
         user = get_user_model().objects.create_user(

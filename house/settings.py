@@ -1,4 +1,5 @@
 import secrets
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -87,6 +88,7 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+                'django.template.context_processors.csrf',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
@@ -154,7 +156,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
+        'accounts.authentication.TabSessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -174,6 +176,7 @@ REST_FRAMEWORK = {
         'delegated_invitation_accept': '10/hour',
     },
 }
+API_TAB_SESSION_LIFETIME = timedelta(days=14)
 
 if DEBUG:
     CACHES = {

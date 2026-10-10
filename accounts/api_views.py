@@ -1,4 +1,3 @@
-from django.contrib.auth import login, logout
 from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
@@ -10,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from accounts.models import UserPreferences
+from accounts.models import TabSessionToken, UserPreferences
 from accounts.serializers import (
     AccountActivitySerializer,
     AccountSerializer,
@@ -31,7 +30,7 @@ class CsrfTokenView(generics.GenericAPIView):
     permission_classes = [AllowAny]
     serializer_class = CsrfTokenSerializer
 
-    @extend_schema(summary='Get a CSRF token for session-authenticated browser requests')
+    @extend_schema(summary='Get a CSRF token for browser login requests')
     def get(self, request):
         return Response({'csrf_token': get_token(request)})
 
@@ -84,15 +83,16 @@ class LoginView(generics.GenericAPIView):
     @extend_schema(
         request=LoginSerializer,
         responses={200: LoginResponseSerializer},
-        summary='Start a session',
+        summary='Start an independent tab-scoped API session',
     )
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
-        login(request, user)
+        _, session_token = TabSessionToken.issue(user)
         response = Response(AccountSerializer(user).data)
         response.data['csrf_token'] = get_token(request)
+        response.data['session_token'] = session_token
         return response
 
 
@@ -100,9 +100,9 @@ class LogoutView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = EmptySerializer
 
-    @extend_schema(summary='End the current session', responses={204: None})
+    @extend_schema(summary='Revoke the current tab-scoped API session', responses={204: None})
     def post(self, request):
-        logout(request)
+        request.auth.revoke()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
