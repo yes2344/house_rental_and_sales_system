@@ -4,14 +4,27 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import Profile
-from admin.models import AdminAuditEvent, BrokerageSettings
+from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
 
 User = get_user_model()
 
 
+class SocialMediaLinkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SocialMediaLink
+        fields = ['platform', 'url', 'is_enabled', 'display_order']
+
+    def validate_url(self, value):
+        if not value.startswith('https://'):
+            raise serializers.ValidationError('Enter a secure HTTPS URL.')
+        return value
+
+
 class BrokerageSettingsSerializer(serializers.ModelSerializer):
+    social_links = SocialMediaLinkSerializer(many=True, required=False)
+
     class Meta:
         model = BrokerageSettings
         fields = [
@@ -25,6 +38,7 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
             'tiktok_url',
             'youtube_url',
             'linkedin_url',
+            'social_links',
         ]
 
     def validate(self, attrs):
@@ -41,6 +55,57 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
             if value and not value.startswith(('https://', 'http://')):
                 raise serializers.ValidationError({field: 'Enter an HTTP or HTTPS URL.'})
         return attrs
+
+    def validate_social_links(self, value):
+        platforms = [link['platform'] for link in value]
+        if len(platforms) != len(set(platforms)):
+            raise serializers.ValidationError('Each social platform can only have one link.')
+        return value
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        social_links = validated_data.pop('social_links', None)
+        if social_links is not None:
+            links_by_platform = {link['platform']: link['url'] for link in social_links}
+            for platform in SocialMediaLink.Platform.values:
+                validated_data[f'{platform}_url'] = links_by_platform.get(platform, '')
+        instance = super().update(instance, validated_data)
+        if social_links is not None:
+            instance.social_links.all().delete()
+            SocialMediaLink.objects.bulk_create([
+                SocialMediaLink(brokerage=instance, **link)
+                for link in social_links
+            ])
+        return instance
+
+
+class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
+    social_links = serializers.SerializerMethodField()
+
+    class Meta(BrokerageSettingsSerializer.Meta):
+        fields = ['business_name', 'phone', 'email', 'social_links']
+
+    def get_social_links(self, obj):
+        if not obj.pk:
+            return []
+        queryset = SocialMediaLink.objects.filter(
+            brokerage_id=obj.pk,
+            is_enabled=True,
+        ).order_by('display_order', 'platform')
+        return SocialMediaLinkSerializer(queryset, many=True).data
+
+
+class HomepageNoteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HomepageNote
+        fields = ['id', 'title', 'text', 'is_published', 'display_order', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_text(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Enter note text.')
+        return value
 
 
 class AdminRoleField(serializers.ChoiceField):

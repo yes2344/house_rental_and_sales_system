@@ -168,6 +168,7 @@ img { display: block; max-width: 100%; }
 .listing-specs span { display: inline-flex; align-items: center; gap: 4px; }
 .listing-specs svg { color: #77877b; }
 .listing-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--line); }
+.listing-registration-date { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--muted); font-size: 10px; }
 .listing-price { font-family: Manrope, sans-serif; font-size: 16px; font-weight: 800; }
 .listing-price span { color: var(--green-800); font-family: 'DM Sans', 'Noto Sans Ethiopic', sans-serif; font-size: 10px; font-weight: 700; }
 .listing-status { display: inline-flex; align-items: center; gap: 5px; color: #55745b; font-size: 9px; font-weight: 600; }

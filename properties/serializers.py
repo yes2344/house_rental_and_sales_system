@@ -236,6 +236,19 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'rental_frequency',
             self.instance.rental_frequency if self.instance else '',
         )
+        if listing_type == Property.ListingType.RENT:
+            became_rental = self.instance is None or self.instance.listing_type != Property.ListingType.RENT
+            frequency_changed = 'rental_frequency' in attrs
+            if not rental_frequency and (became_rental or frequency_changed):
+                raise serializers.ValidationError(
+                    {'rental_frequency': 'Choose a rental period for rental listings.'}
+                )
+            if rental_frequency == Property.RentalFrequency.WEEKLY and (
+                self.instance is None or self.instance.rental_frequency != Property.RentalFrequency.WEEKLY
+            ):
+                raise serializers.ValidationError(
+                    {'rental_frequency': 'New rental listings must use daily, monthly, or yearly pricing.'}
+                )
         if listing_type == Property.ListingType.SALE and rental_frequency:
             raise serializers.ValidationError(
                 {'rental_frequency': 'Rental frequency can only be set for rental listings.'}

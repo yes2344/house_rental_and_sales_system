@@ -1,9 +1,10 @@
-import { Bath, BedDouble, MapPin, Ruler } from 'lucide-react';
+import { Bath, BedDouble, CalendarDays, MapPin, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { PropertySummary } from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
+import { formatPropertyPrice, formatRegistrationDate } from './propertyDisplay';
 import { hasPublicCoordinates, openStreetMapUrl } from './propertyLocation';
 import { PropertySlideshow } from './PropertySlideshow';
 
@@ -21,9 +22,14 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
     land: text('land'),
     commercial: text('commercial'),
   }[property.category] ?? property.category;
-  const price = new Intl.NumberFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
-    maximumFractionDigits: 0,
-  }).format(Number(property.price));
+  const price = formatPropertyPrice(
+    property.price,
+    property.listing_type,
+    property.rental_frequency,
+    locale,
+    text,
+  );
+  const registrationDate = formatRegistrationDate(property.created_at, locale);
   const statusMessage: Record<string, MessageKey> = {
     rented: 'statusRented',
     sold: 'statusSold',
@@ -66,8 +72,13 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
           {property.bathrooms > 0 && <span><Bath size={15} aria-hidden="true" />{property.bathrooms} {text('bathrooms')}</span>}
           {property.area_sqft > 0 && <span><Ruler size={15} aria-hidden="true" />{property.area_sqft.toLocaleString(locale === 'am' ? 'am-ET' : 'en-ET')} {text('area')}</span>}
         </div>
+        {registrationDate && (
+          <p className="listing-registration-date">
+            <CalendarDays size={13} aria-hidden="true" />{text('registeredDate')} {registrationDate}
+          </p>
+        )}
         <div className="listing-card-bottom">
-          <strong className="listing-price"><span>{text('ethiopianBirr')}</span> {price}</strong>
+          <strong className="listing-price">{price}</strong>
           <span className={`listing-status${statusKey === 'available' ? '' : ' is-unavailable'}`}><span />{text(statusKey)}</span>
         </div>
       </div>

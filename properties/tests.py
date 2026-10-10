@@ -154,6 +154,17 @@ class PublicPropertyApiTests(APITestCase):
         self.assertEqual(result['status'], 'available')
         self.assertNotIn('contact_phone', result)
         self.assertNotIn('owner', result)
+        self.assertIn('rental_frequency', result)
+        self.assertIn('created_at', result)
+
+    def test_formatted_rent_price_includes_period_and_sale_price_does_not(self):
+        self.property.listing_type = Property.ListingType.RENT
+        self.property.rental_frequency = Property.RentalFrequency.MONTHLY
+        self.assertEqual(self.property.formatted_price, 'ETB 500,000.00 / per month')
+
+        self.property.listing_type = Property.ListingType.SALE
+        self.property.rental_frequency = ''
+        self.assertEqual(self.property.formatted_price, 'ETB 500,000.00')
 
     def test_public_amenity_list_returns_existing_localized_options(self):
         response = self.client.get(reverse('api:amenity-list'))
@@ -411,7 +422,11 @@ class ManagedPropertyApiTests(APITestCase):
         )
         valid = self.client.patch(
             reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
-            {'listing_type': 'rent', 'status': 'rented'},
+            {
+                'listing_type': 'rent',
+                'status': 'rented',
+                'rental_frequency': Property.RentalFrequency.MONTHLY,
+            },
             format='json',
         )
 
@@ -532,6 +547,69 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('price', response.data['error']['details'])
         self.assertFalse(Property.objects.filter(title='New owner listing').exists())
+
+    def test_new_rentals_require_daily_monthly_or_yearly_frequency(self):
+        self.client.force_authenticate(user=self.manager)
+        create_url = reverse('api:managed-property-list')
+
+        missing_period = self.client.post(
+            create_url,
+            self.property_payload(title='Rental without period', listing_type='rent'),
+            format='json',
+        )
+        weekly_period = self.client.post(
+            create_url,
+            self.property_payload(
+                title='New weekly rental',
+                listing_type='rent',
+                rental_frequency='weekly',
+            ),
+            format='json',
+        )
+        self.assertEqual(missing_period.status_code, 400)
+        self.assertIn('rental_frequency', missing_period.data['error']['details'])
+        self.assertEqual(weekly_period.status_code, 400)
+        self.assertIn('rental_frequency', weekly_period.data['error']['details'])
+
+        for frequency in ('daily', 'monthly', 'yearly'):
+            response = self.client.post(
+                create_url,
+                self.property_payload(
+                    title=f'{frequency.title()} rental',
+                    listing_type='rent',
+                    rental_frequency=frequency,
+                ),
+                format='json',
+            )
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(response.data['rental_frequency'], frequency)
+            self.assertIn(response.data['slug'], [
+                item['slug']
+                for item in self.client.get(reverse('api:property-list')).data['results']
+            ])
+
+    def test_legacy_weekly_rental_can_be_edited_without_changing_its_period(self):
+        legacy_rental = Property.objects.create(
+            title='Legacy weekly rental',
+            slug='legacy-weekly-rental',
+            location='Submitted location',
+            listing_type=Property.ListingType.RENT,
+            rental_frequency=Property.RentalFrequency.WEEKLY,
+            price=1000,
+            description='Legacy rental period remains readable.',
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.patch(
+            reverse('api:managed-property-detail', kwargs={'pk': legacy_rental.pk}),
+            {'description': 'Updated while preserving legacy period.'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        legacy_rental.refresh_from_db()
+        self.assertEqual(legacy_rental.rental_frequency, Property.RentalFrequency.WEEKLY)
 
     def test_authorized_staff_can_create_property_without_coordinates(self):
         self.client.force_authenticate(user=self.manager)

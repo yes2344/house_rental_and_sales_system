@@ -61,7 +61,11 @@
               <div class="property-body">
                 <h3>{{ property.title }}</h3>
                 <div class="price">{{ property.formatted_price }}</div>
+                <p class="property-card-availability">
+                  {% if property.status == "active" %}Available{% else %}{{ property.get_status_display }}{% endif %}
+                </p>
                 <p>{{ property.bedrooms }} Bed · {{ property.bathrooms }} Bath · {{ property.area_sqft }} sq ft</p>
+                <p class="property-registration-date">Listed {{ property.created_at|date:"M j, Y" }}</p>
                 <div class="meta">
                   {% include "user/_property_location.html" %}
                   {% if property.has_public_coordinates %}
@@ -78,6 +82,19 @@
           {% endfor %}
         </div>
       </section>
+      {% if homepage_notes %}
+      <section class="container homepage-notes">
+        <div class="section-title"><h2>Brokerage updates</h2></div>
+        <div class="homepage-note-grid">
+          {% for note in homepage_notes %}
+            <article class="homepage-note">
+              {% if note.title %}<h3>{{ note.title }}</h3>{% endif %}
+              <p>{{ note.text }}</p>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
     </main>
 
     {% include "user/_brokerage_footer.html" %}

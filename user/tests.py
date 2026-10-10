@@ -198,6 +198,12 @@ class ViewingRequestApprovalTests(TestCase):
         self.assertContains(public_listings, 'mlon=37.740000')
         self.assertContains(public_detail, 'export/embed.html')
         self.assertContains(public_detail, '10.340000%2C37.740000')
+        self.assertContains(public_home, 'Listed')
+        self.assertContains(public_listings, 'Listed')
+        self.assertContains(public_detail, 'Listed')
+        self.assertContains(public_home, 'Available')
+        self.assertContains(public_listings, 'Available')
+        self.assertContains(public_detail, 'Available')
 
     def test_legacy_public_footer_uses_configured_brokerage_contacts(self):
         BrokerageSettings.objects.create(

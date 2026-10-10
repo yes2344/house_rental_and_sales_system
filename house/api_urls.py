@@ -13,7 +13,10 @@ from admin.api_views import (
     AdminUserDetailView,
     AdminUserListView,
     BrokerageSettingsView,
+    ManagedHomepageNoteDetailView,
+    ManagedHomepageNoteListCreateView,
     PublicListingReportCreateView,
+    PublicHomepageNoteListView,
 )
 from accounts.api_views import (
     AccountPreferencesResetView,
@@ -47,6 +50,7 @@ from viewings.views import (
 app_name = 'api'
 
 urlpatterns = [
+    path('homepage-notes/', PublicHomepageNoteListView.as_view(), name='homepage-note-list'),
     path('brokerage/contact/', BrokerageSettingsView.as_view(), name='brokerage-contact'),
     path('reports/', PublicListingReportCreateView.as_view(), name='listing-report-create'),
     path('auth/csrf/', CsrfTokenView.as_view(), name='csrf-token'),
@@ -70,6 +74,8 @@ urlpatterns = [
         name='viewing-request-receipt',
     ),
     path('management/properties/', ManagedPropertyListCreateView.as_view(), name='managed-property-list'),
+    path('management/homepage-notes/', ManagedHomepageNoteListCreateView.as_view(), name='managed-homepage-note-list'),
+    path('management/homepage-notes/<int:pk>/', ManagedHomepageNoteDetailView.as_view(), name='managed-homepage-note-detail'),
     path('management/properties/<int:pk>/', ManagedPropertyDetailView.as_view(), name='managed-property-detail'),
     path(
         'management/properties/<int:pk>/publication/',

@@ -10,14 +10,14 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.models import DelegatedAccountInvitation, Profile
-from accounts.permissions import HasManagementPermission, IsPlatformOwner
+from accounts.permissions import HasManagementPermission, IsPlatformOwner, has_management_permission
 from accounts.serializers import (
     AccountSerializer,
     DelegatedAccountCreateSerializer,
     DelegatedAccountSerializer,
 )
 from admin.audit import record_admin_action
-from admin.models import AdminAuditEvent, BrokerageSettings
+from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote
 from admin.serializers import (
     AdminAuditEventSerializer,
     AdminBrokerAssignmentSerializer,
@@ -25,6 +25,8 @@ from admin.serializers import (
     AdminPropertySerializer,
     AdminUserSerializer,
     BrokerageSettingsSerializer,
+    HomepageNoteSerializer,
+    PublicBrokerageSettingsSerializer,
     PublicListingReportSerializer,
     PublicReportReceiptSerializer,
 )
@@ -51,7 +53,12 @@ class BrokerageSettingsView(APIView):
 
     @extend_schema(summary='Retrieve public brokerage contact and social links')
     def get(self, request):
-        return Response(BrokerageSettingsSerializer(self.get_object()).data)
+        serializer_class = (
+            BrokerageSettingsSerializer
+            if has_management_permission(request.user, Profile.Permission.SETTINGS_MANAGE)
+            else PublicBrokerageSettingsSerializer
+        )
+        return Response(serializer_class(self.get_object()).data)
 
     @transaction.atomic
     @extend_schema(
@@ -77,6 +84,59 @@ class BrokerageSettingsView(APIView):
         )
         return Response(BrokerageSettingsSerializer(updated).data)
 
+
+class PublicHomepageNoteListView(generics.ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = HomepageNoteSerializer
+    queryset = HomepageNote.objects.filter(is_published=True).order_by('display_order', '-created_at')
+
+
+class ManagedHomepageNoteListCreateView(generics.ListCreateAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    serializer_class = HomepageNoteSerializer
+    queryset = HomepageNote.objects.all()
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        note = serializer.save()
+        record_admin_action(
+            self.request.user,
+            action='homepage_note_created',
+            object_type='homepage_note',
+            object_id=note.pk,
+            changes={'is_published': note.is_published},
+        )
+
+
+class ManagedHomepageNoteDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    serializer_class = HomepageNoteSerializer
+    queryset = HomepageNote.objects.all()
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        note = serializer.save()
+        record_admin_action(
+            self.request.user,
+            action='homepage_note_updated',
+            object_type='homepage_note',
+            object_id=note.pk,
+            changes={'fields': list(serializer.validated_data)},
+        )
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        record_admin_action(
+            self.request.user,
+            action='homepage_note_deleted',
+            object_type='homepage_note',
+            object_id=instance.pk,
+            changes={'is_published': instance.is_published},
+        )
+        instance.delete()
 
 class AdminUserListView(generics.ListAPIView):
     permission_classes = [HasManagementPermission]

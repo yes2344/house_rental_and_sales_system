@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
 import { getErrorMessage } from '../api/client';
+import { formatPropertyPrice, formatRegistrationDate } from '../components/propertyDisplay';
 import {
   getManagedProperties,
   updateManagedPropertyPublication,
@@ -210,9 +211,14 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
                     <td>
                       <strong>{property.title}</strong>
                       <span className="manager-row-secondary">{property.location}</span>
+                      {formatRegistrationDate(property.created_at, locale) && (
+                        <span className="manager-row-secondary">
+                          {text('registeredDate')} {formatRegistrationDate(property.created_at, locale)}
+                        </span>
+                      )}
                     </td>
                     <td>{text(property.listing_type === 'rent' ? 'forRent' : 'forSale')}</td>
-                    <td>{text('ethiopianBirr')} {Number(property.price).toLocaleString(locale === 'am' ? 'am-ET' : 'en-ET')}</td>
+                    <td>{formatPropertyPrice(property.price, property.listing_type, property.rental_frequency, locale, text)}</td>
                     <td><span className={`manager-badge status-${property.status}`}>{text(propertyStatusMessage(property.status))}</span></td>
                     <td><span className={`manager-badge publication-${property.publication_status}`}>{text(publicationMessage[property.publication_status])}</span></td>
                     <td className="manager-row-actions">

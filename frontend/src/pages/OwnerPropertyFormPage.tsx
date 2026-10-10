@@ -204,8 +204,9 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
       ...current,
       listing_type: value,
       status: current.status === 'sold' || current.status === 'rented' ? 'available' : current.status,
+      rental_frequency: value === 'sale' ? '' : current.rental_frequency,
     }));
-    setFieldErrors((current) => ({ ...current, listing_type: '', status: '' }));
+    setFieldErrors((current) => ({ ...current, listing_type: '', status: '', rental_frequency: '' }));
   };
 
   const onAmenityToggle = (amenityId: number) => {
@@ -531,7 +532,6 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
                 <select value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
                   <option value="">{text('selectOption')}</option>
                   <option value="daily">{text('daily')}</option>
-                  <option value="weekly">{text('weekly')}</option>
                   <option value="monthly">{text('monthly')}</option>
                   <option value="yearly">{text('yearly')}</option>
                 </select>

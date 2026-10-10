@@ -73,7 +73,11 @@
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px;">
             <span class="badge" style="position: static; background: #eaf8f1; color: #0d5f46;">{{ property.get_listing_type_display }}</span>
             <div class="price" style="font-size: 1.5rem; margin:0;">{{ property.formatted_price }}</div>
+            <span class="badge" style="position: static;">
+              {% if property.status == "active" %}Available{% else %}{{ property.get_status_display }}{% endif %}
+            </span>
           </div>
+          <p class="property-registration-date">Listed {{ property.created_at|date:"M j, Y" }}</p>
           <p><strong>Features:</strong> {{ property.features }}</p>
         </div>
 

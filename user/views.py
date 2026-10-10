@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
-from admin.models import BrokerageSettings
+from admin.models import BrokerageSettings, HomepageNote, SocialMediaLink
 from .forms import ViewingRequestForm
 from .models import Property, ViewingRequest
 from viewings.models import ViewingRequestEvent
@@ -35,6 +35,13 @@ def _public_context(**context):
     return {
         **context,
         'brokerage_contact': BrokerageSettings.objects.filter(pk=1).first(),
+        'brokerage_social_links': SocialMediaLink.objects.filter(
+            brokerage_id=1,
+            is_enabled=True,
+        ).order_by('display_order', 'platform'),
+        'homepage_notes': HomepageNote.objects.filter(
+            is_published=True,
+        ).order_by('display_order', '-created_at'),
     }
 
 

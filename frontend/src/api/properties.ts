@@ -12,12 +12,13 @@ export interface PropertySummary {
   longitude: number | string | null;
   category: string;
   listing_type: ListingType;
+  rental_frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
   price: string;
   currency: 'ETB';
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;
-  status: string;
+  status: 'available' | 'rented' | 'sold' | 'inactive';
   primary_image: string | null;
   images: { id: number; url: string | null; caption: string; is_primary: boolean }[];
   created_at: string;

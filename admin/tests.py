@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from accounts.models import DelegatedAccountInvitation, Profile
-from admin.models import AdminAuditEvent, BrokerageSettings
+from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
 
@@ -134,6 +134,120 @@ class AdminApiTests(APITestCase):
         self.assertEqual(created.publication_status, Property.PublicationStatus.PUBLISHED)
         public_response = self.client.get(reverse('api:property-list'))
         self.assertIn(created.slug, [item['slug'] for item in public_response.data['results']])
+
+    def test_homepage_notes_are_public_only_when_published_and_ordered(self):
+        first = HomepageNote.objects.create(
+            title='Second',
+            text='second announcement',
+            is_published=True,
+            display_order=2,
+        )
+        HomepageNote.objects.create(
+            title='Private',
+            text='unpublished announcement',
+            is_published=False,
+            display_order=1,
+        )
+        last = HomepageNote.objects.create(
+            title='First',
+            text='first announcement',
+            is_published=True,
+            display_order=1,
+        )
+
+        response = self.client.get(reverse('api:homepage-note-list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([note['id'] for note in response.data['results']], [last.pk, first.pk])
+        self.assertNotIn('unpublished announcement', str(response.data))
+
+    def test_homepage_note_management_requires_settings_permission_and_persists_changes(self):
+        note_url = reverse('api:managed-homepage-note-list')
+        payload = {
+            'title': 'Welcome',
+            'text': '<b>Plain text safely escaped by the client</b>',
+            'is_published': True,
+            'display_order': 4,
+        }
+
+        self.client.force_authenticate(user=self.customer)
+        forbidden = self.client.post(note_url, payload, format='json')
+        self.assertEqual(forbidden.status_code, 403)
+
+        content_manager = User.objects.create_user(username='homepage-content-manager', is_staff=True)
+        Profile.objects.create(
+            user=content_manager,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.SETTINGS_MANAGE],
+        )
+        self.client.force_authenticate(user=content_manager)
+        created = self.client.post(note_url, payload, format='json')
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(self.client.get(reverse('api:homepage-note-list')).data['results'][0]['text'], payload['text'])
+
+        updated = self.client.patch(
+            reverse('api:managed-homepage-note-detail', kwargs={'pk': created.data['id']}),
+            {'text': 'Updated welcome', 'display_order': 1},
+            format='json',
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.data['text'], 'Updated welcome')
+        self.assertEqual(self.client.get(reverse('api:homepage-note-list')).data['results'][0]['text'], 'Updated welcome')
+
+        deleted = self.client.delete(
+            reverse('api:managed-homepage-note-detail', kwargs={'pk': created.data['id']}),
+        )
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(HomepageNote.objects.filter(pk=created.data['id']).exists())
+        self.assertTrue(AdminAuditEvent.objects.filter(
+            action='homepage_note_deleted',
+            object_id=str(created.data['id']),
+        ).exists())
+
+    def test_social_links_require_authorization_and_only_enabled_https_links_are_public(self):
+        contact_url = reverse('api:brokerage-contact')
+        self.client.force_authenticate(user=self.customer)
+        denied = self.client.patch(
+            contact_url,
+            {'social_links': [{'platform': 'facebook', 'url': 'https://facebook.com/example', 'is_enabled': True, 'display_order': 0}]},
+            format='json',
+        )
+        self.assertEqual(denied.status_code, 403)
+
+        content_manager = User.objects.create_user(username='social-link-manager', is_staff=True)
+        Profile.objects.create(
+            user=content_manager,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.SETTINGS_MANAGE],
+        )
+        self.client.force_authenticate(user=content_manager)
+        updated = self.client.patch(
+            contact_url,
+            {
+                'social_links': [
+                    {'platform': 'facebook', 'url': 'https://facebook.com/example', 'is_enabled': True, 'display_order': 2},
+                    {'platform': 'telegram', 'url': 'https://t.me/example', 'is_enabled': False, 'display_order': 1},
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(SocialMediaLink.objects.count(), 2)
+        self.client.force_authenticate(user=None)
+        public = self.client.get(contact_url)
+        self.assertEqual(
+            public.data['social_links'],
+            [{'platform': 'facebook', 'url': 'https://facebook.com/example', 'is_enabled': True, 'display_order': 2}],
+        )
+        self.assertNotIn('facebook_url', public.data)
+
+        self.client.force_authenticate(user=content_manager)
+        invalid = self.client.patch(
+            contact_url,
+            {'social_links': [{'platform': 'facebook', 'url': 'http://facebook.com/example', 'is_enabled': True, 'display_order': 0}]},
+            format='json',
+        )
+        self.assertEqual(invalid.status_code, 400)
 
     def test_user_management_cannot_grant_staff_privileges_or_self_deactivate(self):
         self.client.force_authenticate(user=self.admin_user)

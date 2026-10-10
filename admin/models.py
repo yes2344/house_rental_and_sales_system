@@ -43,6 +43,56 @@ class BrokerageSettings(models.Model):
         return self.business_name or 'Brokerage contact settings'
 
 
+class SocialMediaLink(models.Model):
+    class Platform(models.TextChoices):
+        FACEBOOK = 'facebook', 'Facebook'
+        WHATSAPP = 'whatsapp', 'WhatsApp'
+        TELEGRAM = 'telegram', 'Telegram'
+        INSTAGRAM = 'instagram', 'Instagram'
+        TIKTOK = 'tiktok', 'TikTok'
+        YOUTUBE = 'youtube', 'YouTube'
+        LINKEDIN = 'linkedin', 'LinkedIn'
+
+    brokerage = models.ForeignKey(
+        BrokerageSettings,
+        on_delete=models.CASCADE,
+        related_name='social_links',
+    )
+    platform = models.CharField(max_length=16, choices=Platform.choices)
+    url = models.URLField(max_length=300)
+    is_enabled = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'platform']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['brokerage', 'platform'],
+                name='brokerage_unique_social_platform',
+            ),
+        ]
+
+    def __str__(self):
+        return self.get_platform_display()
+
+
+class HomepageNote(models.Model):
+    title = models.CharField(max_length=160, blank=True)
+    text = models.TextField(max_length=2000)
+    is_published = models.BooleanField(default=False)
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', '-created_at']
+
+    def __str__(self):
+        return self.title or self.text[:60]
+
+
 class AdminAuditEvent(models.Model):
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -67,7 +67,11 @@
                 <div class="property-body">
                   <h3>{{ property.title }}</h3>
                   <div class="price">{{ property.formatted_price }}</div>
+                  <p class="property-card-availability">
+                    {% if property.status == "active" %}Available{% else %}{{ property.get_status_display }}{% endif %}
+                  </p>
                   <p>{{ property.bedrooms }} Bed · {{ property.bathrooms }} Bath · {{ property.area_sqft }} sq ft</p>
+                  <p class="property-registration-date">Listed {{ property.created_at|date:"M j, Y" }}</p>
                   <div class="meta">
                     {% include "user/_property_location.html" %}
                     {% if property.has_public_coordinates %}

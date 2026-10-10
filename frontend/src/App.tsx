@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Route, Routes } from 'react-router-dom';
 
 import { BrokerageContactProvider } from './BrokerageContactContext';
+import { HomepageContentProvider } from './HomepageContentContext';
 import { PageLayout } from './components/PageLayout';
 import { RequireAuth } from './components/RequireAuth';
 import { RequireListingManager } from './components/RequireListingManager';
@@ -35,6 +36,7 @@ export default function App() {
 
   return (
     <BrokerageContactProvider>
+    <HomepageContentProvider>
     <Routes>
       <Route
         element={(
@@ -73,6 +75,7 @@ export default function App() {
         <Route path="*" element={<NotFoundPage text={text} />} />
       </Route>
     </Routes>
+    </HomepageContentProvider>
     </BrokerageContactProvider>
   );
 }

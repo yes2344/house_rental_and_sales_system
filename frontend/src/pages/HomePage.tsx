@@ -5,6 +5,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getErrorMessage } from '../api/client';
 import { getLatestProperties, type PropertySummary } from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
+import { useHomepageContent } from '../HomepageContentContext';
+import { SocialMark, socialPlatformNames } from '../components/SocialMark';
+import { useBrokerageContact } from '../BrokerageContactContext';
 import type { Locale, MessageKey } from '../i18n';
 
 export interface HomePageProps {
@@ -14,6 +17,8 @@ export interface HomePageProps {
 
 export function HomePage({ locale, text }: HomePageProps) {
   const navigate = useNavigate();
+  const { notes } = useHomepageContent();
+  const { contact } = useBrokerageContact();
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [propertyType, setPropertyType] = useState('');
   const [location, setLocation] = useState('Debre Markos');
@@ -191,6 +196,46 @@ export function HomePage({ locale, text }: HomePageProps) {
           </div>
         </div>
       </section>
+
+      {notes.length > 0 && (
+        <section className="section homepage-notes-section" aria-labelledby="homepage-notes-title">
+          <div className="container">
+            <div className="section-heading">
+              <div><p className="eyebrow eyebrow-muted">{text('brokerContactTitle')}</p><h2 id="homepage-notes-title">{text('homepageNotesTitle')}</h2></div>
+            </div>
+            <div className="homepage-notes-grid">
+              {notes.map((note) => (
+                <article className="homepage-note-card" key={note.id}>
+                  {note.title && <h3>{note.title}</h3>}
+                  <p>{note.text}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {contact.social_links.some((link) => link.is_enabled && link.url) && (
+        <section className="homepage-social-section" aria-label={text('brokerSocialLinks')}>
+          <div className="container homepage-social-inner">
+            <h2>{text('brokerSocialLinks')}</h2>
+            <div className="footer-socials">
+              {contact.social_links.filter((link) => link.is_enabled && link.url).map((link) => (
+                <a
+                  key={link.platform}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={socialPlatformNames[link.platform]}
+                  title={socialPlatformNames[link.platform]}
+                >
+                  <SocialMark platform={link.platform} />
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="section process-section" id="how-it-works">
         <div className="container process-layout">

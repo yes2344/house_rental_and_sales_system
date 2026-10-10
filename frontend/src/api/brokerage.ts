@@ -1,29 +1,33 @@
 import { apiClient } from './client';
 
+export type SocialPlatform =
+  | 'facebook'
+  | 'whatsapp'
+  | 'telegram'
+  | 'instagram'
+  | 'tiktok'
+  | 'youtube'
+  | 'linkedin';
+
+export interface BrokerageSocialLink {
+  platform: SocialPlatform;
+  url: string;
+  is_enabled: boolean;
+  display_order: number;
+}
+
 export interface BrokerageContact {
   business_name: string;
   phone: string;
-  whatsapp_url: string;
-  telegram_url: string;
   email: string;
-  facebook_url: string;
-  instagram_url: string;
-  tiktok_url: string;
-  youtube_url: string;
-  linkedin_url: string;
+  social_links: BrokerageSocialLink[];
 }
 
 export const emptyBrokerageContact: BrokerageContact = {
   business_name: '',
   phone: '',
-  whatsapp_url: '',
-  telegram_url: '',
   email: '',
-  facebook_url: '',
-  instagram_url: '',
-  tiktok_url: '',
-  youtube_url: '',
-  linkedin_url: '',
+  social_links: [],
 };
 
 export async function getBrokerageContact(signal?: AbortSignal): Promise<BrokerageContact> {

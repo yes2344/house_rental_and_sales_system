@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router-dom';
 import { getErrorMessage } from '../api/client';
 import { getProperty, type PropertyDetail } from '../api/properties';
 import { FavoriteButton } from '../components/FavoriteButton';
+import { formatPropertyPrice, formatRegistrationDate } from '../components/propertyDisplay';
 import { PropertyGallery } from '../components/PropertyGallery';
 import { hasPublicCoordinates, openStreetMapDirectionsUrl } from '../components/propertyLocation';
 const LocationMap = lazy(() =>
@@ -42,10 +43,6 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
       });
     return () => controller.abort();
   }, [slug]);
-
-  const formatPrice = (price: string) => new Intl.NumberFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
-    maximumFractionDigits: 0,
-  }).format(Number(price));
 
   const shareProperty = async () => {
     try {
@@ -84,6 +81,9 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
   const formattedUpdatedDate = new Intl.DateTimeFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
     dateStyle: 'medium',
   }).format(new Date(property.updated_at));
+  const formattedRegistrationDate = formatRegistrationDate(property.created_at, locale);
+  const whatsappLink = contact.social_links.find((link) => link.platform === 'whatsapp')?.url;
+  const telegramLink = contact.social_links.find((link) => link.platform === 'telegram')?.url;
   const hasCoordinates = hasPublicCoordinates(property.latitude, property.longitude);
   const coordinates = hasCoordinates
     ? { latitude: Number(property.latitude), longitude: Number(property.longitude) }
@@ -109,7 +109,13 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
       <section className="container detail-content-layout">
         <div className="detail-primary-content">
           <div className="detail-price-row">
-            <div className="detail-price"><span>{text('priceLabel')}</span><strong>{text('ethiopianBirr')} {formatPrice(property.price)}</strong></div>
+            <div className="detail-price"><span>{text('priceLabel')}</span><strong>{formatPropertyPrice(
+              property.price,
+              property.listing_type,
+              property.rental_frequency,
+              locale,
+              text,
+            )}</strong></div>
             <span className="detail-availability"><span />{text('available')}</span>
           </div>
           <section className="detail-section">
@@ -155,7 +161,10 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
               <p className="location-not-provided">{text('preciseLocationUnavailable')}</p>
             )}
           </section>
-          <p className="detail-updated"><CalendarDays size={14} aria-hidden="true" />{text('lastUpdated')} {formattedUpdatedDate}</p>
+          {formattedRegistrationDate && (
+            <p className="detail-updated"><CalendarDays size={14} aria-hidden="true" />{text('registeredDate')} {formattedRegistrationDate}</p>
+          )}
+          <p className="detail-updated">{text('lastUpdated')} {formattedUpdatedDate}</p>
         </div>
 
         <aside className="contact-card">
@@ -164,18 +173,18 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
           {contact.phone && (
             <a className="contact-method" href={`tel:${contact.phone}`}><Phone size={17} aria-hidden="true" /><span><small>{text('contactByPhone')}</small><strong>{contact.phone}</strong></span></a>
           )}
-          {contact.whatsapp_url && (
-            <a className="contact-method" href={contact.whatsapp_url} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>WhatsApp</small><strong>{text('contactBroker')}</strong></span></a>
+          {whatsappLink && (
+            <a className="contact-method" href={whatsappLink} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>WhatsApp</small><strong>{text('contactBroker')}</strong></span></a>
           )}
-          {contact.telegram_url && (
-            <a className="contact-method" href={contact.telegram_url} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>Telegram</small><strong>{text('contactBroker')}</strong></span></a>
+          {telegramLink && (
+            <a className="contact-method" href={telegramLink} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>Telegram</small><strong>{text('contactBroker')}</strong></span></a>
           )}
           {contact.email && (
             <a className="contact-method" href={`mailto:${contact.email}`}><Mail size={17} aria-hidden="true" /><span><small>{text('contactByEmail')}</small><strong>{contact.email}</strong></span></a>
           )}
           <Link className="button button-primary viewing-cta" to={`/viewing-requests/new?property_id=${property.id}&property_slug=${encodeURIComponent(property.slug)}`}><CalendarDays size={16} aria-hidden="true" />{text('requestViewing')}</Link>
           <p className="contact-note">{contactError ? text('brokerContactUnavailable') : text('viewingNoAccount')}</p>
-          {!contactError && !contact.phone && !contact.email && !contact.whatsapp_url && !contact.telegram_url && (
+          {!contactError && !contact.phone && !contact.email && !whatsappLink && !telegramLink && (
             <p className="contact-note">{text('brokerContactNotConfigured')}</p>
           )}
         </aside>

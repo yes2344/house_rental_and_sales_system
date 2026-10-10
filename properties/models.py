@@ -243,7 +243,16 @@ class Property(models.Model):
 
     @property
     def formatted_price(self):
-        return f'ETB {self.price:,.2f}'
+        price = f'ETB {self.price:,.2f}'
+        if self.listing_type == self.ListingType.RENT and self.rental_frequency:
+            period = {
+                self.RentalFrequency.DAILY: 'per day',
+                self.RentalFrequency.WEEKLY: 'per week',
+                self.RentalFrequency.MONTHLY: 'per month',
+                self.RentalFrequency.YEARLY: 'per year',
+            }[self.rental_frequency]
+            return f'{price} / {period}'
+        return price
 
     @property
     def has_public_coordinates(self):

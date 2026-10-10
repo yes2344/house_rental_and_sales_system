@@ -79,6 +79,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid rgba(28, 133, 94,
 .badge { background: rgba(255,255,255,0.92); padding: 0.35rem 0.6rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
 .property-body { padding: 18px; }
 .price { color: #0d5338; font-weight: 800; font-size: 1.2rem; }
+.property-registration-date { margin: 7px 0 0; color: #667670; font-size: .8rem; }
+.property-card-availability { margin: 6px 0 0; color: #135d45; font-size: .84rem; font-weight: 700; }
 .meta { display: flex; justify-content: space-between; margin-top: 16px; color: #516562; }
 .property-location { display: inline-flex; min-width: 0; align-items: center; gap: 6px; overflow-wrap: anywhere; }
 .property-location-icon { width: 16px; height: 16px; flex: 0 0 auto; color: #1d8d63; }
@@ -228,6 +230,10 @@ form .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   display: inline-flex;
 }
 footer { background: #0d1d1a; color: rgba(255,255,255,0.8); padding: 34px 0; margin-top: 30px; }
+.brokerage-social-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.brokerage-social-links a { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.3); border-radius: 50%; color: inherit; }
+.brokerage-social-links a:hover, .brokerage-social-links a:focus-visible { background: rgba(255,255,255,.12); outline: 2px solid #fff; outline-offset: 2px; }
+.social-platform-mark { display: block; width: 18px; height: 18px; }
 @media (max-width: 760px) {
   .hero-inner, .card-grid, .stats, .layout-2, form .two-col { grid-template-columns: 1fr; }
   .nav-links { display: none; }
