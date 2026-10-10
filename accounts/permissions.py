@@ -3,8 +3,32 @@ from rest_framework.permissions import BasePermission
 from accounts.models import Profile
 
 
+BROKER_WORK_PERMISSIONS = frozenset({
+    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+})
+
+
 def is_platform_administrator(user):
     return bool(user and user.is_authenticated and user.is_active and user.is_superuser)
+
+
+def effective_management_permissions(user):
+    if user.is_superuser:
+        return [permission for permission, _ in Profile.Permission.choices]
+    profile = getattr(user, 'profile', None)
+    if profile is None:
+        return []
+    if profile.role == Profile.Role.ADMINISTRATOR:
+        return [Profile.Permission.USERS_MANAGE] if user.is_staff else []
+    if profile.role == Profile.Role.BROKER and profile.broker_approved:
+        return [
+            permission
+            for permission in profile.management_permissions
+            if permission in BROKER_WORK_PERMISSIONS
+        ]
+    return []
 
 
 def has_management_permission(user, permission):
@@ -13,18 +37,36 @@ def has_management_permission(user, permission):
     if user.is_superuser:
         return True
     profile = Profile.objects.filter(user_id=user.pk).first()
-    if profile is None or permission not in profile.management_permissions:
+    if profile is None:
         return False
     if profile.role == Profile.Role.ADMINISTRATOR:
-        return bool(user.is_staff)
+        return bool(user.is_staff and permission == Profile.Permission.USERS_MANAGE)
     if profile.role == Profile.Role.BROKER:
-        return profile.broker_approved
+        return bool(
+            profile.broker_approved
+            and permission in BROKER_WORK_PERMISSIONS
+            and permission in profile.management_permissions
+        )
     return False
 
 
-class IsPlatformOwner(BasePermission):
+def can_manage_broker_accounts(user):
+    if not user or not user.is_authenticated or not user.is_active:
+        return False
+    if user.is_superuser:
+        return True
+    return bool(
+        user.is_staff
+        and Profile.objects.filter(
+            user_id=user.pk,
+            role=Profile.Role.ADMINISTRATOR,
+        ).exists()
+    )
+
+
+class IsBrokerAccountManager(BasePermission):
     def has_permission(self, request, view):
-        return is_platform_administrator(request.user)
+        return can_manage_broker_accounts(request.user)
 
 
 class HasManagementPermission(BasePermission):

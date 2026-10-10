@@ -56,6 +56,7 @@ img { display: block; max-width: 100%; }
 .primary-navigation a { position: relative; display: inline-flex; height: 100%; align-items: center; transition: color .2s ease; }
 .primary-navigation a:hover, .primary-navigation a.active { color: var(--green-900); }
 .primary-navigation a.active::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--green-700); content: ''; }
+.mobile-menu-contact { display: none; }
 .header-actions { position: relative; display: flex; align-items: center; gap: 21px; font-size: 13px; font-weight: 600; }
 .language-toggle, .header-sign-in { padding: 8px 0; border: 0; background: none; color: var(--ink-soft); cursor: pointer; }
 .language-toggle { color: var(--green-800); font-weight: 700; }
@@ -384,10 +385,14 @@ img { display: block; max-width: 100%; }
 .detail-property-image { animation: slideshow-fade .35s ease both; }
 .property-lightbox { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 30px; background: rgb(8 17 13 / 92%); }
 .property-lightbox-dialog { position: relative; width: min(1100px, 100%); height: min(800px, 100%); display: grid; place-items: center; }
-.lightbox-image { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lightbox-image { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; transition: transform .2s ease; }
 .lightbox-placeholder { width: min(700px, 100%); min-height: 300px; display: grid; place-items: center; background: #e8ede3; color: #6c806e; }
 .lightbox-close, .lightbox-arrow { position: absolute; z-index: 1; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgb(255 255 255 / 25%); border-radius: 50%; background: rgb(13 20 17 / 78%); color: white; cursor: pointer; }
 .lightbox-close { top: 10px; right: 10px; }
+.lightbox-zoom-controls { position: absolute; z-index: 1; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 7px; padding: 6px; border: 1px solid rgb(255 255 255 / 25%); border-radius: 24px; background: rgb(13 20 17 / 78%); color: white; }
+.lightbox-zoom-controls button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.lightbox-zoom-controls button:disabled { opacity: .45; cursor: not-allowed; }
+.lightbox-zoom-controls span { min-width: 42px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .lightbox-arrow { top: 50%; transform: translateY(-50%); }
 .lightbox-previous { left: 10px; }
 .lightbox-next { right: 10px; }
@@ -545,6 +550,13 @@ img { display: block; max-width: 100%; }
   .primary-navigation.is-open { display: flex; height: auto; flex-direction: column; align-items: stretch; gap: 0; padding: 9px 0; border-top: 1px solid var(--line); }
   .primary-navigation a { min-height: 43px; }
   .primary-navigation a.active::after { right: auto; bottom: 4px; width: 26px; }
+  .mobile-menu-contact { display: grid; gap: 10px; margin-top: 8px; padding: 15px 0 5px; border-top: 1px solid var(--line); }
+  .mobile-menu-contact h2 { margin: 0 0 2px; color: var(--green-900); font-size: 12px; }
+  .primary-navigation .mobile-menu-contact a { min-height: 40px; height: auto; display: flex; align-items: center; gap: 11px; color: var(--ink-soft); }
+  .mobile-menu-contact a > svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--green-700); }
+  .mobile-menu-contact a span { display: grid; gap: 2px; }
+  .mobile-menu-contact a small { color: var(--muted); font-size: 10px; }
+  .mobile-menu-contact a strong { font-size: 12px; font-weight: 600; }
   .header-actions.is-open { display: flex; justify-content: space-between; padding: 12px 0 16px; border-top: 1px solid var(--line); }
   .header-actions.is-open { flex-wrap: wrap; gap: 9px 13px; }
   .header-sign-in { margin-left: auto; }
@@ -685,6 +697,7 @@ img { display: block; max-width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .lightbox-image { transition: none; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 

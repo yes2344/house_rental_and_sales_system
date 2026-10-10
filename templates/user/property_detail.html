@@ -61,6 +61,12 @@
             </div>
             <button type="button" class="slider-btn next" aria-label="Next image">›</button>
           </div>
+          <div class="gallery-zoom-controls" aria-label="Photo zoom controls">
+            <button type="button" class="slider-btn" id="gallery-zoom-out" aria-label="Zoom out">−</button>
+            <span id="gallery-zoom-level" aria-live="polite">100%</span>
+            <button type="button" class="slider-btn" id="gallery-zoom-in" aria-label="Zoom in">+</button>
+            <button type="button" class="slider-btn gallery-reset-zoom" id="gallery-zoom-reset">Reset</button>
+          </div>
 
           <h2>Property overview</h2>
           <p>{{ property.description }}</p>
@@ -122,21 +128,47 @@
 
       if (gallery && slides.length) {
         let index = 0;
+        let zoom = 1;
+        const zoomLevel = document.getElementById('gallery-zoom-level');
+        const updateZoom = () => {
+          slides[index].style.setProperty('--gallery-zoom', String(zoom));
+          if (zoomLevel) zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
+        };
 
         function showSlide(nextIndex) {
           index = (nextIndex + slides.length) % slides.length;
+          zoom = 1;
+          slides.forEach((slide) => slide.style.setProperty('--gallery-zoom', '1'));
+          updateZoom();
           slides.forEach((slide, slideIndex) => {
             slide.classList.toggle('active', slideIndex === index);
           });
           dots.forEach((dot, dotIndex) => {
             dot.classList.toggle('active', dotIndex === index);
+            dot.setAttribute('aria-pressed', String(dotIndex === index));
           });
         }
 
         prevBtn?.addEventListener('click', () => showSlide(index - 1));
         nextBtn?.addEventListener('click', () => showSlide(index + 1));
+        document.getElementById('gallery-zoom-in')?.addEventListener('click', () => {
+          zoom = Math.min(2.5, Number((zoom + 0.25).toFixed(2)));
+          updateZoom();
+        });
+        document.getElementById('gallery-zoom-out')?.addEventListener('click', () => {
+          zoom = Math.max(1, Number((zoom - 0.25).toFixed(2)));
+          updateZoom();
+        });
+        document.getElementById('gallery-zoom-reset')?.addEventListener('click', () => {
+          zoom = 1;
+          updateZoom();
+        });
         dots.forEach((dot) => {
-          dot.addEventListener('click', () => showSlide(Number(dot.dataset.index)));
+          dot.addEventListener('click', () => {
+            zoom = 1;
+            showSlide(Number(dot.dataset.index));
+            updateZoom();
+          });
         });
 
         const slideshowRegion = gallery.parentElement;

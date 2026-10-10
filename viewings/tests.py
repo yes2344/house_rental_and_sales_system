@@ -185,15 +185,14 @@ class PublicViewingRequestApiTests(APITestCase):
         request = ViewingRequest.objects.get(pk=created.data['id'])
         owner = get_user_model().objects.create_user(username='proposal-owner')
         Profile.objects.create(user=owner, role=Profile.Role.OWNER)
-        manager = get_user_model().objects.create_user(
-            username='proposal-manager',
-            is_staff=True,
-        )
+        manager = get_user_model().objects.create_user(username='proposal-broker')
         Profile.objects.create(
             user=manager,
-            role=Profile.Role.ADMINISTRATOR,
-            management_permissions=[Profile.Permission.VIEWING_MANAGE_ALL],
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
+        PropertyBrokerAssignment.objects.create(property=request.property, broker=manager)
         request.property.owner = owner
         request.property.save(update_fields=['owner'])
         self.client.force_authenticate(user=manager)
@@ -401,7 +400,7 @@ class ManagedViewingRequestApiTests(APITestCase):
         )
         self.assertEqual(hidden.status_code, 404)
 
-    def test_view_only_delegated_permission_cannot_update_request(self):
+    def test_delegated_administrator_cannot_view_or_update_requests(self):
         delegated_admin = get_user_model().objects.create_user(
             username='viewing-reader',
             is_staff=True,
@@ -422,7 +421,7 @@ class ManagedViewingRequestApiTests(APITestCase):
             format='json',
         )
 
-        self.assertEqual(readable.status_code, 200)
+        self.assertEqual(readable.status_code, 403)
         self.assertEqual(forbidden.status_code, 403)
 
     def test_registered_submitter_cannot_manage_requests_for_their_own_property(self):

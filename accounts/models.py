@@ -23,6 +23,7 @@ class Profile(models.Model):
         VIEWING_MANAGE_ALL = 'viewings.manage_all', 'Manage all viewing requests'
         VIEWING_MANAGE_ASSIGNED = 'viewings.manage_assigned', 'Manage assigned viewing requests'
         USERS_MANAGE = 'users.manage', 'Manage ordinary user accounts'
+        OWNER_ANNOUNCEMENTS_REVIEW = 'announcements.review', 'Review owner property announcements'
         REPORTS_REVIEW = 'reports.review', 'Review listing reports'
         STATISTICS_VIEW = 'statistics.view', 'View management statistics'
         AUDIT_VIEW = 'audit.view', 'View audit records'

@@ -12,8 +12,16 @@ class MultipleFileInput(forms.ClearableFileInput):
         self.attrs['multiple'] = 'multiple'
 
 
+class MultipleFileField(forms.FileField):
+    def clean(self, data, initial=None):
+        if not data:
+            return []
+        files = data if isinstance(data, (list, tuple)) else [data]
+        return [super().clean(file, initial) for file in files]
+
+
 class PropertyForm(forms.ModelForm):
-    images = forms.FileField(
+    images = MultipleFileField(
         required=False,
         widget=MultipleFileInput(attrs={'accept': 'image/*'}),
     )
@@ -23,6 +31,9 @@ class PropertyForm(forms.ModelForm):
         fields = [
             'title',
             'location',
+            'latitude',
+            'longitude',
+            'exact_location_is_public',
             'property_type',
             'listing_type',
             'price',
@@ -43,6 +54,14 @@ class PropertyForm(forms.ModelForm):
                 'A property can have up to 10 photos in total. Remove existing photos before adding more.'
             )
         return files
+
+    def clean(self):
+        cleaned_data = super().clean()
+        latitude = cleaned_data.get('latitude')
+        longitude = cleaned_data.get('longitude')
+        if (latitude is None) != (longitude is None):
+            self.add_error('latitude', 'Enter both latitude and longitude, or leave both blank.')
+        return cleaned_data
 
 
 class ViewingRequestForm(forms.ModelForm):

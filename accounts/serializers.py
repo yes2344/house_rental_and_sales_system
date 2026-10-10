@@ -8,6 +8,7 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import DelegatedAccountInvitation, Profile, UserPreferences
+from accounts.permissions import effective_management_permissions
 from favorites.models import Favorite
 from properties.models import Property
 from viewings.models import ViewingRequest
@@ -23,6 +24,14 @@ class ProfilePhoneField(serializers.CharField):
     def to_representation(self, instance):
         profile = Profile.objects.filter(user_id=instance.pk).only('phone').first()
         return profile.phone if profile else ''
+
+
+class EffectiveManagementPermissionsField(serializers.ListField):
+    def get_attribute(self, instance):
+        return instance
+
+    def to_representation(self, instance):
+        return effective_management_permissions(instance)
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -57,10 +66,7 @@ class AccountSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_management_permissions(self, obj):
-        if obj.is_superuser:
-            return [permission for permission, _ in Profile.Permission.choices]
-        profile = getattr(obj, 'profile', None)
-        return profile.management_permissions if profile else []
+        return effective_management_permissions(obj)
 
     @extend_schema_field(serializers.BooleanField())
     def get_is_platform_owner(self, obj):
@@ -122,7 +128,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         choices=[(Profile.Role.ADMINISTRATOR, 'Administrator'), (Profile.Role.BROKER, 'Broker')],
         source='profile.role',
     )
-    management_permissions = serializers.ListField(
+    management_permissions = EffectiveManagementPermissionsField(
         child=serializers.ChoiceField(choices=Profile.Permission.choices),
         source='profile.management_permissions',
         allow_empty=True,
@@ -158,12 +164,19 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             broker_permissions = {
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
             }
             unsupported = set(permissions) - broker_permissions
             if unsupported:
                 raise serializers.ValidationError(
-                    'Brokers can only receive assigned-listing and assigned-viewing permissions.'
+                    'Brokers can only receive broker-work permissions.'
                 )
+        if role == Profile.Role.ADMINISTRATOR and set(permissions) - {
+            Profile.Permission.USERS_MANAGE,
+        }:
+            raise serializers.ValidationError(
+                'Administrators may only manage broker accounts.'
+            )
         return list(dict.fromkeys(permissions))
 
     def validate_email(self, value):
@@ -180,9 +193,18 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             'role',
             self.instance.profile.role if self.instance else None,
         )
+        request = self.context.get('request')
+        if request and not request.user.is_superuser and role != Profile.Role.BROKER:
+            raise serializers.ValidationError(
+                {'role': 'Administrators may manage broker accounts only.'}
+            )
         permissions = profile_data.get(
             'management_permissions',
-            self.instance.profile.management_permissions if self.instance else [],
+            (
+                [Profile.Permission.USERS_MANAGE]
+                if role == Profile.Role.ADMINISTRATOR
+                else self.instance.profile.management_permissions if self.instance else []
+            ),
         )
         owner_only = {
             Profile.Permission.SETTINGS_MANAGE,
@@ -196,11 +218,18 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             allowed = {
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
             }
             if set(permissions) - allowed:
                 raise serializers.ValidationError(
-                    {'management_permissions': 'Brokers may receive only assigned-work permissions.'}
+                    {'management_permissions': 'Brokers may receive only broker-work permissions.'}
                 )
+        if role == Profile.Role.ADMINISTRATOR and set(permissions) - {
+            Profile.Permission.USERS_MANAGE,
+        }:
+            raise serializers.ValidationError(
+                {'management_permissions': 'Administrators may only manage broker accounts.'}
+            )
         return attrs
 
     @transaction.atomic
@@ -219,6 +248,8 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         profile.broker_approved = role == Profile.Role.BROKER
         if permissions is not None:
             profile.management_permissions = permissions
+        elif role == Profile.Role.ADMINISTRATOR:
+            profile.management_permissions = [Profile.Permission.USERS_MANAGE]
         profile.save(update_fields=['role', 'broker_approved', 'management_permissions', 'updated_at'])
         instance.is_staff = role == Profile.Role.ADMINISTRATOR
         instance.save(update_fields=['is_staff'])
@@ -235,7 +266,6 @@ class DelegatedAccountCreateSerializer(serializers.Serializer):
         child=serializers.ChoiceField(choices=Profile.Permission.choices),
         allow_empty=True,
         required=False,
-        default=list,
     )
 
     def validate_username(self, value):
@@ -247,6 +277,25 @@ class DelegatedAccountCreateSerializer(serializers.Serializer):
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError('A user with this email already exists.')
         return value
+
+    def validate_role(self, value):
+        request = self.context.get('request')
+        if request and not request.user.is_superuser and value != Profile.Role.BROKER:
+            raise serializers.ValidationError('Administrators may create broker accounts only.')
+        return value
+
+    def validate(self, attrs):
+        if 'management_permissions' not in attrs:
+            attrs['management_permissions'] = (
+                [Profile.Permission.USERS_MANAGE]
+                if attrs['role'] == Profile.Role.ADMINISTRATOR
+                else [
+                    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+                    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                ]
+            )
+        return attrs
 
     def validate_management_permissions(self, permissions):
         return DelegatedAccountSerializer(

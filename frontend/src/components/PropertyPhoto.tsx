@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { House } from 'lucide-react';
 
 interface PropertyPhotoProps {
@@ -7,6 +7,7 @@ interface PropertyPhotoProps {
   className: string;
   fallbackClassName: string;
   fallbackLabel: string;
+  style?: CSSProperties;
 }
 
 export function PropertyPhoto({
@@ -15,6 +16,7 @@ export function PropertyPhoto({
   className,
   fallbackClassName,
   fallbackLabel,
+  style,
 }: PropertyPhotoProps) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
 
@@ -33,6 +35,7 @@ export function PropertyPhoto({
       className={className}
       src={src}
       alt={alt}
+      style={style}
       loading="lazy"
       onLoad={(event) => {
         if (event.currentTarget.naturalWidth < 256 || event.currentTarget.naturalHeight < 160) {

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import type { BrokerageContact } from '../api/brokerage';
 import type { MessageKey } from '../i18n';
+import { publicContact } from '../publicContact';
 import { SocialMark, socialPlatformNames } from './SocialMark';
 
 interface FooterProps {
@@ -14,7 +15,9 @@ interface FooterProps {
 
 export function Footer({ contact, contactError, text }: FooterProps) {
   const { account } = useAuth();
-  const configuredSocial = contact.social_links.filter((link) => link.is_enabled && link.url);
+  const configuredSocial = contact.social_links.filter(
+    (link) => link.is_enabled && link.url && link.platform !== 'whatsapp' && link.platform !== 'telegram',
+  );
 
   return (
     <footer className="site-footer">
@@ -40,12 +43,16 @@ export function Footer({ contact, contactError, text }: FooterProps) {
         </div>
         <section className="footer-contact" aria-label={text('brokerContactTitle')}>
           <h2>{text('brokerContactTitle')}</h2>
-          {contact.phone && (
-            <a href={`tel:${contact.phone}`}><Phone size={15} aria-hidden="true" />{contact.phone}</a>
-          )}
+          <a href={`tel:${publicContact.phone}`}><Phone size={15} aria-hidden="true" />{publicContact.phone}</a>
           {contact.email && (
             <a href={`mailto:${contact.email}`}><Mail size={15} aria-hidden="true" />{contact.email}</a>
           )}
+          <a href={publicContact.whatsappUrl} target="_blank" rel="noreferrer">
+            <SocialMark platform="whatsapp" />{text('contactWhatsapp')}: {publicContact.phone}
+          </a>
+          <a href={publicContact.telegramUrl} target="_blank" rel="noreferrer">
+            <SocialMark platform="telegram" />{text('contactTelegram')}: @Lion1621
+          </a>
           {configuredSocial.length > 0 && (
             <div className="footer-socials" aria-label={text('brokerSocialLinks')}>
               {configuredSocial.map((link) => (

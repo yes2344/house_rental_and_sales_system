@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Create Listing | Admin</title>
     <link rel="stylesheet" href="{% static 'portal.css' %}" />
+    <link rel="stylesheet" href="{% static 'leaflet.css' %}" />
   </head>
   <body>
     <header>
@@ -46,6 +47,22 @@
             <label>Property title{{ form.title }}</label>
             <label>Price{{ form.price }}</label>
             <label>Location{{ form.location }}</label>
+            <div class="admin-location-picker">
+              <h2>Precise property location (optional)</h2>
+              <p>Click the map or drag the marker to the actual property location. The initial map center is only a map view and will not be saved unless you select a point.</p>
+              <div class="location-picker-actions">
+                <button class="btn btn-secondary" type="button" id="use-current-location">Use my current location</button>
+                <button class="btn btn-secondary" type="button" id="clear-property-location">Clear location</button>
+              </div>
+              <p id="location-picker-message" role="status" aria-live="polite"></p>
+              <div id="admin-property-map" class="admin-property-map" role="region" aria-label="Select the property location on the map"></div>
+              <div class="two-col admin-coordinate-fields">
+                <label>Latitude{{ form.latitude }}</label>
+                <label>Longitude{{ form.longitude }}</label>
+              </div>
+              <label>{{ form.exact_location_is_public }} Show exact coordinates publicly</label>
+              <p>When unchecked, saved coordinates remain private.</p>
+            </div>
             <label>Property type{{ form.property_type }}</label>
             <label>Listing type{{ form.listing_type }}</label>
             <label>Bedrooms{{ form.bedrooms }}</label>
@@ -56,7 +73,7 @@
             <label style="grid-column:1 / -1;">Description{{ form.description }}</label>
             <label style="grid-column:1 / -1;">Features{{ form.features }}</label>
             <label style="grid-column:1 / -1;">Upload photos (up to 10){{ form.images }}</label>
-            <div class="upload-preview" id="upload-preview" style="grid-column: 1 / -1;"></div>
+            <div class="upload-preview" id="upload-preview" style="grid-column: 1 / -1;" aria-live="polite"></div>
           </div>
           <div style="display:flex; justify-content:flex-end; gap: 12px; margin-top: 18px;">
             <a href="/admin-portal/properties/" class="btn btn-secondary">Cancel</a>
@@ -70,65 +87,135 @@
       <div class="container">Debre Markos Homes · Listing editor</div>
     </footer>
 
+    <script src="{% static 'leaflet.js' %}"></script>
     <script>
       const fileInput = document.querySelector('input[type="file"]');
       const previewBox = document.getElementById('upload-preview');
+      const latitudeInput = document.getElementById('id_latitude');
+      const longitudeInput = document.getElementById('id_longitude');
+      const locationMessage = document.getElementById('location-picker-message');
+      const mapElement = document.getElementById('admin-property-map');
+      const files = [];
+      let previewIndex = 0;
+      let previewZoom = 1;
+      let mapMarker = null;
+
+      if (mapElement && window.L) {
+        const map = window.L.map(mapElement).setView([10.333, 37.733], 12);
+        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(map);
+
+        const setCoordinates = (latitude, longitude) => {
+          latitudeInput.value = latitude.toFixed(6);
+          longitudeInput.value = longitude.toFixed(6);
+          if (mapMarker) mapMarker.setLatLng([latitude, longitude]);
+          else {
+            mapMarker = window.L.marker([latitude, longitude], { draggable: true }).addTo(map);
+            mapMarker.on('dragend', () => {
+              const point = mapMarker.getLatLng();
+              setCoordinates(point.lat, point.lng);
+            });
+          }
+          locationMessage.textContent = `Selected property coordinates: ${latitudeInput.value}, ${longitudeInput.value}`;
+        };
+
+        const setFromInputs = () => {
+          const latitude = Number(latitudeInput.value);
+          const longitude = Number(longitudeInput.value);
+          if (!latitudeInput.value || !longitudeInput.value
+            || !Number.isFinite(latitude) || !Number.isFinite(longitude)
+            || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return;
+          setCoordinates(latitude, longitude);
+          map.setView([latitude, longitude], Math.max(map.getZoom(), 15));
+        };
+
+        map.on('click', (event) => setCoordinates(event.latlng.lat, event.latlng.lng));
+        latitudeInput.addEventListener('change', setFromInputs);
+        longitudeInput.addEventListener('change', setFromInputs);
+        document.getElementById('clear-property-location').addEventListener('click', () => {
+          latitudeInput.value = '';
+          longitudeInput.value = '';
+          if (mapMarker) map.removeLayer(mapMarker);
+          mapMarker = null;
+          locationMessage.textContent = 'No precise location selected.';
+        });
+        document.getElementById('use-current-location').addEventListener('click', () => {
+          if (!navigator.geolocation) {
+            locationMessage.textContent = 'Location is unavailable in this browser. You can still choose the property on the map.';
+            return;
+          }
+          locationMessage.textContent = 'Requesting your location. Move the marker to the actual property if needed.';
+          navigator.geolocation.getCurrentPosition(
+            ({ coords }) => {
+              setCoordinates(coords.latitude, coords.longitude);
+              map.setView([coords.latitude, coords.longitude], 16);
+            },
+            () => {
+              locationMessage.textContent = 'Could not access your location. You can still choose the property on the map.';
+            },
+            { enableHighAccuracy: true, timeout: 10000 },
+          );
+        });
+
+        if (latitudeInput.value && longitudeInput.value) setFromInputs();
+        window.setTimeout(() => map.invalidateSize(), 0);
+      }
 
       if (fileInput && previewBox) {
-        fileInput.addEventListener('change', (event) => {
-          const files = Array.from(event.target.files || []);
-          previewBox.innerHTML = '';
+        const renderPreview = () => {
+          previewBox.replaceChildren();
+          if (!files.length) {
+            previewBox.textContent = 'No photos selected.';
+            return;
+          }
+          previewIndex = (previewIndex + files.length) % files.length;
+          const current = files[previewIndex];
+          const gallery = document.createElement('div');
+          gallery.className = 'admin-image-preview';
+          const image = document.createElement('img');
+          image.src = current.url;
+          image.alt = current.file.name;
+          image.style.transform = `scale(${previewZoom})`;
+          image.className = 'admin-image-preview-photo';
+          const caption = document.createElement('p');
+          caption.textContent = `${current.file.name} (${previewIndex + 1} of ${files.length})`;
+          const controls = document.createElement('div');
+          controls.className = 'admin-image-preview-controls';
+          const addButton = (label, action, ariaLabel) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-secondary';
+            button.textContent = label;
+            button.setAttribute('aria-label', ariaLabel);
+            button.addEventListener('click', action);
+            controls.appendChild(button);
+          };
+          if (files.length > 1) {
+            addButton('‹', () => { previewIndex -= 1; previewZoom = 1; renderPreview(); }, 'Previous photo');
+            addButton('›', () => { previewIndex += 1; previewZoom = 1; renderPreview(); }, 'Next photo');
+          }
+          addButton('−', () => { previewZoom = Math.max(1, previewZoom - 0.2); renderPreview(); }, 'Zoom out');
+          addButton('+', () => { previewZoom = Math.min(2.5, previewZoom + 0.2); renderPreview(); }, 'Zoom in');
+          addButton('Reset zoom', () => { previewZoom = 1; renderPreview(); }, 'Reset photo zoom');
+          gallery.append(image, caption, controls);
+          previewBox.appendChild(gallery);
+        };
 
-          files.forEach((file) => {
-            const item = document.createElement('div');
-            item.className = 'upload-item';
-
-            const label = document.createElement('span');
-            label.className = 'upload-file-name';
-            label.textContent = file.name;
-
-            const progressWrap = document.createElement('div');
-            progressWrap.className = 'upload-progress-wrap';
-
-            const progressFill = document.createElement('span');
-            progressFill.className = 'upload-progress-fill';
-            progressWrap.appendChild(progressFill);
-
-            const progressLabel = document.createElement('span');
-            progressLabel.className = 'upload-progress-label';
-            progressLabel.textContent = '0%';
-
-            const done = document.createElement('span');
-            done.className = 'upload-success';
-            done.textContent = '✓';
-
-            item.appendChild(label);
-            item.appendChild(progressWrap);
-            item.appendChild(progressLabel);
-            item.appendChild(done);
-            previewBox.appendChild(item);
-
-            const tick = () => {
-              let value = 0;
-              const interval = setInterval(() => {
-                value += 12;
-                if (value >= 100) {
-                  value = 100;
-                  clearInterval(interval);
-                  progressFill.style.width = '100%';
-                  progressLabel.textContent = 'Done';
-                  progressLabel.style.color = '#0d6b48';
-                  done.classList.add('visible');
-                  return;
-                }
-                progressFill.style.width = value + '%';
-                progressLabel.textContent = value + '%';
-              }, 120);
-            };
-
-            tick();
+        fileInput.addEventListener('change', () => {
+          files.splice(0).forEach(({ url }) => URL.revokeObjectURL(url));
+          Array.from(fileInput.files || []).slice(0, 10).forEach((file) => {
+            files.push({ file, url: URL.createObjectURL(file) });
           });
+          previewIndex = 0;
+          previewZoom = 1;
+          renderPreview();
         });
+        window.addEventListener('pagehide', () => {
+          files.forEach(({ url }) => URL.revokeObjectURL(url));
+        }, { once: true });
+        renderPreview();
       }
     </script>
   </body>

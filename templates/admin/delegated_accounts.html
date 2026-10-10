@@ -12,13 +12,15 @@
     <header>
       <div class="container navbar">
         <div class="header-left">
-          <a class="header-back" href="/admin-portal/" aria-label="Back to dashboard">←</a>
+          <a class="header-back" href="{% if is_platform_owner %}/admin-portal/{% else %}/admin-portal/delegated-accounts/{% endif %}" aria-label="{% if is_platform_owner %}Back to dashboard{% else %}Broker accounts{% endif %}">←</a>
           <div class="brand"><span class="brand-mark">D</span> Debre Markos Admin</div>
         </div>
         <nav class="nav-links">
-          <a href="/admin-portal/">Dashboard</a>
-          <a href="/admin-portal/properties/">Properties</a>
-          <a href="/admin-portal/viewing-requests/">Viewings</a>
+          {% if is_platform_owner %}
+            <a href="/admin-portal/">Dashboard</a>
+            <a href="/admin-portal/properties/">Properties</a>
+            <a href="/admin-portal/viewing-requests/">Viewings</a>
+          {% endif %}
           <a href="/admin-portal/delegated-accounts/">Staff access</a>
         </nav>
         <a class="btn btn-primary" href="/">Public site</a>
@@ -49,7 +51,7 @@
 
       <div class="layout-2" style="margin-top: 28px;">
         <section class="panel">
-          <h2>Create an administrator or broker invitation</h2>
+          <h2>{% if is_platform_owner %}Create an administrator or broker invitation{% else %}Invite a broker{% endif %}</h2>
           <p>New accounts are inactive until the invitee sets a password with the one-time token.</p>
           <form method="post">
             {% csrf_token %}
@@ -101,6 +103,6 @@
       </section>
     </main>
 
-    <footer><div class="container">Debre Markos Homes · Owner-controlled access</div></footer>
+    <footer><div class="container">Debre Markos Homes · {% if is_platform_owner %}Owner-controlled access{% else %}Broker account management{% endif %}</div></footer>
   </body>
 </html>

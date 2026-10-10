@@ -1,4 +1,7 @@
+from tempfile import TemporaryDirectory
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
@@ -85,9 +88,22 @@ class AdminApiTests(APITestCase):
         Profile.objects.create(
             user=contact_manager,
             role=Profile.Role.ADMINISTRATOR,
-            management_permissions=[Profile.Permission.SETTINGS_MANAGE],
+            management_permissions=[Profile.Permission.USERS_MANAGE, Profile.Permission.SETTINGS_MANAGE],
         )
         self.client.force_authenticate(user=contact_manager)
+        denied_update = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {
+                'business_name': 'Brokerage contact',
+                'phone': '+251900000000',
+                'email': 'contact@example.com',
+            },
+            format='json',
+        )
+        self.assertEqual(denied_update.status_code, 403)
+        self.assertFalse(BrokerageSettings.objects.exists())
+
+        self.client.force_authenticate(user=self.admin_user)
         updated = self.client.patch(
             reverse('api:brokerage-contact'),
             {
@@ -97,7 +113,6 @@ class AdminApiTests(APITestCase):
             },
             format='json',
         )
-
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.data['phone'], '+251900000000')
         settings_obj = BrokerageSettings.objects.get(pk=1)
@@ -135,6 +150,98 @@ class AdminApiTests(APITestCase):
         public_response = self.client.get(reverse('api:property-list'))
         self.assertIn(created.slug, [item['slug'] for item in public_response.data['results']])
 
+    def test_legacy_admin_property_registration_accepts_multiple_images(self):
+        browser_client = Client()
+        browser_client.force_login(self.admin_user)
+        media_directory = self.enterContext(TemporaryDirectory())
+
+        with override_settings(MEDIA_ROOT=media_directory):
+            response = browser_client.post(
+                reverse('admin_property_form'),
+                {
+                    'title': 'Legacy admin listing with photos',
+                    'location': 'Verified area',
+                    'property_type': 'house',
+                    'listing_type': 'sale',
+                    'price': '250000',
+                    'bedrooms': 2,
+                    'bathrooms': 1,
+                    'area_sqft': 900,
+                    'description': 'Created with multiple uploaded photos.',
+                    'status': Property.Status.AVAILABLE,
+                    'images': [
+                        SimpleUploadedFile('front.jpg', b'front-photo', content_type='image/jpeg'),
+                        SimpleUploadedFile('inside.png', b'inside-photo', content_type='image/png'),
+                    ],
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        created = Property.objects.get(title='Legacy admin listing with photos')
+        self.assertEqual(created.images.count(), 2)
+        self.assertEqual(
+            set(created.images.values_list('image', flat=True)),
+            {'property_images/front.jpg', 'property_images/inside.png'},
+        )
+
+    def test_legacy_admin_property_registration_saves_optional_coordinates(self):
+        browser_client = Client()
+        browser_client.force_login(self.admin_user)
+        form_page = browser_client.get(reverse('admin_property_form'))
+        self.assertContains(form_page, 'admin-property-map')
+        self.assertContains(form_page, '/static/leaflet.js')
+
+        response = browser_client.post(
+            reverse('admin_property_form'),
+            {
+                'title': 'Admin map listing',
+                'location': 'Verified area',
+                'latitude': '10.333000',
+                'longitude': '37.733000',
+                'exact_location_is_public': 'on',
+                'property_type': 'house',
+                'listing_type': 'sale',
+                'price': '250000',
+                'bedrooms': 2,
+                'bathrooms': 1,
+                'area_sqft': 900,
+                'description': 'A listing with an explicitly selected location.',
+                'status': Property.Status.AVAILABLE,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created = Property.objects.get(title='Admin map listing')
+        self.assertEqual(str(created.latitude), '10.333000')
+        self.assertEqual(str(created.longitude), '37.733000')
+        self.assertTrue(created.exact_location_is_public)
+
+    def test_legacy_admin_property_registration_rejects_partial_coordinates(self):
+        browser_client = Client()
+        browser_client.force_login(self.admin_user)
+
+        response = browser_client.post(
+            reverse('admin_property_form'),
+            {
+                'title': 'Admin partial map listing',
+                'location': 'Verified area',
+                'latitude': '10.333000',
+                'longitude': '',
+                'property_type': 'house',
+                'listing_type': 'sale',
+                'price': '250000',
+                'bedrooms': 2,
+                'bathrooms': 1,
+                'area_sqft': 900,
+                'description': 'A listing with incomplete coordinates.',
+                'status': Property.Status.AVAILABLE,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Enter both latitude and longitude')
+        self.assertFalse(Property.objects.filter(title='Admin partial map listing').exists())
+
     def test_homepage_notes_are_public_only_when_published_and_ordered(self):
         first = HomepageNote.objects.create(
             title='Second',
@@ -161,7 +268,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual([note['id'] for note in response.data['results']], [last.pk, first.pk])
         self.assertNotIn('unpublished announcement', str(response.data))
 
-    def test_homepage_note_management_requires_settings_permission_and_persists_changes(self):
+    def test_homepage_note_management_is_owner_only_and_persists_changes(self):
         note_url = reverse('api:managed-homepage-note-list')
         payload = {
             'title': 'Welcome',
@@ -178,9 +285,13 @@ class AdminApiTests(APITestCase):
         Profile.objects.create(
             user=content_manager,
             role=Profile.Role.ADMINISTRATOR,
-            management_permissions=[Profile.Permission.SETTINGS_MANAGE],
+            management_permissions=[Profile.Permission.USERS_MANAGE, Profile.Permission.SETTINGS_MANAGE],
         )
         self.client.force_authenticate(user=content_manager)
+        denied = self.client.post(note_url, payload, format='json')
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_authenticate(user=self.admin_user)
         created = self.client.post(note_url, payload, format='json')
         self.assertEqual(created.status_code, 201)
         self.assertEqual(self.client.get(reverse('api:homepage-note-list')).data['results'][0]['text'], payload['text'])
@@ -204,7 +315,7 @@ class AdminApiTests(APITestCase):
             object_id=str(created.data['id']),
         ).exists())
 
-    def test_social_links_require_authorization_and_only_enabled_https_links_are_public(self):
+    def test_social_links_are_owner_managed_and_only_enabled_https_links_are_public(self):
         contact_url = reverse('api:brokerage-contact')
         self.client.force_authenticate(user=self.customer)
         denied = self.client.patch(
@@ -218,9 +329,21 @@ class AdminApiTests(APITestCase):
         Profile.objects.create(
             user=content_manager,
             role=Profile.Role.ADMINISTRATOR,
-            management_permissions=[Profile.Permission.SETTINGS_MANAGE],
+            management_permissions=[Profile.Permission.USERS_MANAGE, Profile.Permission.SETTINGS_MANAGE],
         )
         self.client.force_authenticate(user=content_manager)
+        denied = self.client.patch(
+            contact_url,
+            {
+                'social_links': [
+                    {'platform': 'facebook', 'url': 'https://facebook.com/example', 'is_enabled': True, 'display_order': 2},
+                    {'platform': 'telegram', 'url': 'https://t.me/example', 'is_enabled': False, 'display_order': 1},
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.client.force_authenticate(user=self.admin_user)
         updated = self.client.patch(
             contact_url,
             {
@@ -241,7 +364,7 @@ class AdminApiTests(APITestCase):
         )
         self.assertNotIn('facebook_url', public.data)
 
-        self.client.force_authenticate(user=content_manager)
+        self.client.force_authenticate(user=self.admin_user)
         invalid = self.client.patch(
             contact_url,
             {'social_links': [{'platform': 'facebook', 'url': 'http://facebook.com/example', 'is_enabled': True, 'display_order': 0}]},
@@ -292,10 +415,7 @@ class AdminApiTests(APITestCase):
                 'username': 'listing-reviewer',
                 'email': 'reviewer@example.com',
                 'role': Profile.Role.ADMINISTRATOR,
-                'management_permissions': [
-                    Profile.Permission.PROPERTY_VIEW_ALL,
-                    Profile.Permission.PROPERTY_MODERATE,
-                ],
+                'management_permissions': [Profile.Permission.USERS_MANAGE],
             },
             format='json',
         )
@@ -307,7 +427,7 @@ class AdminApiTests(APITestCase):
         self.assertFalse(account.is_superuser)
         self.assertEqual(
             account.profile.management_permissions,
-            [Profile.Permission.PROPERTY_VIEW_ALL, Profile.Permission.PROPERTY_MODERATE],
+            [Profile.Permission.USERS_MANAGE],
         )
         token = response.data['invitation_token']
         self.assertEqual(len(token), 43)
@@ -412,7 +532,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(User.objects.filter(username='overprivileged-broker').exists())
 
-    def test_delegated_permissions_are_enforced_and_owner_can_revoke_them(self):
+    def test_delegated_administrators_cannot_manage_listings_even_if_legacy_permissions_exist(self):
         delegated = User.objects.create_user(
             username='limited-reviewer',
             password='SecurePass123!value',
@@ -432,7 +552,7 @@ class AdminApiTests(APITestCase):
             format='json',
         )
 
-        self.assertEqual(can_view.status_code, 200)
+        self.assertEqual(can_view.status_code, 403)
         self.assertEqual(cannot_moderate.status_code, 403)
         self.client.force_authenticate(user=self.admin_user)
         update_permissions = self.client.patch(
@@ -445,6 +565,12 @@ class AdminApiTests(APITestCase):
             },
             format='json',
         )
+        self.assertEqual(update_permissions.status_code, 400)
+        update_permissions = self.client.patch(
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': delegated.pk}),
+            {'management_permissions': [Profile.Permission.USERS_MANAGE]},
+            format='json',
+        )
         self.assertEqual(update_permissions.status_code, 200)
         self.assertTrue(
             AdminAuditEvent.objects.filter(action='delegated_account_updated').exists()
@@ -455,7 +581,7 @@ class AdminApiTests(APITestCase):
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
         )
-        self.assertEqual(can_moderate.status_code, 200)
+        self.assertEqual(can_moderate.status_code, 403)
 
         self.client.force_authenticate(user=self.admin_user)
         revoked = self.client.patch(
@@ -467,6 +593,101 @@ class AdminApiTests(APITestCase):
         self.client.force_authenticate(user=delegated)
         denied_after_revoke = self.client.get(reverse('api:admin-property-list'))
         self.assertEqual(denied_after_revoke.status_code, 403)
+
+    def test_delegated_administrator_can_manage_only_broker_accounts(self):
+        delegated_admin = User.objects.create_user(
+            username='broker-account-admin',
+            password='SecurePass123!value',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated_admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[
+                Profile.Permission.PROPERTY_VIEW_ALL,
+                Profile.Permission.VIEWING_VIEW_ALL,
+                Profile.Permission.SETTINGS_MANAGE,
+            ],
+        )
+        broker = User.objects.create_user(
+            username='managed-by-delegated-admin',
+            email='managed-broker@example.com',
+        )
+        Profile.objects.create(user=broker, role=Profile.Role.BROKER, broker_approved=True)
+        self.client.force_authenticate(user=delegated_admin)
+
+        current_account = self.client.get(reverse('api:me'))
+        users = self.client.get(reverse('api:admin-user-list'))
+        delegated_accounts = self.client.get(reverse('api:admin-delegated-account-list'))
+        created = self.client.post(
+            reverse('api:admin-delegated-account-list'),
+            {
+                'username': 'new-delegated-broker',
+                'email': 'new-delegated-broker@example.com',
+                'role': Profile.Role.BROKER,
+            },
+            format='json',
+        )
+        cannot_create_admin = self.client.post(
+            reverse('api:admin-delegated-account-list'),
+            {
+                'username': 'new-delegated-admin',
+                'email': 'new-delegated-admin@example.com',
+                'role': Profile.Role.ADMINISTRATOR,
+            },
+            format='json',
+        )
+        self.assertEqual(current_account.status_code, 200)
+        self.assertEqual(current_account.data['management_permissions'], [Profile.Permission.USERS_MANAGE])
+        self.assertEqual(users.status_code, 200)
+        self.assertEqual([row['id'] for row in users.data['results']], [broker.pk])
+        self.assertEqual(delegated_accounts.status_code, 200)
+        self.assertEqual([row['id'] for row in delegated_accounts.data['results']], [broker.pk])
+        self.assertEqual(created.status_code, 201)
+        created_broker = User.objects.get(username='new-delegated-broker')
+        self.assertEqual(
+            created_broker.profile.management_permissions,
+            [
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+            ],
+        )
+        self.assertEqual(cannot_create_admin.status_code, 400)
+
+        self.assertEqual(self.client.get(reverse('api:managed-property-list')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('api:managed-viewing-list')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('api:admin-property-list')).status_code, 403)
+        self.assertEqual(
+            self.client.patch(
+                reverse('api:brokerage-contact'),
+                {'phone': '+251900000000'},
+                format='json',
+            ).status_code,
+            403,
+        )
+
+    def test_delegated_administrator_portal_shows_only_broker_account_management(self):
+        delegated_admin = User.objects.create_user(
+            username='broker-portal-admin',
+            password='SecurePass123!value',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated_admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.USERS_MANAGE],
+        )
+        client = Client()
+        client.force_login(delegated_admin)
+
+        response = client.get(reverse('admin_delegated_accounts'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Invite a broker')
+        self.assertNotContains(response, '/admin-portal/properties/')
+        self.assertNotContains(response, '/admin-portal/viewing-requests/')
+        self.assertEqual(client.get(reverse('admin_property_list')).status_code, 302)
 
     def test_delegated_accounts_cannot_promote_themselves_or_change_owner_access(self):
         delegated = User.objects.create_user(
@@ -497,7 +718,7 @@ class AdminApiTests(APITestCase):
         self.assertTrue(self.admin_user.is_active)
         self.assertTrue(self.admin_user.is_superuser)
 
-    def test_deactivated_delegated_administrator_loses_api_access(self):
+    def test_deactivated_delegated_administrator_loses_broker_management_access(self):
         delegated = User.objects.create_user(
             username='deactivated-reviewer',
             password='SecurePass123!value',
@@ -506,10 +727,13 @@ class AdminApiTests(APITestCase):
         Profile.objects.create(
             user=delegated,
             role=Profile.Role.ADMINISTRATOR,
-            management_permissions=[Profile.Permission.PROPERTY_VIEW_ALL],
+            management_permissions=[Profile.Permission.USERS_MANAGE],
         )
         self.client.force_authenticate(user=delegated)
-        self.assertEqual(self.client.get(reverse('api:admin-property-list')).status_code, 200)
+        self.assertEqual(
+            self.client.get(reverse('api:admin-delegated-account-list')).status_code,
+            200,
+        )
 
         self.client.force_authenticate(user=self.admin_user)
         response = self.client.patch(
@@ -520,7 +744,10 @@ class AdminApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         delegated.refresh_from_db()
         self.client.force_authenticate(user=delegated)
-        self.assertEqual(self.client.get(reverse('api:admin-property-list')).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse('api:admin-delegated-account-list')).status_code,
+            403,
+        )
 
     def test_admin_can_reject_a_listing_with_reason_and_audit(self):
         self.client.force_authenticate(user=self.admin_user)

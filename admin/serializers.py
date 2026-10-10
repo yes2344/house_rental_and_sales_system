@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import Profile
+from accounts.serializers import EffectiveManagementPermissionsField
 from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
 from properties.access import public_properties
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
@@ -134,7 +135,7 @@ class AdminBrokerApprovalField(serializers.BooleanField):
 class AdminUserSerializer(serializers.ModelSerializer):
     role = AdminRoleField(choices=Profile.Role.choices, read_only=True)
     broker_approved = AdminBrokerApprovalField(read_only=True)
-    management_permissions = serializers.ListField(
+    management_permissions = EffectiveManagementPermissionsField(
         child=serializers.ChoiceField(choices=Profile.Permission.choices),
         source='profile.management_permissions',
         read_only=True,

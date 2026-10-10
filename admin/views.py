@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from accounts.models import DelegatedAccountInvitation, Profile
+from accounts.permissions import can_manage_broker_accounts
 from admin.staff_forms import DelegatedAccountCreateForm, DelegatedAccountUpdateForm
 from admin.audit import record_admin_action
 from user.forms import PropertyForm, ViewingRequestAdminForm
@@ -209,18 +210,23 @@ def delete_property(request, pk):
     return redirect('admin_property_list')
 
 
-@owner_required
 def delegated_accounts(request):
+    if not can_manage_broker_accounts(request.user):
+        return redirect('/')
+
     profiles = Profile.objects.filter(
         role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
         user__is_superuser=False,
-    ).select_related('user').order_by('user__username')
+    )
+    if not request.user.is_superuser:
+        profiles = profiles.filter(role=Profile.Role.BROKER)
+    profiles = profiles.select_related('user').order_by('user__username')
     invitation_token = None
     selected_profile = None
 
     if request.method == 'POST' and request.POST.get('account_id'):
         selected_profile = get_object_or_404(profiles, user_id=request.POST['account_id'])
-        form = DelegatedAccountUpdateForm(request.POST, profile=selected_profile)
+        form = DelegatedAccountUpdateForm(request.POST, profile=selected_profile, actor=request.user)
         if form.is_valid():
             user = selected_profile.user
             before = {
@@ -261,7 +267,7 @@ def delegated_accounts(request):
             messages.success(request, f'Access updated for {user.get_username()}.')
             return redirect('admin_delegated_accounts')
     elif request.method == 'POST':
-        form = DelegatedAccountCreateForm(request.POST)
+        form = DelegatedAccountCreateForm(request.POST, actor=request.user)
         if form.is_valid():
             from django.contrib.auth import get_user_model
 
@@ -294,19 +300,20 @@ def delegated_accounts(request):
                 },
             )
             messages.success(request, f'Invitation created for {user.get_username()}.')
-            form = DelegatedAccountCreateForm()
+            form = DelegatedAccountCreateForm(actor=request.user)
     elif request.GET.get('account_id'):
         selected_profile = get_object_or_404(profiles, user_id=request.GET['account_id'])
-        form = DelegatedAccountUpdateForm(profile=selected_profile)
+        form = DelegatedAccountUpdateForm(profile=selected_profile, actor=request.user)
     else:
-        form = DelegatedAccountCreateForm()
+        form = DelegatedAccountCreateForm(actor=request.user)
 
     response = render(request, 'admin/delegated_accounts.html', {
         'profiles': profiles,
-        'create_form': form if selected_profile is None else DelegatedAccountCreateForm(),
+        'create_form': form if selected_profile is None else DelegatedAccountCreateForm(actor=request.user),
         'edit_form': form if selected_profile is not None else None,
         'selected_profile': selected_profile,
         'invitation_token': invitation_token,
+        'is_platform_owner': request.user.is_superuser,
     })
     response['Cache-Control'] = 'no-store'
     response['Referrer-Policy'] = 'no-referrer'

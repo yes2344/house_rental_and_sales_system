@@ -16,7 +16,7 @@ from properties.models import Property
 
 
 REMINDER_DAYS = (30, 7, 1)
-BROKER_REVIEW_PERMISSION = Profile.Permission.PROPERTY_MODERATE
+BROKER_REVIEW_PERMISSION = Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW
 
 
 class Command(BaseCommand):

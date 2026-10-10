@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
 
 import type { PropertyDetail } from '../api/properties';
 import type { MessageKey } from '../i18n';
@@ -29,11 +29,17 @@ export function PropertyGallery({ property, text }: PropertyGalleryProps) {
   }, [property]);
   const [selected, setSelected] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const closeButton = useRef<HTMLButtonElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
   const activeImage = images[selected];
 
-  useEffect(() => setSelected(0), [property.id]);
+  useEffect(() => {
+    setSelected(0);
+    setZoom(1);
+  }, [property.id]);
+
+  useEffect(() => setZoom(1), [selected]);
 
   useEffect(() => {
     if (!lightboxOpen) return undefined;
@@ -90,6 +96,7 @@ export function PropertyGallery({ property, text }: PropertyGalleryProps) {
             disabled={!activeImage}
           >
             <PropertyPhoto
+              key={activeImage?.id ?? property.id}
               src={activeImage?.url}
               alt={activeImage
                 ? `${activeImage.caption || text('propertyImage')}: ${property.title}`
@@ -166,7 +173,35 @@ export function PropertyGallery({ property, text }: PropertyGalleryProps) {
               className="lightbox-image"
               fallbackClassName="lightbox-image lightbox-placeholder"
               fallbackLabel={text('noPhoto')}
+              style={{ transform: `scale(${zoom})` }}
             />
+            <div className="lightbox-zoom-controls" aria-label={text('photoZoomControls')}>
+              <button
+                type="button"
+                aria-label={text('zoomOutPhoto')}
+                onClick={() => setZoom((current) => Math.max(1, Number((current - 0.25).toFixed(2))))}
+                disabled={zoom <= 1}
+              >
+                <ZoomOut size={17} aria-hidden="true" />
+              </button>
+              <span aria-live="polite">{Math.round(zoom * 100)}%</span>
+              <button
+                type="button"
+                aria-label={text('zoomInPhoto')}
+                onClick={() => setZoom((current) => Math.min(2.5, Number((current + 0.25).toFixed(2))))}
+                disabled={zoom >= 2.5}
+              >
+                <ZoomIn size={17} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label={text('resetPhotoZoom')}
+                onClick={() => setZoom(1)}
+                disabled={zoom === 1}
+              >
+                <RotateCcw size={16} aria-hidden="true" />
+              </button>
+            </div>
             {images.length > 1 && (
               <>
                 <button className="lightbox-arrow lightbox-previous" type="button" aria-label={text('previousPage')} onClick={previous}>

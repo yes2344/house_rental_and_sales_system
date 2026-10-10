@@ -342,15 +342,14 @@ class ManagedPropertyApiTests(APITestCase):
         Profile.objects.create(user=self.other_owner, role=Profile.Role.OWNER)
         self.customer = user_model.objects.create_user(username='listing-customer')
         Profile.objects.create(user=self.customer, role=Profile.Role.CUSTOMER)
-        self.manager = user_model.objects.create_user(username='listing-manager', is_staff=True)
+        self.manager = user_model.objects.create_user(username='listing-broker')
         Profile.objects.create(
             user=self.manager,
-            role=Profile.Role.ADMINISTRATOR,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
             management_permissions=[
-                Profile.Permission.PROPERTY_VIEW_ALL,
-                Profile.Permission.PROPERTY_MODERATE,
-                Profile.Permission.PROPERTY_EDIT_ALL,
-                Profile.Permission.PROPERTY_DELETE_ALL,
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
             ],
         )
         self.property = Property.objects.create(
@@ -362,6 +361,7 @@ class ManagedPropertyApiTests(APITestCase):
             owner=self.owner,
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
+        PropertyBrokerAssignment.objects.create(property=self.property, broker=self.manager)
 
     def property_payload(self, **overrides):
         payload = {
@@ -505,7 +505,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertIsNone(self.property.latitude)
         self.assertIsNone(self.property.longitude)
 
-    def test_only_listing_moderators_can_publish_available_properties(self):
+    def test_only_platform_owner_can_publish_available_properties(self):
         self.property.publication_status = Property.PublicationStatus.DRAFT
         self.property.save(update_fields=['publication_status'])
         publication_url = reverse('api:managed-property-publication', kwargs={'pk': self.property.pk})
@@ -516,7 +516,8 @@ class ManagedPropertyApiTests(APITestCase):
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
         )
-        self.client.force_authenticate(user=self.manager)
+        platform_owner = get_user_model().objects.create_superuser(username='listing-platform-owner')
+        self.client.force_authenticate(user=platform_owner)
         published = self.client.post(
             publication_url,
             {'publication_status': Property.PublicationStatus.PUBLISHED},
@@ -599,6 +600,7 @@ class ManagedPropertyApiTests(APITestCase):
             description='Legacy rental period remains readable.',
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
+        PropertyBrokerAssignment.objects.create(property=legacy_rental, broker=self.manager)
         self.client.force_authenticate(user=self.manager)
 
         response = self.client.patch(
@@ -611,7 +613,7 @@ class ManagedPropertyApiTests(APITestCase):
         legacy_rental.refresh_from_db()
         self.assertEqual(legacy_rental.rental_frequency, Property.RentalFrequency.WEEKLY)
 
-    def test_authorized_staff_can_create_property_without_coordinates(self):
+    def test_authorized_broker_can_create_property_without_coordinates(self):
         self.client.force_authenticate(user=self.manager)
 
         response = self.client.post(

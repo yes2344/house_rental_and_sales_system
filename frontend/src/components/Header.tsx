@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Mail, Menu, Phone, X } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
+import { useBrokerageContact } from '../BrokerageContactContext';
 import { getErrorMessage } from '../api/client';
 import type { Locale, MessageKey } from '../i18n';
+import { publicContact } from '../publicContact';
+import { SocialMark } from './SocialMark';
 
 interface HeaderProps {
   locale: Locale;
@@ -18,6 +21,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const [logoutError, setLogoutError] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
   const { account, authLoading, signOut } = useAuth();
+  const { contact } = useBrokerageContact();
   const canManageListings = Boolean(account?.is_platform_owner || account?.management_permissions.some(
     (permission) => [
       'properties.view_all',
@@ -80,6 +84,31 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             <NavLink to="/properties" onClick={closeMenu}>{text('explore')}</NavLink>
             <NavLink to="/settings" onClick={closeMenu}>{text('settingsTitle')}</NavLink>
             <a href="/#how-it-works" onClick={closeMenu}>{text('howItWorks')}</a>
+            {account?.role === 'administrator'
+              && account.management_permissions.includes('users.manage') && (
+              <a href="/admin-portal/delegated-accounts/">{text('managerBrokerAccounts')}</a>
+            )}
+            <section className="mobile-menu-contact" aria-label={text('brokerContactTitle')}>
+              <h2>{text('brokerContactTitle')}</h2>
+              <a href={`tel:${publicContact.phone}`} onClick={closeMenu}>
+                <Phone size={16} aria-hidden="true" />
+                <span><small>{text('contactByPhone')}</small><strong>{publicContact.phone}</strong></span>
+              </a>
+              <a href={publicContact.whatsappUrl} target="_blank" rel="noreferrer">
+                <SocialMark platform="whatsapp" />
+                <span><small>{text('contactWhatsapp')}</small><strong>{publicContact.phone}</strong></span>
+              </a>
+              <a href={publicContact.telegramUrl} target="_blank" rel="noreferrer">
+                <SocialMark platform="telegram" />
+                <span><small>{text('contactTelegram')}</small><strong>@Lion1621</strong></span>
+              </a>
+              {contact.email && (
+                <a href={`mailto:${contact.email}`} onClick={closeMenu}>
+                  <Mail size={16} aria-hidden="true" />
+                  <span><small>{text('contactByEmail')}</small><strong>{contact.email}</strong></span>
+                </a>
+              )}
+            </section>
           </nav>
 
           <div className={`header-actions${menuOpen ? ' is-open' : ''}`}>

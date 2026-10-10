@@ -32,7 +32,7 @@ from properties.serializers import PropertyImageManagementSerializer
 
 
 User = get_user_model()
-BROKER_REVIEW_PERMISSION = Profile.Permission.PROPERTY_MODERATE
+BROKER_REVIEW_PERMISSION = Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW
 
 
 def notify_user(user, announcement, notification_type, message, idempotency_key):

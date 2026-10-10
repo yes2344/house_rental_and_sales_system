@@ -10,7 +10,11 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.models import DelegatedAccountInvitation, Profile
-from accounts.permissions import HasManagementPermission, IsPlatformOwner, has_management_permission
+from accounts.permissions import (
+    HasManagementPermission,
+    IsBrokerAccountManager,
+    has_management_permission,
+)
 from accounts.serializers import (
     AccountSerializer,
     DelegatedAccountCreateSerializer,
@@ -154,7 +158,11 @@ class AdminUserListView(generics.ListAPIView):
             return User.objects.none()
         queryset = User.objects.select_related('profile').order_by(*self.ordering)
         if not self.request.user.is_superuser:
-            queryset = queryset.filter(is_staff=False, is_superuser=False)
+            queryset = queryset.filter(
+                is_staff=False,
+                is_superuser=False,
+                profile__role=Profile.Role.BROKER,
+            )
         return queryset
 
 
@@ -170,7 +178,11 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
             return User.objects.none()
         queryset = User.objects.select_related('profile')
         if not self.request.user.is_superuser:
-            queryset = queryset.filter(is_staff=False, is_superuser=False)
+            queryset = queryset.filter(
+                is_staff=False,
+                is_superuser=False,
+                profile__role=Profile.Role.BROKER,
+            )
         return queryset
 
     @transaction.atomic
@@ -217,14 +229,17 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
 
 
 class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsPlatformOwner]
+    permission_classes = [IsBrokerAccountManager]
     serializer_class = DelegatedAccountSerializer
 
     def get_queryset(self):
-        return User.objects.filter(
+        queryset = User.objects.filter(
             is_superuser=False,
             profile__role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
-        ).select_related('profile').order_by('username')
+        )
+        if not self.request.user.is_superuser:
+            queryset = queryset.filter(profile__role=Profile.Role.BROKER)
+        return queryset.select_related('profile').order_by('username')
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -264,15 +279,18 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
 
 
 class AdminDelegatedAccountDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsPlatformOwner]
+    permission_classes = [IsBrokerAccountManager]
     serializer_class = DelegatedAccountSerializer
     http_method_names = ['get', 'patch', 'head', 'options']
 
     def get_queryset(self):
-        return User.objects.filter(
+        queryset = User.objects.filter(
             is_superuser=False,
             profile__role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
-        ).select_related('profile')
+        )
+        if not self.request.user.is_superuser:
+            queryset = queryset.filter(profile__role=Profile.Role.BROKER)
+        return queryset.select_related('profile')
 
     @transaction.atomic
     def perform_update(self, serializer):

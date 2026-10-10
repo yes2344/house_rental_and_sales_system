@@ -36,7 +36,7 @@ class OwnerAnnouncementWorkflowTests(APITestCase):
             user=self.broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
-            management_permissions=[Profile.Permission.PROPERTY_MODERATE],
+            management_permissions=[Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW],
         )
 
     def submission_payload(self):
@@ -97,7 +97,7 @@ class OwnerAnnouncementWorkflowTests(APITestCase):
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
         announcement.property.refresh_from_db()
         self.assertEqual(
             announcement.property.publication_status,
