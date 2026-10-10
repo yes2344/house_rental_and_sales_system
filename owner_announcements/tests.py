@@ -79,6 +79,78 @@ class OwnerAnnouncementWorkflowTests(APITestCase):
             for item in public_response.data['results']
         ))
 
+    def test_owner_submission_notifies_all_active_announcement_review_brokers(self):
+        second_broker = User.objects.create_user(
+            username='second-announcement-reviewer',
+            password='secure-password-123',
+        )
+        Profile.objects.create(
+            user=second_broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW],
+        )
+        inactive_broker = User.objects.create_user(
+            username='inactive-announcement-reviewer',
+            password='secure-password-123',
+            is_active=False,
+        )
+        Profile.objects.create(
+            user=inactive_broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW],
+        )
+        broker_without_review_access = User.objects.create_user(
+            username='broker-without-review-access',
+            password='secure-password-123',
+        )
+        Profile.objects.create(
+            user=broker_without_review_access,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
+        )
+
+        announcement = self.submit_announcement()
+
+        notified_users = set(InAppNotification.objects.filter(
+            announcement=announcement,
+            notification_type='announcement_submitted',
+        ).values_list('recipient_id', flat=True))
+        self.assertEqual(
+            notified_users,
+            {self.owner.pk, self.broker.pk, second_broker.pk},
+        )
+        self.client.force_authenticate(self.broker)
+        broker_notifications = self.client.get(reverse('api:notification-list'))
+        self.assertEqual(broker_notifications.status_code, 200)
+        self.assertIn(announcement.pk, [
+            notification['announcement_id']
+            for notification in broker_notifications.data['results']
+        ])
+
+    def test_owner_resubmission_notifies_review_brokers_again(self):
+        announcement = self.submit_announcement()
+        self.client.force_authenticate(self.owner)
+
+        response = self.client.patch(
+            reverse('api:owner-announcement-detail', args=[announcement.pk]),
+            {
+                'description': 'Updated property details for another review.',
+                'authorization_confirmed': True,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        notification = InAppNotification.objects.get(
+            announcement=announcement,
+            recipient=self.broker,
+            notification_type='announcement_resubmitted',
+        )
+        self.assertIn('resubmitted property for review', notification.message)
+
     def test_only_a_broker_with_review_permission_can_approve(self):
         announcement = self.submit_announcement()
         self.client.force_authenticate(self.owner)

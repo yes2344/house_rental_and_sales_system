@@ -361,6 +361,8 @@ export function OwnerAnnouncementsPage() {
                   coordinates={selectedCoordinates}
                   interactive
                   markerLabel={values.location || values.title || 'Property location'}
+                  satelliteLabel="Satellite"
+                  streetMapLabel="Street map"
                   onCoordinatesChange={(coordinates) => {
                     setField('latitude', coordinates.latitude.toFixed(6));
                     setField('longitude', coordinates.longitude.toFixed(6));

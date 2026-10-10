@@ -935,6 +935,44 @@ class AdminApiTests(APITestCase):
 
 
 class AdminPortalMethodTests(TestCase):
+    def test_owner_portal_removes_viewing_management(self):
+        owner = User.objects.create_superuser(
+            username='viewings-removed-owner',
+            password='SecurePass123!value',
+        )
+        client = Client()
+        client.force_login(owner)
+
+        dashboard = client.get(reverse('admin_dashboard'))
+
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertNotContains(dashboard, 'viewing-requests')
+        self.assertNotContains(dashboard, 'viewing requests')
+        self.assertEqual(client.get('/admin-portal/viewing-requests/').status_code, 404)
+
+    def test_brokers_cannot_access_broker_account_management(self):
+        broker = User.objects.create_user(
+            username='broker-without-account-management',
+            password='SecurePass123!value',
+        )
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+                Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+            ],
+        )
+        client = Client()
+        client.force_login(broker)
+
+        response = client.get(reverse('admin_delegated_accounts'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/')
+        self.assertNotIn(Profile.Permission.USERS_MANAGE, broker.profile.management_permissions)
+
     def test_portal_logout_requires_post_and_ends_session(self):
         owner = User.objects.create_superuser(
             username='portal-logout-owner',

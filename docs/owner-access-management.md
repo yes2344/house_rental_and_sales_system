@@ -9,7 +9,7 @@ The platform owner is the Django superuser and the only principal with platform-
 .\.venv\Scripts\python.exe manage.py changepassword YOUR_OWNER_USERNAME
 ```
 
-Enter credentials only into the interactive terminal prompts. Do not put passwords in source files, environment templates, shell command arguments, or chat. Only the owner can sign in to Django Admin at `/admin/` or use the legacy owner portal's property and viewing-request pages. Authorized administrators have access only to its delegated broker-account page.
+Enter credentials only into the interactive terminal prompts. Do not put passwords in source files, environment templates, shell command arguments, or chat. Only the owner can sign in to Django Admin at `/admin/` or use the legacy owner portal's property pages. Viewing requests are managed in the broker workspace; the Django admin and legacy owner portal no longer expose viewing-request management. Delegated administrators have access only to broker-account management.
 
 ## Manage administrators and brokers
 

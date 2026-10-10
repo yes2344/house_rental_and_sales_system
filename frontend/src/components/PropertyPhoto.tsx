@@ -22,7 +22,12 @@ export function PropertyPhoto({
 
   if (!src || failedSource === src) {
     return (
-      <div className={fallbackClassName} role="img" aria-label={alt || fallbackLabel}>
+      <div
+        className={fallbackClassName}
+        role="img"
+        aria-label={alt || fallbackLabel}
+        style={style}
+      >
         <House size={37} strokeWidth={1.3} aria-hidden="true" />
         <span>{fallbackLabel}</span>
       </div>

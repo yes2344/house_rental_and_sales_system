@@ -146,7 +146,12 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
             {coordinates ? (
               <>
                 <Suspense fallback={<div className="property-map map-loading" role="status">{text('loadingMap')}</div>}>
-                  <LocationMap coordinates={coordinates} markerLabel={property.location} />
+                  <LocationMap
+                    coordinates={coordinates}
+                    markerLabel={property.location}
+                    satelliteLabel={text('mapSatellite')}
+                    streetMapLabel={text('mapStreet')}
+                  />
                 </Suspense>
                 <a
                   className="button button-outline location-directions-link"

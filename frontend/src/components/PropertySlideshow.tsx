@@ -38,8 +38,35 @@ export function PropertySlideshow({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [motionReduced, setMotionReduced] = useState(false);
+  const [sliding, setSliding] = useState(false);
+  const [slideDirection, setSlideDirection] = useState<1 | -1>(1);
+  const [nextImageReady, setNextImageReady] = useState(false);
 
   useEffect(() => setCurrentIndex(0), [orderedImages]);
+
+  const nextIndex = orderedImages.length
+    ? (currentIndex + 1) % orderedImages.length
+    : 0;
+  const previousIndex = orderedImages.length
+    ? (currentIndex - 1 + orderedImages.length) % orderedImages.length
+    : 0;
+  const active = orderedImages[currentIndex];
+  const next = orderedImages[slideDirection === 1 ? nextIndex : previousIndex];
+
+  useEffect(() => {
+    setNextImageReady(false);
+    if (!next?.url) return undefined;
+
+    const preload = new Image();
+    preload.onload = () => setNextImageReady(true);
+    preload.onerror = () => setNextImageReady(true);
+    preload.src = next.url;
+    if (preload.complete) setNextImageReady(true);
+    return () => {
+      preload.onload = null;
+      preload.onerror = null;
+    };
+  }, [next?.url]);
 
   useEffect(() => {
     const mediaPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -62,42 +89,67 @@ export function PropertySlideshow({
   }, []);
 
   useEffect(() => {
-    if (paused || orderedImages.length < 2 || motionReduced) {
+    if (paused || orderedImages.length < 2 || motionReduced || sliding || !nextImageReady) {
       return undefined;
     }
-    const timer = window.setInterval(() => {
-      setCurrentIndex((current) => (current + 1) % orderedImages.length);
+    const timer = window.setTimeout(() => {
+      setSlideDirection(1);
+      setSliding(true);
     }, 3000);
-    return () => window.clearInterval(timer);
-  }, [motionReduced, orderedImages.length, paused]);
+    return () => window.clearTimeout(timer);
+  }, [motionReduced, nextImageReady, orderedImages.length, paused, sliding]);
 
   const move = (offset: number) => {
-    setCurrentIndex((current) => (
-      (current + offset + orderedImages.length) % orderedImages.length
-    ));
+    if (sliding || orderedImages.length < 2) return;
+    setSlideDirection(offset > 0 ? 1 : -1);
+    setSliding(true);
   };
-  const active = orderedImages[currentIndex];
+  const finishSlide = () => {
+    setCurrentIndex((current) => (
+      (current + slideDirection + orderedImages.length) % orderedImages.length
+    ));
+    setSliding(false);
+  };
 
   return (
     <div
-      className="property-slideshow"
+      className={`property-slideshow${sliding ? ` is-sliding ${slideDirection === 1 ? 'slides-left' : 'slides-right'}` : ''}`}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false);
       }}
+      onTransitionEnd={(event) => {
+        if (
+          event.target instanceof HTMLElement
+          && event.target.classList.contains('slideshow-next')
+          && event.propertyName === 'transform'
+        ) finishSlide();
+      }}
     >
-      {active ? (
+      {active && (
         <PropertyPhoto
           key={active.id}
           src={active.url}
           alt={`${title} — ${active.caption || photoLabel}`}
-          className="listing-image"
-          fallbackClassName="listing-image listing-image-placeholder"
+          className="listing-image slideshow-current"
+          fallbackClassName="listing-image listing-image-placeholder slideshow-current"
           fallbackLabel={fallbackLabel}
         />
-      ) : (
+      )}
+      {next && orderedImages.length > 1 && (
+        <PropertyPhoto
+          key={next.id}
+          src={next.url}
+          alt={`${title} — ${next.caption || photoLabel}`}
+          className="listing-image slideshow-next"
+          fallbackClassName="listing-image listing-image-placeholder slideshow-next"
+          fallbackLabel={fallbackLabel}
+          style={{ visibility: nextImageReady ? 'visible' : 'hidden' }}
+        />
+      )}
+      {!active && (
         <PropertyPhoto
           src={fallbackImage}
           alt=""
@@ -117,6 +169,7 @@ export function PropertySlideshow({
               event.stopPropagation();
               move(-1);
             }}
+            disabled={sliding}
           >
             <ArrowLeft size={15} aria-hidden="true" />
           </button>
@@ -129,6 +182,7 @@ export function PropertySlideshow({
               event.stopPropagation();
               move(1);
             }}
+            disabled={sliding}
           >
             <ArrowRight size={15} aria-hidden="true" />
           </button>
@@ -143,6 +197,8 @@ export function PropertySlideshow({
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
+                  if (sliding) return;
+                  setSliding(false);
                   setCurrentIndex(index);
                 }}
               />

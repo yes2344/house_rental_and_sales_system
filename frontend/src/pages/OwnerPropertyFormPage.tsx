@@ -587,6 +587,8 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               interactive
               onCoordinatesChange={updateCoordinates}
               markerLabel={text('selectedPropertyLocation')}
+              satelliteLabel={text('mapSatellite')}
+              streetMapLabel={text('mapStreet')}
             />
           </Suspense>
           <p className="manager-hint location-map-hint">{text('mapSelectionHint')}</p>

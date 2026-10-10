@@ -3,7 +3,6 @@ from django.contrib import admin
 from accounts.models import Profile
 from admin.models import AdminAuditEvent
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
-from viewings.models import ViewingRequest
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -35,13 +34,6 @@ class ListingReportAdmin(ReadOnlyAdmin):
     list_display = ('id', 'property_title', 'reason', 'status', 'created_at', 'reviewed_by')
     list_filter = ('status', 'reason')
     search_fields = ('property_title', 'reporter_name', 'reporter_email')
-
-
-@admin.register(ViewingRequest)
-class ViewingRequestAdmin(ReadOnlyAdmin):
-    list_display = ('id', 'property', 'full_name', 'preferred_date', 'status', 'created_at')
-    list_filter = ('status',)
-    search_fields = ('property__title', 'full_name', 'email')
 
 
 @admin.register(Profile)

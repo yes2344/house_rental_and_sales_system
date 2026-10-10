@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import {
+  LayersControl,
   MapContainer,
   Marker,
   Popup,
@@ -29,6 +30,8 @@ interface LocationMapProps {
   interactive?: boolean;
   onCoordinatesChange?: (coordinates: PropertyCoordinates) => void;
   markerLabel: string;
+  satelliteLabel: string;
+  streetMapLabel: string;
   zoom?: number;
 }
 
@@ -57,7 +60,7 @@ function MapFocus({ coordinates }: { coordinates: PropertyCoordinates | null }) 
 
   useEffect(() => {
     if (coordinates) {
-      map.setView([coordinates.latitude, coordinates.longitude], Math.max(map.getZoom(), 15));
+      map.setView([coordinates.latitude, coordinates.longitude], Math.max(map.getZoom(), 16));
     }
   }, [coordinates, map]);
 
@@ -69,7 +72,9 @@ export function LocationMap({
   interactive = false,
   onCoordinatesChange,
   markerLabel,
-  zoom = 15,
+  satelliteLabel,
+  streetMapLabel,
+  zoom = 16,
 }: LocationMapProps) {
   const markerRef = useRef<L.Marker>(null);
   const center: L.LatLngExpression = coordinates
@@ -80,14 +85,27 @@ export function LocationMap({
     <MapContainer
       className="property-map"
       center={center}
-      zoom={coordinates ? zoom : 12}
+      zoom={coordinates ? zoom : 13}
       scrollWheelZoom
       keyboard
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      <LayersControl position="topright">
+        <LayersControl.BaseLayer checked name={satelliteLabel}>
+          <TileLayer
+            attribution='Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxNativeZoom={19}
+            maxZoom={20}
+          />
+        </LayersControl.BaseLayer>
+        <LayersControl.BaseLayer name={streetMapLabel}>
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={19}
+          />
+        </LayersControl.BaseLayer>
+      </LayersControl>
       {interactive && onCoordinatesChange && (
         <MapClickHandler onCoordinatesChange={onCoordinatesChange} />
       )}

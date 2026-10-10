@@ -4,11 +4,11 @@ The owner-announcement service is separate from broker-managed listings:
 
 1. An authenticated customer submits a property, their contact details, authorization confirmation, and optionally up to 10 photos.
 2. The submission creates a property with `service_type=owner_announced` and `publication_status=pending_review`. It does not appear in public search.
-3. A manager with `properties.moderate` reviews it, records an agreement period, and explicitly chooses whether owner contact details and exact coordinates may be public.
+3. Active brokers with `announcements.review` receive in-app notifications when an owner submits or resubmits a property. An authorized broker reviews it, records an agreement period, and explicitly chooses whether owner contact details and exact coordinates may be public.
 4. The public property API and server-rendered listing pages show an owner-announced property only while its status is approved and an active agreement includes the current date. Contact details are separately gated by the agreement's public-contact choice.
 5. Owners can request renewal, withdraw an announcement, review its status, and read in-app notifications. Brokers can review submissions and suspend an approved announcement.
 
-Private owner contact details are kept on `OwnerAnnouncement`; they are not copied to public property fields. Owners must still provide accurate details, and their authorization checkbox is a self-attestation, not document or identity verification. The current project has no email/phone verification, email delivery, or SMS provider. Notifications are in-app only.
+Private owner contact details are kept on `OwnerAnnouncement`; they are not copied to public property fields. Owners must still provide accurate details, and their authorization checkbox is a self-attestation, not document or identity verification. The current project has no email/phone verification, email delivery, or SMS provider. Notifications are in-app only, and owners' listings remain pending until broker approval.
 
 ## Locations
 

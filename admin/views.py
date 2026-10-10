@@ -1,7 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import user_passes_test
-from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -10,9 +9,8 @@ from accounts.models import DelegatedAccountInvitation, Profile
 from accounts.permissions import can_manage_broker_accounts
 from admin.staff_forms import DelegatedAccountCreateForm, DelegatedAccountUpdateForm
 from admin.audit import record_admin_action
-from user.forms import PropertyForm, ViewingRequestAdminForm
-from user.models import Property, PropertyImage, ViewingRequest
-from viewings.models import ViewingRequestEvent
+from user.forms import PropertyForm
+from user.models import Property, PropertyImage
 
 
 def owner_required(view_func):
@@ -32,15 +30,9 @@ def portal_logout(request):
 def dashboard(request):
     active_count = Property.objects.filter(status__in=['active', 'available']).count()
     inactive_count = Property.objects.filter(status='inactive').count()
-    pending_requests = ViewingRequest.objects.filter(
-        status__in=[ViewingRequest.Status.PENDING, ViewingRequest.Status.PROPOSED]
-    ).count()
-    recent_requests = ViewingRequest.objects.select_related('property').order_by('-created_at')[:5]
     return render(request, 'admin/dashboard.html', {
         'active_count': active_count,
         'inactive_count': inactive_count,
-        'pending_requests': pending_requests,
-        'recent_requests': recent_requests,
     })
 
 
@@ -87,88 +79,6 @@ def property_form(request, pk=None):
         form = PropertyForm(instance=property_obj)
 
     return render(request, 'admin/property_form.html', {'form': form, 'property': property_obj})
-
-
-@owner_required
-def viewing_requests(request):
-    requests = ViewingRequest.objects.select_related('property').order_by('-created_at')
-    return render(request, 'admin/viewing_requests.html', {'requests': requests})
-
-
-@owner_required
-@transaction.atomic
-def update_viewing_request(request, pk):
-    viewing = get_object_or_404(
-        ViewingRequest.objects.select_for_update().select_related('property'),
-        id=pk,
-    )
-
-    if request.method == 'POST':
-        form = ViewingRequestAdminForm(request.POST, instance=viewing)
-        if form.is_valid():
-            previous_status = viewing.status
-            proposal_changed = (
-                'proposed_date' in form.changed_data
-                or 'proposed_time' in form.changed_data
-            )
-            viewing_obj = form.save(commit=False)
-            if proposal_changed:
-                viewing_obj.status = ViewingRequest.Status.PROPOSED
-            elif form.cleaned_data['reject_request']:
-                viewing_obj.status = ViewingRequest.Status.REJECTED
-            viewing_obj.save()
-            changes = {}
-            if previous_status != viewing_obj.status:
-                changes['status'] = {'from': previous_status, 'to': viewing_obj.status}
-            if 'proposed_date' in form.changed_data:
-                changes['proposed_date'] = 'updated'
-            if 'proposed_time' in form.changed_data:
-                changes['proposed_time'] = 'updated'
-            if 'agent_notes' in form.changed_data:
-                changes['agent_notes'] = 'updated'
-            if changes:
-                record_admin_action(
-                    request.user,
-                    action='viewing_request_updated',
-                    object_type='viewing_request',
-                    object_id=viewing_obj.pk,
-                    changes=changes,
-                )
-            if proposal_changed:
-                event_type = (
-                    ViewingRequestEvent.Type.PROPOSAL_REVISED
-                    if previous_status == ViewingRequest.Status.PROPOSED
-                    else ViewingRequestEvent.Type.PROPOSAL_SENT
-                )
-                ViewingRequestEvent.objects.create(
-                    viewing_request=viewing_obj,
-                    actor=request.user,
-                    event_type=event_type,
-                    from_status=previous_status,
-                    to_status=viewing_obj.status,
-                    proposed_date=viewing_obj.proposed_date,
-                    proposed_time=viewing_obj.proposed_time,
-                )
-            elif form.cleaned_data['reject_request'] and previous_status != viewing_obj.status:
-                ViewingRequestEvent.objects.create(
-                    viewing_request=viewing_obj,
-                    actor=request.user,
-                    event_type=ViewingRequestEvent.Type.REJECTED,
-                    from_status=previous_status,
-                    to_status=viewing_obj.status,
-                )
-            messages.success(request, f'Viewing request for {viewing.property.title} was updated.')
-            return redirect('admin_viewing_requests')
-    else:
-        form = ViewingRequestAdminForm(instance=viewing)
-
-    events = viewing.events.select_related('actor')
-    return render(request, 'admin/viewing_request_update.html', {
-        'form': form,
-        'viewing': viewing,
-        'events': events,
-        'appointment_timezone': settings.TIME_ZONE,
-    })
 
 
 @owner_required

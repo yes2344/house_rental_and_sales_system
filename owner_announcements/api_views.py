@@ -48,10 +48,7 @@ def notify_user(user, announcement, notification_type, message, idempotency_key)
 
 
 def broker_recipients():
-    recipients = {
-        user.pk: user
-        for user in User.objects.filter(is_active=True, is_superuser=True)
-    }
+    recipients = {}
     for profile in Profile.objects.select_related('user').filter(user__is_active=True):
         if has_management_permission(profile.user, BROKER_REVIEW_PERMISSION):
             recipients[profile.user_id] = profile.user
@@ -155,6 +152,12 @@ class OwnerAnnouncementDetailView(generics.RetrieveUpdateAPIView):
         )
         serializer.is_valid(raise_exception=True)
         updated = serializer.save()
+        notify_brokers(
+            updated,
+            'announcement_resubmitted',
+            f'Owner updated and resubmitted property for review: {updated.property.title}.',
+            f'resubmitted:{updated.updated_at.isoformat()}',
+        )
         return Response(
             OwnerAnnouncementSerializer(updated, context={'request': request}).data,
         )

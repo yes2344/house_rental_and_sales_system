@@ -184,7 +184,7 @@ form .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .admin-location-picker h2 { margin: 0 0 8px; color: #173e32; }
 .admin-location-picker p { color: #516562; line-height: 1.55; }
 .location-picker-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-.admin-property-map { height: 340px; border-radius: 12px; border: 1px solid #d8e4df; z-index: 0; }
+.admin-property-map { height: 400px; border-radius: 12px; border: 1px solid #d8e4df; z-index: 0; }
 .admin-coordinate-fields { margin-top: 14px; }
 .admin-image-preview { display: grid; justify-items: center; gap: 10px; padding: 14px; border: 1px solid #dfeee9; border-radius: 14px; background: white; }
 .admin-image-preview-photo { width: min(100%, 760px); height: 320px; object-fit: contain; transition: transform .3s ease; }
@@ -265,6 +265,6 @@ footer { background: #0d1d1a; color: rgba(255,255,255,0.8); padding: 34px 0; mar
   .nav-links { display: none; }
   .navbar { flex-wrap: wrap; }
   .property-gallery { height: 260px; }
-  .admin-property-map { height: 280px; }
+  .admin-property-map { height: 320px; }
   .admin-image-preview-photo { height: 240px; }
 }
