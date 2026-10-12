@@ -809,6 +809,20 @@ img { display: block; max-width: 100%; }
 .manager-field { font-size: 10px; }
 .manager-field > span { color: var(--ink-soft); }
 .manager-field input[type='file'] { padding: 7px; }
+.social-link-editor-list { display: grid; gap: 10px; }
+.social-link-editor {
+  display: grid; grid-template-columns: 42px minmax(0, 1fr) 105px 168px;
+  align-items: end; gap: 12px; padding: 12px;
+  border: 1px solid var(--line); background: var(--paper);
+}
+.social-link-preview {
+  width: 40px; height: 40px; display: grid; place-items: center; align-self: end;
+  margin-bottom: 1px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--cream); color: var(--green-800);
+}
+.social-link-preview svg { display: block; width: 22px; height: 22px; flex: 0 0 auto; }
+.social-link-url, .social-link-order { min-width: 0; }
+.social-link-editor .social-link-enabled { align-self: end; min-height: 40px; white-space: nowrap; }
 .manager-form-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 17px 20px; border-top: 1px solid var(--line); }
 .manager-form-actions .button { min-height: 40px; }
 .button-danger { border-color: #efd1ca; background: #fff8f6; color: #8e3d31; }
@@ -857,6 +871,8 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 980px) {
   .manager-shell { width: min(var(--container), calc(100% - 48px)); grid-template-columns: 160px minmax(0, 1fr); gap: 17px; }
+  .social-link-editor { grid-template-columns: 42px minmax(0, 1fr) 92px; }
+  .social-link-editor .social-link-enabled { grid-column: 2 / -1; justify-self: start; }
   .manager-filter-bar { flex-wrap: wrap; }
   .manager-search { flex-basis: 100%; }
   .image-upload-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -876,6 +892,12 @@ img { display: block; max-width: 100%; }
   .manager-pagination { align-items: flex-start; flex-direction: column; }
   .manager-pagination > div { width: 100%; justify-content: space-between; }
   .manager-form-section, .request-review-card { padding: 15px; }
+  .social-link-editor { grid-template-columns: 38px minmax(0, 1fr); gap: 10px; padding: 10px; }
+  .social-link-preview { width: 36px; height: 36px; grid-row: 1 / span 3; align-self: start; }
+  .social-link-preview svg { width: 21px; height: 21px; }
+  .social-link-url, .social-link-order, .social-link-editor .social-link-enabled { grid-column: 2; }
+  .social-link-order { width: min(112px, 100%); }
+  .social-link-editor .social-link-enabled { justify-self: start; }
   .manager-form-grid { grid-template-columns: 1fr; gap: 12px; }
   .manager-field-wide { grid-column: auto; }
   .amenity-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
