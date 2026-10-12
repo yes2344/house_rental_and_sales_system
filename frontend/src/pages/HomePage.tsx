@@ -220,7 +220,7 @@ export function HomePage({ locale, text }: HomePageProps) {
         <section className="section homepage-notes-section" aria-labelledby="homepage-notes-title">
           <div className="container">
             <div className="section-heading">
-              <div><p className="eyebrow eyebrow-muted">{text('brokerContactTitle')}</p><h2 id="homepage-notes-title">{text('homepageNotesTitle')}</h2></div>
+              <div><h2 id="homepage-notes-title">{text('homepageNotesTitle')}</h2></div>
             </div>
             <div className="homepage-notes-grid">
               {notes.map((note) => (

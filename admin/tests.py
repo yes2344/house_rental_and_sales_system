@@ -316,6 +316,55 @@ class AdminApiTests(APITestCase):
             object_id=str(created.data['id']),
         ).exists())
 
+    def test_approved_broker_can_manage_brokerage_contact_and_published_homepage_announcements(self):
+        broker = User.objects.create_user(username='approved-broker-content-manager')
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+        )
+        self.client.force_authenticate(user=broker)
+
+        contact = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {
+                'business_name': 'Broker-managed Realty',
+                'phone': '+251900000001',
+                'email': 'broker@example.com',
+                'social_links': [
+                    {
+                        'platform': 'whatsapp',
+                        'url': 'https://wa.me/251900000001',
+                        'is_enabled': True,
+                        'display_order': 0,
+                    },
+                ],
+            },
+            format='json',
+        )
+        announcement = self.client.post(
+            reverse('api:managed-homepage-note-list'),
+            {
+                'title': 'Broker announcement',
+                'text': 'A message written by the authorized broker.',
+                'is_published': True,
+                'display_order': 0,
+            },
+            format='json',
+        )
+
+        self.assertEqual(contact.status_code, 200)
+        self.assertEqual(announcement.status_code, 201)
+        self.client.force_authenticate(user=None)
+        public_contact = self.client.get(reverse('api:brokerage-contact'))
+        public_announcements = self.client.get(reverse('api:homepage-note-list'))
+        self.assertEqual(public_contact.data['phone'], '+251900000001')
+        self.assertEqual(public_contact.data['social_links'][0]['url'], 'https://wa.me/251900000001')
+        self.assertEqual(
+            [note['text'] for note in public_announcements.data['results']],
+            ['A message written by the authorized broker.'],
+        )
+
     def test_social_links_are_owner_managed_and_only_enabled_https_links_are_public(self):
         contact_url = reverse('api:brokerage-contact')
         self.client.force_authenticate(user=self.customer)

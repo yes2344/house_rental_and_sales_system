@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import type { BrokerageContact } from '../api/brokerage';
 import type { MessageKey } from '../i18n';
-import { publicContact } from '../publicContact';
 import { SocialMark, socialPlatformNames } from './SocialMark';
 
 interface FooterProps {
@@ -15,9 +14,8 @@ interface FooterProps {
 
 export function Footer({ contact, contactError, text }: FooterProps) {
   const { account } = useAuth();
-  const configuredSocial = contact.social_links.filter(
-    (link) => link.is_enabled && link.url && link.platform !== 'whatsapp' && link.platform !== 'telegram',
-  );
+  const configuredSocial = contact.social_links.filter((link) => link.is_enabled && link.url);
+  const hasBrokerageContact = Boolean(contact.phone || contact.email || configuredSocial.length);
 
   return (
     <footer className="site-footer">
@@ -31,7 +29,9 @@ export function Footer({ contact, contactError, text }: FooterProps) {
                 <path d="M15 20h6v9h-6z" fill="#153F35" />
               </svg>
             </span>
-            <span className="brand-copy"><strong>{contact.business_name || 'Habesha Homes'}</strong><small>ADDIS ABABA</small></span>
+            {contact.business_name && (
+              <span className="brand-copy"><strong>{contact.business_name}</strong></span>
+            )}
           </Link>
           <p>{text('footerNote')}</p>
         </div>
@@ -41,40 +41,37 @@ export function Footer({ contact, contactError, text }: FooterProps) {
             {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
           </Link>
         </div>
-        <section className="footer-contact" aria-label={text('brokerContactTitle')}>
-          <h2>{text('brokerContactTitle')}</h2>
-          <a href={`tel:${publicContact.phone}`}><Phone size={15} aria-hidden="true" />{publicContact.phone}</a>
-          {contact.email && (
-            <a href={`mailto:${contact.email}`}><Mail size={15} aria-hidden="true" />{contact.email}</a>
-          )}
-          <a href={publicContact.whatsappUrl} target="_blank" rel="noreferrer">
-            <SocialMark platform="whatsapp" />{text('contactWhatsapp')}: {publicContact.phone}
-          </a>
-          <a href={publicContact.telegramUrl} target="_blank" rel="noreferrer">
-            <SocialMark platform="telegram" />{text('contactTelegram')}: @Lion1621
-          </a>
-          {configuredSocial.length > 0 && (
-            <div className="footer-socials" aria-label={text('brokerSocialLinks')}>
-              {configuredSocial.map((link) => (
-                <a
-                  key={link.platform}
-                  href={link.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={socialPlatformNames[link.platform]}
-                  title={socialPlatformNames[link.platform]}
-                >
-                  <SocialMark platform={link.platform} />
-                </a>
-              ))}
-            </div>
-          )}
-          {contactError && <p className="footer-contact-error" role="status">{text('brokerContactUnavailable')}</p>}
-        </section>
+        {hasBrokerageContact && (
+          <section className="footer-contact" aria-label={text('brokerContactTitle')}>
+            <h2>{text('brokerContactTitle')}</h2>
+            {contact.phone && (
+              <a href={`tel:${contact.phone}`}><Phone size={15} aria-hidden="true" />{contact.phone}</a>
+            )}
+            {contact.email && (
+              <a href={`mailto:${contact.email}`}><Mail size={15} aria-hidden="true" />{contact.email}</a>
+            )}
+            {configuredSocial.length > 0 && (
+              <div className="footer-socials" aria-label={text('brokerSocialLinks')}>
+                {configuredSocial.map((link) => (
+                  <a
+                    key={link.platform}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={socialPlatformNames[link.platform]}
+                    title={socialPlatformNames[link.platform]}
+                  >
+                    <SocialMark platform={link.platform} />
+                  </a>
+                ))}
+              </div>
+            )}
+            {contactError && <p className="footer-contact-error" role="status">{text('brokerContactUnavailable')}</p>}
+          </section>
+        )}
       </div>
       <div className="container footer-bottom">
-        <span>© {new Date().getFullYear()} {contact.business_name || 'Habesha Homes'}</span>
-        <span>Addis Ababa, Ethiopia</span>
+        <span>© {new Date().getFullYear()}{contact.business_name ? ` ${contact.business_name}` : ''}</span>
       </div>
     </footer>
   );
