@@ -25,7 +25,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const canManageListings = Boolean(
     account?.is_platform_owner
     || (
-      (account?.role === 'broker' || account?.role === 'administrator')
+      account?.role === 'broker'
       && account.management_permissions.some((permission) => [
         'properties.view_all',
         'properties.moderate',

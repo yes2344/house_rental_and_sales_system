@@ -12,12 +12,11 @@ export function RequireListingManager({ text }: RequireListingManagerProps) {
 
   const canManage = Boolean(
     account?.is_platform_owner
-    || (
-      (account?.role === 'broker' || account?.role === 'administrator')
-      && account.management_permissions.some((permission) => permission.startsWith('properties.')
+    || (account?.role === 'broker' && account.management_permissions.some(
+      (permission) => permission.startsWith('properties.')
         || permission.startsWith('viewings.')
-        || permission === 'settings.manage')
-    ),
+        || permission === 'settings.manage',
+    )),
   );
 
   if (canManage) {

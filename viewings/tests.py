@@ -141,6 +141,56 @@ class PublicViewingRequestApiTests(APITestCase):
             self.customer.pk,
         )
 
+    def test_different_customers_can_request_the_same_property_and_only_see_their_own(self):
+        payload = {
+            'property_id': self.property.pk,
+            'full_name': 'First Customer',
+            'email': 'first@example.com',
+            'phone': '+251900000001',
+            'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
+        }
+        first_response = self.client.post(
+            reverse('api:viewing-request-create'),
+            payload,
+            format='json',
+        )
+        first_request_id = first_response.data['id']
+
+        second_customer = get_user_model().objects.create_user(
+            username='second-viewing-customer',
+            email='second@example.com',
+        )
+        Profile.objects.create(user=second_customer, role=Profile.Role.CUSTOMER)
+        self.client.force_authenticate(user=second_customer)
+        second_response = self.client.post(
+            reverse('api:viewing-request-create'),
+            {
+                **payload,
+                'full_name': 'Second Customer',
+                'email': 'second@example.com',
+                'phone': '+251900000002',
+            },
+            format='json',
+        )
+        second_request_id = second_response.data['id']
+
+        self.client.force_authenticate(user=self.customer)
+        first_activity = self.client.get(reverse('api:activity'))
+        self.client.force_authenticate(user=second_customer)
+        second_activity = self.client.get(reverse('api:activity'))
+
+        self.assertEqual(first_response.status_code, 201)
+        self.assertEqual(second_response.status_code, 201)
+        self.assertNotEqual(first_request_id, second_request_id)
+        self.assertEqual(
+            [item['id'] for item in first_activity.data['viewing_requests']],
+            [first_request_id],
+        )
+        self.assertEqual(
+            [item['id'] for item in second_activity.data['viewing_requests']],
+            [second_request_id],
+        )
+
     def test_submitting_request_notifies_approved_brokers(self):
         broker = get_user_model().objects.create_user(username='request-notification-broker')
         Profile.objects.create(

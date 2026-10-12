@@ -11,14 +11,15 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   const { account } = useAuth();
   const permissions = account?.management_permissions ?? [];
   const isOwner = Boolean(account?.is_platform_owner);
-  const canViewProperties = isOwner || permissions.some((permission) => [
+  const isAuthorizedBroker = account?.role === 'broker';
+  const canViewProperties = isOwner || (isAuthorizedBroker && permissions.some((permission) => [
     'properties.view_all',
     'properties.moderate',
     'properties.edit_all',
     'properties.manage_assigned',
-  ].includes(permission));
-  const canViewRequests = isOwner || permissions.some((permission) => permission.startsWith('viewings.'));
-  const canManageSettings = isOwner || permissions.includes('settings.manage');
+  ].includes(permission)));
+  const canViewRequests = isOwner || (isAuthorizedBroker && permissions.some((permission) => permission.startsWith('viewings.')));
+  const canManageSettings = isOwner || (isAuthorizedBroker && permissions.includes('settings.manage'));
   const canManageBrokers = isOwner;
 
   return (
