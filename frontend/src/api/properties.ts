@@ -1,5 +1,16 @@
 import { apiClient } from './client';
 
+export interface MarketplaceLocation {
+  id: number;
+  name: string;
+  name_am: string;
+  slug: string;
+  location_type: string;
+  parent_id: number | null;
+  is_active: boolean;
+  display_order: number;
+}
+
 export type ListingType = 'sale' | 'rent';
 export type PropertyType =
   | 'house' | 'villa' | 'apartment' | 'condominium' | 'land'
@@ -63,6 +74,18 @@ export interface PropertyLocationSuggestion {
   name_am: string;
   location_type: string;
   parent_id: number | null;
+}
+
+export async function getLocations(
+  parentId?: number,
+  signal?: AbortSignal,
+  includeAll = false,
+): Promise<MarketplaceLocation[]> {
+  const response = await apiClient.get<MarketplaceLocation[]>('/locations/', {
+    params: includeAll ? { all: 1 } : parentId ? { parent_id: parentId } : undefined,
+    signal,
+  });
+  return response.data;
 }
 
 export interface PaginatedResponse<T> {

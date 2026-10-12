@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { getLocations, type MarketplaceLocation } from '../api/ownerAnnouncements';
+import { getLocations, type MarketplaceLocation } from '../api/properties';
 import type { Locale } from '../i18n';
 
 interface LocationCascadeProps {

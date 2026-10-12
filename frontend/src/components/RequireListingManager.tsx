@@ -14,7 +14,6 @@ export function RequireListingManager({ text }: RequireListingManagerProps) {
     account?.is_platform_owner
     || account?.management_permissions.some((permission) => permission.startsWith('properties.')
       || permission.startsWith('viewings.')
-      || permission === 'announcements.review'
       || permission === 'settings.manage'),
   );
 

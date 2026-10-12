@@ -19,7 +19,6 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   ].includes(permission));
   const canViewRequests = isOwner || permissions.some((permission) => permission.startsWith('viewings.'));
   const canManageSettings = isOwner || permissions.includes('settings.manage');
-  const canReviewAnnouncements = isOwner || permissions.includes('announcements.review');
   const canManageBrokers = isOwner;
 
   return (
@@ -27,7 +26,6 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
       <nav className="manager-navigation" aria-label={text('managerNavigation')}>
         {canViewProperties && <NavLink to="/management/listings" end>{text('managerListings')}</NavLink>}
         {canViewRequests && <NavLink to="/management/viewing-requests">{text('managerViewingRequests')}</NavLink>}
-        {canReviewAnnouncements && <NavLink to="/management/owner-announcements">Owner announcements</NavLink>}
         {canManageSettings && <NavLink to="/management/brokerage">{text('managerContactSettings')}</NavLink>}
         {canManageBrokers && <a href="/admin-portal/delegated-accounts/">{text('managerBrokerAccounts')}</a>}
       </nav>

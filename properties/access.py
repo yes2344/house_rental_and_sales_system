@@ -1,5 +1,4 @@
 from django.db.models import Q
-from django.utils import timezone
 
 from accounts.models import Profile
 from accounts.permissions import (
@@ -8,25 +7,15 @@ from accounts.permissions import (
     is_platform_administrator,
 )
 from properties.models import Property
-from owner_announcements.models import OwnerAnnouncement, OwnerAnnouncementAgreement
 
 
 def public_properties():
-    today = timezone.localdate()
-    owner_scope = Q(
-        service_type=Property.ServiceType.OWNER_ANNOUNCED,
-        owner_announcement__status=OwnerAnnouncement.Status.APPROVED,
-        owner_announcement__agreements__status=OwnerAnnouncementAgreement.Status.ACTIVE,
-        owner_announcement__agreements__start_date__lte=today,
-        owner_announcement__agreements__end_date__gte=today,
-    )
     return (
         Property.objects.filter(
             publication_status=Property.PublicationStatus.PUBLISHED,
             status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+            service_type=Property.ServiceType.BROKER_MANAGED,
         )
-        .filter(Q(service_type=Property.ServiceType.BROKER_MANAGED) | owner_scope)
-        .distinct()
     )
 
 

@@ -1,6 +1,5 @@
 from decimal import Decimal
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.utils import timezone
 from django.utils.text import slugify
 from django.db import transaction
 from rest_framework import serializers
@@ -9,7 +8,6 @@ from drf_spectacular.utils import extend_schema_field
 from accounts.models import Profile
 from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
 from properties.search_terms import normalize_search_text
-from owner_announcements.models import OwnerAnnouncement, OwnerAnnouncementAgreement
 
 
 class LocationSerializer(serializers.ModelSerializer):
@@ -165,22 +163,6 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     def get_location_name(self, obj):
         return obj.administrative_location.name if obj.administrative_location_id else ''
 
-    def _public_announcement(self, obj):
-        if obj.service_type != Property.ServiceType.OWNER_ANNOUNCED:
-            return None
-        try:
-            announcement = obj.owner_announcement
-        except OwnerAnnouncement.DoesNotExist:
-            return None
-        today = timezone.localdate()
-        valid_agreement = any(
-            agreement.status == OwnerAnnouncementAgreement.Status.ACTIVE
-            and agreement.start_date <= today <= agreement.end_date
-            and agreement.public_contact_visible
-            for agreement in announcement.agreements.all()
-        )
-        return announcement if announcement.public_contact_visible and valid_agreement else None
-
     def _public_broker_managed_listing(self, obj):
         broker = obj.submitted_by
         if (
@@ -199,22 +181,19 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_public_contact_name(self, obj):
-        announcement = self._public_announcement(obj)
-        return announcement.public_contact_name if announcement else ''
+        return ''
 
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_public_contact_phone(self, obj):
         if self._public_broker_managed_listing(obj):
             return obj.contact_phone
-        announcement = self._public_announcement(obj)
-        return announcement.public_contact_phone if announcement else ''
+        return ''
 
     @extend_schema_field(serializers.EmailField(allow_blank=True))
     def get_public_contact_email(self, obj):
         if self._public_broker_managed_listing(obj):
             return obj.contact_email
-        announcement = self._public_announcement(obj)
-        return announcement.public_contact_email if announcement else ''
+        return ''
 
     @extend_schema_field(serializers.URLField(allow_null=True))
     def get_primary_image(self, obj):

@@ -110,7 +110,6 @@ class PublicPropertyListView(generics.ListAPIView):
             .prefetch_related(
                 'images',
                 'amenities',
-                'owner_announcement__agreements',
                 'broker_assignments__broker__profile',
             )
             .order_by(*self.ordering)
@@ -139,7 +138,6 @@ class PublicPropertyDetailView(generics.RetrieveAPIView):
     queryset = public_properties().select_related('submitted_by').prefetch_related(
         'images',
         'amenities',
-        'owner_announcement__agreements',
         'broker_assignments__broker__profile',
     )
 

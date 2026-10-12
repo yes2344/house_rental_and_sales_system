@@ -52,12 +52,6 @@ const OwnerListingsPage = lazy(() =>
 const OwnerPropertyFormPage = lazy(() =>
   import('./pages/OwnerPropertyFormPage').then(({ OwnerPropertyFormPage }) => ({ default: OwnerPropertyFormPage })),
 );
-const OwnerAnnouncementsPage = lazy(() =>
-  import('./pages/OwnerAnnouncementsPage').then(({ OwnerAnnouncementsPage }) => ({ default: OwnerAnnouncementsPage })),
-);
-const BrokerAnnouncementsPage = lazy(() =>
-  import('./pages/BrokerAnnouncementsPage').then(({ BrokerAnnouncementsPage }) => ({ default: BrokerAnnouncementsPage })),
-);
 const OwnerViewingRequestsPage = lazy(() =>
   import('./pages/OwnerViewingRequestsPage').then(({ OwnerViewingRequestsPage }) => ({ default: OwnerViewingRequestsPage })),
 );
@@ -118,14 +112,12 @@ export default function App() {
                 <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
                 <Route path="account" element={<AccountPage locale={locale} text={text} />} />
                 <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
-                <Route path="owner/announcements" element={<OwnerAnnouncementsPage />} />
                 <Route element={<RequireListingManager text={text} />}>
                   <Route element={<OwnerDashboardLayout text={text} />}>
                     <Route path="management/listings" element={<OwnerListingsPage locale={locale} text={text} />} />
                     <Route path="management/listings/new" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
                     <Route path="management/listings/:id/edit" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
                     <Route path="management/viewing-requests" element={<OwnerViewingRequestsPage text={text} />} />
-                    <Route path="management/owner-announcements" element={<BrokerAnnouncementsPage />} />
                     <Route path="management/brokerage" element={<BrokerageSettingsPage text={text} />} />
                   </Route>
                 </Route>

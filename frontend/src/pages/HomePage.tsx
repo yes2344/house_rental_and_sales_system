@@ -151,17 +151,6 @@ export function HomePage({ locale, text }: HomePageProps) {
         </div>
       </section>
 
-      <section className="section owner-announcement-cta">
-        <div className="container owner-announcement-cta-inner">
-          <div>
-            <p className="eyebrow eyebrow-muted">For property owners</p>
-            <h2>Want to advertise your property?</h2>
-            <p className="section-description">Submit your property details to the brokerage for review and an advertising agreement.</p>
-          </div>
-          <Link className="button button-primary" to="/owner/announcements">Announce your property <ArrowUpRight size={16} aria-hidden="true" /></Link>
-        </div>
-      </section>
-
       <section className="section listings-section" id="latest-listings">
         <div className="container">
           <div className="section-heading">
