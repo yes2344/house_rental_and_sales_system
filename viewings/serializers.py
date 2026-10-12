@@ -8,6 +8,8 @@ from viewings.models import ViewingRequest, ViewingRequestEvent
 
 
 def appointment_is_in_past(appointment_date, appointment_time):
+    if appointment_date is None:
+        return True
     local_now = timezone.localtime()
     return appointment_date < local_now.date() or (
         appointment_date == local_now.date()
@@ -53,7 +55,7 @@ class PublicViewingRequestCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         preferred_date = attrs.get('preferred_date')
         preferred_time = attrs.get('preferred_time')
-        if preferred_date and appointment_is_in_past(preferred_date, preferred_time):
+        if preferred_date and preferred_time and appointment_is_in_past(preferred_date, preferred_time):
             raise serializers.ValidationError({
                 'preferred_time': 'Preferred time cannot be in the past.'
             })
@@ -64,7 +66,6 @@ class PublicViewingRequestReceiptSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     status = serializers.ChoiceField(choices=ViewingRequest.Status.choices)
     created_at = serializers.DateTimeField()
-    receipt_token = serializers.CharField()
 
 
 class GuestViewingRequestStatusSerializer(serializers.ModelSerializer):
@@ -108,6 +109,7 @@ class ViewingRequestEventSerializer(serializers.ModelSerializer):
             'proposed_date',
             'proposed_time',
             'actor_name',
+            'message',
             'created_at',
         ]
         read_only_fields = fields
@@ -189,9 +191,13 @@ class ManagedViewingRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'proposed_date': 'An appointment proposal requires both a date and a time.'
             })
-        if proposal_changed and self.instance.status == ViewingRequest.Status.CONFIRMED:
+        if proposal_changed and self.instance.status not in (
+            ViewingRequest.Status.PENDING,
+            ViewingRequest.Status.PROPOSED,
+            ViewingRequest.Status.DECLINED,
+        ):
             raise serializers.ValidationError({
-                'proposed_date': 'A confirmed appointment cannot be changed through a new proposal.'
+                'proposed_date': 'A closed or confirmed request cannot receive a new proposal.'
             })
         if proposal_changed and appointment_is_in_past(proposed_date, proposed_time):
             raise serializers.ValidationError({
@@ -201,12 +207,12 @@ class ManagedViewingRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'status': 'A proposal cannot be sent and rejected in the same update.'
             })
-        if requested_status == ViewingRequest.Status.REJECTED and self.instance.status in (
-            ViewingRequest.Status.CONFIRMED,
-            ViewingRequest.Status.DECLINED,
+        if requested_status == ViewingRequest.Status.REJECTED and self.instance.status not in (
+            ViewingRequest.Status.PENDING,
+            ViewingRequest.Status.PROPOSED,
         ):
             raise serializers.ValidationError({
-                'status': 'A completed visitor decision cannot be rejected.'
+                'status': 'Only a pending request or open proposal can be rejected.'
             })
         if requested_status not in (None, ViewingRequest.Status.REJECTED):
             raise serializers.ValidationError({
@@ -253,3 +259,54 @@ class ManagedViewingRequestSerializer(serializers.ModelSerializer):
         if hasattr(updated, '_prefetched_objects_cache'):
             updated._prefetched_objects_cache.pop('events', None)
         return updated
+
+
+class CustomerViewingPropertySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Property
+        fields = ['id', 'title', 'slug', 'listing_type', 'status', 'location']
+
+
+class CustomerViewingRequestSerializer(serializers.ModelSerializer):
+    property = CustomerViewingPropertySerializer(read_only=True)
+    events = ViewingRequestEventSerializer(many=True, read_only=True)
+    appointment_timezone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ViewingRequest
+        fields = [
+            'id',
+            'property',
+            'full_name',
+            'email',
+            'phone',
+            'preferred_date',
+            'preferred_time',
+            'message',
+            'proposed_date',
+            'proposed_time',
+            'scheduled_date',
+            'scheduled_time',
+            'status',
+            'appointment_timezone',
+            'events',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_appointment_timezone(self, obj):
+        return settings.TIME_ZONE
+
+
+class ViewingRequestResponseSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=['accept', 'decline'])
+    message = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+
+class ViewingRequestCancellationSerializer(serializers.Serializer):
+    message = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+
+class ManagedViewingRequestActionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=['confirm_requested', 'cancel', 'complete'])
+    message = serializers.CharField(required=False, allow_blank=True, max_length=2000)

@@ -90,7 +90,9 @@ export function LoginPage({ text }: LoginPageProps) {
             {submitting ? text('signingIn') : text('signIn')}<ArrowRight size={16} aria-hidden="true" />
           </button>
         </form>
-        <p className="auth-switch">{text('noAccount')} <Link to="/register">{text('createAccount')}</Link></p>
+        <p className="auth-switch">
+          {text('noAccount')} <Link to="/register" state={{ from: state?.from }}>{text('createAccount')}</Link>
+        </p>
       </section>
     </main>
   );

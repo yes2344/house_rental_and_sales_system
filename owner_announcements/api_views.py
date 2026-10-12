@@ -1,15 +1,17 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django_filters import rest_framework as django_filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from datetime import timedelta
 
 from accounts.models import Profile
 from accounts.permissions import HasManagementPermission, has_management_permission
@@ -28,6 +30,7 @@ from owner_announcements.serializers import (
     OwnerAnnouncementSubmissionSerializer,
 )
 from properties.models import Property, PropertyImage
+from properties.models import Location
 from properties.serializers import PropertyImageManagementSerializer
 
 
@@ -349,34 +352,193 @@ class OwnerAnnouncementWithdrawView(APIView):
         return Response(OwnerAnnouncementSerializer(announcement, context={'request': request}).data)
 
 
+class BrokerAnnouncementFilter(django_filters.FilterSet):
+    status = django_filters.CharFilter(field_name='status')
+    search = django_filters.CharFilter(method='filter_search')
+    property_type = django_filters.CharFilter(field_name='property__property_type')
+    listing_type = django_filters.CharFilter(field_name='property__listing_type')
+    publication_status = django_filters.CharFilter(field_name='property__publication_status')
+    location = django_filters.CharFilter(method='filter_location')
+    queue = django_filters.ChoiceFilter(
+        choices=[
+            ('pending_review', 'Pending review'),
+            ('approved', 'Approved'),
+            ('changes', 'Changes requested'),
+            ('renewal_requested', 'Renewal requested'),
+            ('expiring_soon', 'Expiring soon'),
+            ('expired', 'Expired'),
+            ('closed', 'Rejected or suspended'),
+        ],
+        method='filter_queue',
+    )
+    expiring_soon = django_filters.BooleanFilter(method='filter_expiring_soon')
+    expired = django_filters.BooleanFilter(method='filter_expired')
+
+    class Meta:
+        model = OwnerAnnouncement
+        fields = []
+
+    def filter_location(self, queryset, name, value):
+        value = value.strip()
+        if not value:
+            return queryset
+        if value.isdecimal():
+            location_ids = [int(value)]
+            descendants = set(location_ids)
+            while location_ids:
+                location_ids = list(
+                    Location.objects.filter(parent_id__in=location_ids)
+                    .values_list('pk', flat=True)
+                )
+                descendants.update(location_ids)
+            return queryset.filter(property__administrative_location_id__in=descendants)
+        return queryset.filter(
+            Q(property__location__icontains=value)
+            | Q(property__administrative_location__name__icontains=value)
+        )
+
+    def filter_search(self, queryset, name, value):
+        value = value.strip()
+        if not value:
+            return queryset
+        matching = (
+            Q(property__title__icontains=value)
+            | Q(owner_contact_name__icontains=value)
+            | Q(owner_contact_phone__icontains=value)
+            | Q(submitter__username__icontains=value)
+            | Q(submitter__email__icontains=value)
+            | Q(submitter__first_name__icontains=value)
+            | Q(submitter__last_name__icontains=value)
+        )
+        if value.isdecimal():
+            matching |= Q(pk=int(value)) | Q(property_id=int(value))
+        return queryset.filter(matching)
+
+    def filter_queue(self, queryset, name, value):
+        today = timezone.localdate()
+        queue_filters = {
+            'pending_review': Q(status=OwnerAnnouncement.Status.PENDING_REVIEW),
+            'approved': Q(status=OwnerAnnouncement.Status.APPROVED),
+            'changes': Q(status=OwnerAnnouncement.Status.CORRECTIONS_REQUESTED),
+            'renewal_requested': (
+                Q(renewal_requested_at__isnull=False)
+                & Q(status__in=[OwnerAnnouncement.Status.APPROVED, OwnerAnnouncement.Status.EXPIRED])
+            ),
+            'expiring_soon': (
+                Q(status=OwnerAnnouncement.Status.APPROVED)
+                & Q(active_agreement_end_date__gte=today)
+                & Q(active_agreement_end_date__lte=today + timedelta(days=30))
+            ),
+            'expired': (
+                Q(status=OwnerAnnouncement.Status.EXPIRED)
+                | (
+                    Q(status=OwnerAnnouncement.Status.APPROVED)
+                    & Q(active_agreement_end_date__lt=today)
+                )
+            ),
+            'closed': Q(status__in=[OwnerAnnouncement.Status.REJECTED, OwnerAnnouncement.Status.SUSPENDED]),
+        }
+        return queryset.filter(queue_filters[value]) if value in queue_filters else queryset.none()
+
+    def filter_expiring_soon(self, queryset, name, value):
+        today = timezone.localdate()
+        condition = (
+            Q(status=OwnerAnnouncement.Status.APPROVED)
+            & Q(active_agreement_end_date__gte=today)
+            & Q(active_agreement_end_date__lte=today + timedelta(days=30))
+        )
+        return queryset.filter(
+            condition if value else (~condition | Q(active_agreement_end_date__isnull=True))
+        )
+
+    def filter_expired(self, queryset, name, value):
+        today = timezone.localdate()
+        if value:
+            return queryset.filter(
+                Q(status=OwnerAnnouncement.Status.EXPIRED)
+                | Q(status=OwnerAnnouncement.Status.APPROVED, active_agreement_end_date__lt=today)
+            )
+        return queryset.exclude(
+            status=OwnerAnnouncement.Status.EXPIRED,
+        ).filter(
+            ~Q(status=OwnerAnnouncement.Status.APPROVED)
+            | Q(active_agreement_end_date__gte=today)
+            | Q(active_agreement_end_date__isnull=True)
+        )
+
+
 class BrokerAnnouncementListView(generics.ListAPIView):
     permission_classes = [HasManagementPermission]
     required_management_permission = BROKER_REVIEW_PERMISSION
     serializer_class = BrokerAnnouncementSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'property__listing_type', 'property__property_type']
-    search_fields = [
-        'property__title',
-        'property__location',
-        'owner_contact_name',
-        'owner_contact_phone',
-        'submitter__username',
-        'submitter__email',
-    ]
-    ordering_fields = ['submitted_at', 'updated_at']
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = BrokerAnnouncementFilter
+    ordering_fields = ['submitted_at', 'updated_at', 'property__title', 'active_agreement_end_date']
     ordering = ['-submitted_at']
 
-    def get_queryset(self):
+    def base_queryset(self):
+        active_agreement_end = OwnerAnnouncementAgreement.objects.filter(
+            announcement_id=OuterRef('pk'),
+            status=OwnerAnnouncementAgreement.Status.ACTIVE,
+        ).order_by('-end_date').values('end_date')[:1]
         return (
             OwnerAnnouncement.objects.select_related(
                 'property',
                 'property__administrative_location',
+                'property__administrative_location__parent',
+                'property__administrative_location__parent__parent',
+                'property__administrative_location__parent__parent__parent',
+                'property__administrative_location__parent__parent__parent__parent',
                 'submitter',
                 'reviewed_by',
             )
+            .annotate(active_agreement_end_date=Subquery(active_agreement_end))
             .prefetch_related('property__images', 'agreements', 'events')
-            .order_by(*self.ordering)
         )
+
+    def get_queryset(self):
+        return self.base_queryset().order_by(*self.ordering)
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        today = timezone.localdate()
+        summary = self.base_queryset().aggregate(
+            total=Count('pk'),
+            pending_review=Count('pk', filter=Q(status=OwnerAnnouncement.Status.PENDING_REVIEW)),
+            approved=Count('pk', filter=Q(status=OwnerAnnouncement.Status.APPROVED)),
+            changes=Count('pk', filter=Q(status=OwnerAnnouncement.Status.CORRECTIONS_REQUESTED)),
+            renewal_requested=Count(
+                'pk',
+                filter=Q(
+                    renewal_requested_at__isnull=False,
+                    status__in=[OwnerAnnouncement.Status.APPROVED, OwnerAnnouncement.Status.EXPIRED],
+                ),
+            ),
+            expiring_soon=Count(
+                'pk',
+                filter=Q(
+                    status=OwnerAnnouncement.Status.APPROVED,
+                    active_agreement_end_date__gte=today,
+                    active_agreement_end_date__lte=today + timedelta(days=30),
+                ),
+            ),
+            expired=Count(
+                'pk',
+                filter=(
+                    Q(status=OwnerAnnouncement.Status.EXPIRED)
+                    | Q(
+                        status=OwnerAnnouncement.Status.APPROVED,
+                        active_agreement_end_date__lt=today,
+                    )
+                ),
+            ),
+            closed=Count(
+                'pk',
+                filter=Q(status__in=[OwnerAnnouncement.Status.REJECTED, OwnerAnnouncement.Status.SUSPENDED]),
+            ),
+        )
+        response.data['summary'] = summary
+        return response
 
 
 class BrokerAnnouncementDecisionView(APIView):
@@ -519,6 +681,60 @@ class BrokerAnnouncementDecisionView(APIView):
                 'suspend': f'Your property announcement was suspended: {announcement.property.title}.',
             }[action],
             f'announcement:{announcement.pk}:decision:{announcement.reviewed_at.isoformat()}:owner',
+        )
+        return Response(BrokerAnnouncementSerializer(
+            announcement,
+            context={'request': request},
+        ).data)
+
+
+class BrokerAnnouncementDetailView(generics.RetrieveAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = BROKER_REVIEW_PERMISSION
+    serializer_class = BrokerAnnouncementSerializer
+
+    def get_queryset(self):
+        return BrokerAnnouncementListView().base_queryset()
+
+
+class BrokerAnnouncementRenewalView(APIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = BROKER_REVIEW_PERMISSION
+
+    @transaction.atomic
+    def post(self, request, pk):
+        announcement = get_object_or_404(
+            OwnerAnnouncement.objects.select_for_update().select_related('property', 'submitter'),
+            pk=pk,
+        )
+        if announcement.status != OwnerAnnouncement.Status.EXPIRED:
+            raise ValidationError({'status': 'Only expired announcements can start broker-led renewal negotiation.'})
+        if announcement.renewal_requested_at is not None:
+            raise ValidationError({'status': 'A renewal request is already awaiting review.'})
+
+        announcement.renewal_requested_at = timezone.now()
+        announcement.save(update_fields=['renewal_requested_at', 'updated_at'])
+        OwnerAnnouncementEvent.objects.create(
+            announcement=announcement,
+            actor=request.user,
+            event_type=OwnerAnnouncementEvent.Type.RENEWAL_REQUESTED,
+            from_status=announcement.status,
+            to_status=announcement.status,
+            details={'initiated_by_broker': True},
+        )
+        record_admin_action(
+            request.user,
+            action='owner_announcement_renewal_requested',
+            object_type='owner_announcement',
+            object_id=announcement.pk,
+            changes={'status': announcement.status, 'initiated_by_broker': True},
+        )
+        notify_user(
+            announcement.submitter,
+            announcement,
+            'renewal_requested',
+            f'The brokerage would like to discuss a new agreement for {announcement.property.title}.',
+            f'announcement:{announcement.pk}:broker-renewal:{announcement.renewal_requested_at.isoformat()}:owner',
         )
         return Response(BrokerAnnouncementSerializer(
             announcement,

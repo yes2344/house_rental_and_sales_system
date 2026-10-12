@@ -70,6 +70,22 @@ class ViewingRequestApprovalTests(TestCase):
         self.assertContains(response, 'Keep this private receipt token')
         self.assertContains(response, reverse('user_viewing_request_status'))
 
+    def test_legacy_viewing_form_requires_authentication(self):
+        self.client.logout()
+
+        response = self.client.post(
+            reverse('user_property_request', args=[self.property.pk]),
+            {
+                'full_name': 'Guest Visitor',
+                'email': 'guest@example.com',
+                'phone': '+251900000000',
+                'preferred_date': (timezone.localdate() + timedelta(days=2)).isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ViewingRequest.objects.count(), 1)
+
     def test_property_can_be_marked_for_sale_or_rent(self):
         rent_property = Property.objects.create(
             title='Rent Property',

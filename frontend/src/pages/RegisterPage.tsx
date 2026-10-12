@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowRight, UserRoundPlus } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import { registerAccount } from '../api/accounts';
@@ -18,8 +18,14 @@ interface RegistrationValues {
   password_confirmation: string;
 }
 
+interface RegistrationLocationState {
+  from?: string | { pathname?: string; search?: string; hash?: string };
+}
+
 export function RegisterPage({ text }: RegisterPageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const state = location.state as RegistrationLocationState | null;
   const [values, setValues] = useState<RegistrationValues>({
     username: '',
     email: '',
@@ -54,7 +60,10 @@ export function RegisterPage({ text }: RegisterPageProps) {
         phone: values.phone.trim(),
         password: values.password,
       });
-      navigate('/login', { replace: true, state: { registered: true, username: account.username } });
+      navigate('/login', {
+        replace: true,
+        state: { registered: true, username: account.username, from: state?.from },
+      });
     } catch (requestError: unknown) {
       const apiErrors = getApiFieldErrors(requestError);
       setFieldErrors(apiErrors);
@@ -152,7 +161,9 @@ export function RegisterPage({ text }: RegisterPageProps) {
             {submitting ? text('creatingAccount') : text('createAccount')}<ArrowRight size={16} aria-hidden="true" />
           </button>
         </form>
-        <p className="auth-switch">{text('alreadyHaveAccount')} <Link to="/login">{text('signIn')}</Link></p>
+        <p className="auth-switch">
+          {text('alreadyHaveAccount')} <Link to="/login" state={{ from: state?.from }}>{text('signIn')}</Link>
+        </p>
       </section>
     </main>
   );

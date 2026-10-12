@@ -28,6 +28,9 @@ const ViewingRequestPage = lazy(() =>
 const ViewingRequestStatusPage = lazy(() =>
   import('./pages/ViewingRequestStatusPage').then(({ ViewingRequestStatusPage }) => ({ default: ViewingRequestStatusPage })),
 );
+const CustomerViewingRequestsPage = lazy(() =>
+  import('./pages/CustomerViewingRequestsPage').then(({ CustomerViewingRequestsPage }) => ({ default: CustomerViewingRequestsPage })),
+);
 const AccountPage = lazy(() =>
   import('./pages/AccountPage').then(({ AccountPage }) => ({ default: AccountPage })),
 );
@@ -105,13 +108,14 @@ export default function App() {
               <Route index element={<HomePage locale={locale} text={text} />} />
               <Route path="properties" element={<PropertiesPage locale={locale} text={text} />} />
               <Route path="properties/:slug" element={<PropertyDetailPage locale={locale} text={text} />} />
-              <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
               <Route path="viewing-requests/status" element={<ViewingRequestStatusPage text={text} />} />
               <Route path="login" element={<LoginPage text={text} />} />
               <Route path="accept-invitation" element={<InvitationAcceptPage text={text} />} />
               <Route path="register" element={<RegisterPage text={text} />} />
               <Route path="settings" element={<SettingsPage text={text} />} />
               <Route element={<RequireAuth text={text} />}>
+                <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
+                <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
                 <Route path="account" element={<AccountPage locale={locale} text={text} />} />
                 <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
                 <Route path="owner/announcements" element={<OwnerAnnouncementsPage />} />

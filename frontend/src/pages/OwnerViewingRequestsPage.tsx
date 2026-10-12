@@ -6,6 +6,7 @@ import { getErrorMessage } from '../api/client';
 import {
   getManagedViewingRequest,
   getManagedViewingRequests,
+  actOnManagedViewingRequest,
   updateManagedViewingRequest,
   type ManagedViewingRequest,
   type ManagedViewingRequestFilters,
@@ -41,6 +42,8 @@ function requestStatusMessage(status: ViewingRequestStatus): MessageKey {
   if (status === 'confirmed') return 'viewingConfirmed';
   if (status === 'rejected') return 'viewingRejected';
   if (status === 'declined') return 'viewingVisitorDeclined';
+  if (status === 'cancelled') return 'viewingCancelled';
+  if (status === 'completed') return 'viewingCompleted';
   return 'viewingPending';
 }
 
@@ -49,7 +52,9 @@ function isViewingRequestStatus(value: string | null): value is ViewingRequestSt
     || value === 'proposed'
     || value === 'confirmed'
     || value === 'rejected'
-    || value === 'declined';
+    || value === 'declined'
+    || value === 'cancelled'
+    || value === 'completed';
 }
 
 function eventMessage(eventType: string): MessageKey {
@@ -58,6 +63,9 @@ function eventMessage(eventType: string): MessageKey {
   if (eventType === 'proposal_accepted') return 'appointmentAcceptedEvent';
   if (eventType === 'proposal_declined') return 'appointmentDeclinedEvent';
   if (eventType === 'rejected') return 'requestRejectedEvent';
+  if (eventType === 'request_confirmed') return 'requestConfirmedEvent';
+  if (eventType === 'cancelled') return 'viewingCancelled';
+  if (eventType === 'completed') return 'viewingCompleted';
   return 'requestSubmittedEvent';
 }
 
@@ -77,6 +85,7 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
 
   const rawPage = Number(searchParams.get('page') ?? 1);
   const page = Number.isInteger(rawPage) && rawPage > 1 ? rawPage : 1;
@@ -167,6 +176,26 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
     }
   };
 
+  const runRequestAction = async (action: 'confirm_requested' | 'cancel' | 'complete') => {
+    if (!selected) return;
+    setSaving(true);
+    setSaveError('');
+    setSaveSuccess('');
+    try {
+      const updated = await actOnManagedViewingRequest(selected.id, action, actionMessage.trim());
+      setSelected(updated);
+      setValues(formFromRequest(updated));
+      setRequests((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setActionMessage('');
+      setSaveSuccess(text('requestManagementSaved'));
+      setReloadKey((current) => current + 1);
+    } catch (error: unknown) {
+      setSaveError(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const updateFilter = (name: 'status' | 'ordering', value: string) => {
     const next = new URLSearchParams(searchParams);
     if (value) next.set(name, value);
@@ -205,6 +234,8 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
             <option value="confirmed">{text('viewingConfirmed')}</option>
             <option value="rejected">{text('viewingRejected')}</option>
             <option value="declined">{text('viewingVisitorDeclined')}</option>
+            <option value="cancelled">{text('viewingCancelled')}</option>
+            <option value="completed">{text('viewingCompleted')}</option>
           </select>
         </label>
         <label className="manager-filter">
@@ -328,6 +359,7 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
                     </span>
                   )}
                   {event.actor_name && <span>{event.actor_name}</span>}
+                  {event.message && <p>{event.message}</p>}
                 </li>
               ))}
             </ol>
@@ -377,6 +409,35 @@ export function OwnerViewingRequestsPage({ text }: OwnerViewingRequestsPageProps
               </button>
             </div>
           </form>
+          {['pending', 'proposed', 'confirmed', 'declined'].includes(selected.status) && (
+            <section className="request-update-form" aria-labelledby="request-action-title">
+              <h3 id="request-action-title">{text('requestActions')}</h3>
+              <label className="manager-field manager-field-wide">
+                <span>{text('messageToCustomer')}</span>
+                <textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={actionMessage}
+                  onChange={(event) => setActionMessage(event.target.value)}
+                />
+              </label>
+              <div className="manager-form-actions">
+                {(selected.status === 'pending' || selected.status === 'declined') && selected.preferred_time && (
+                  <button className="button button-primary" type="button" disabled={saving} onClick={() => void runRequestAction('confirm_requested')}>
+                    {text('confirmRequestedTime')}
+                  </button>
+                )}
+                {selected.status === 'confirmed' && (
+                  <button className="button button-primary" type="button" disabled={saving} onClick={() => void runRequestAction('complete')}>
+                    {text('markViewingCompleted')}
+                  </button>
+                )}
+                <button className="button button-outline" type="button" disabled={saving} onClick={() => void runRequestAction('cancel')}>
+                  {text('cancelViewingRequest')}
+                </button>
+              </div>
+            </section>
+          )}
         </section>
       )}
     </main>

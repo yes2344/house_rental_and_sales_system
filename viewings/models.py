@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 from properties.models import Property
 
@@ -11,6 +12,8 @@ class ViewingRequest(models.Model):
         CONFIRMED = 'confirmed', 'Confirmed'
         REJECTED = 'rejected', 'Rejected'
         DECLINED = 'declined', 'Declined'
+        CANCELLED = 'cancelled', 'Cancelled'
+        COMPLETED = 'completed', 'Completed'
 
     STATUS_CHOICES = Status.choices
 
@@ -41,6 +44,16 @@ class ViewingRequest(models.Model):
     class Meta:
         db_table = 'user_viewingrequest'
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['requester', 'property'],
+                condition=(
+                    Q(requester__isnull=False)
+                    & Q(status__in=['pending', 'proposed', 'confirmed', 'declined'])
+                ),
+                name='viewing_one_active_request_per_user_property',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.full_name} - {self.property.title}'
@@ -54,6 +67,9 @@ class ViewingRequestEvent(models.Model):
         PROPOSAL_ACCEPTED = 'proposal_accepted', 'Appointment proposal accepted'
         PROPOSAL_DECLINED = 'proposal_declined', 'Appointment proposal declined'
         REJECTED = 'rejected', 'Request declined by property manager'
+        REQUEST_CONFIRMED = 'request_confirmed', 'Requested appointment confirmed'
+        CANCELLED = 'cancelled', 'Appointment or request cancelled'
+        COMPLETED = 'completed', 'Viewing completed'
 
     viewing_request = models.ForeignKey(
         ViewingRequest,
@@ -72,6 +88,7 @@ class ViewingRequestEvent(models.Model):
     to_status = models.CharField(max_length=20, blank=True)
     proposed_date = models.DateField(null=True, blank=True)
     proposed_time = models.TimeField(null=True, blank=True)
+    message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -126,6 +126,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
               <>
                 <Link className="header-sign-in" to="/account" onClick={closeMenu}>{text('myAccount')}</Link>
                 <Link className="header-sign-in" to="/favorites" onClick={closeMenu}>{text('savedHomesShort')}</Link>
+                <Link className="header-sign-in" to="/viewing-requests" onClick={closeMenu}>{text('yourViewingRequests')}</Link>
                 <button className="header-sign-in header-logout" type="button" disabled={loggingOut} onClick={logout}>
                   {loggingOut ? text('signingOut') : text('signOut')}
                 </button>

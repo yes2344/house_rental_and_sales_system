@@ -298,6 +298,170 @@ class OwnerAnnouncementWorkflowTests(APITestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_broker_announcement_list_filters_and_returns_real_summary_counts(self):
+        announcement = self.submit_announcement()
+        self.client.force_authenticate(self.broker)
+
+        response = self.client.get(reverse('api:management-owner-announcement-list'))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['summary']['total'], 1)
+        self.assertEqual(response.data['summary']['pending_review'], 1)
+        self.assertEqual(response.data['results'][0]['submitter_name'], self.owner.username)
+
+        detail_response = self.client.get(
+            reverse('api:management-owner-announcement-detail', args=[announcement.pk]),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.data)
+        self.assertEqual(detail_response.data['owner_contact_phone'], '+251900000001')
+        self.assertIn('publication_status', detail_response.data['property'])
+
+        filtered_response = self.client.get(
+            reverse('api:management-owner-announcement-list'),
+            {
+                'queue': 'pending_review',
+                'search': str(announcement.pk),
+                'property_type': 'house',
+                'listing_type': 'sale',
+                'location': 'Area provided by owner',
+                'publication_status': Property.PublicationStatus.PENDING_REVIEW,
+                'ordering': 'property__title',
+                'page_size': 1,
+            },
+        )
+        self.assertEqual(filtered_response.status_code, 200, filtered_response.data)
+        self.assertEqual([item['id'] for item in filtered_response.data['results']], [announcement.pk])
+
+        empty_response = self.client.get(
+            reverse('api:management-owner-announcement-list'),
+            {'queue': 'approved'},
+        )
+        self.assertEqual(empty_response.status_code, 200, empty_response.data)
+        self.assertEqual(empty_response.data['results'], [])
+        self.assertEqual(empty_response.data['summary']['pending_review'], 1)
+
+    def test_only_announcement_reviewers_can_access_broker_announcement_list_and_detail(self):
+        announcement = self.submit_announcement()
+        self.client.force_authenticate(self.owner)
+
+        list_response = self.client.get(reverse('api:management-owner-announcement-list'))
+        detail_response = self.client.get(
+            reverse('api:management-owner-announcement-detail', args=[announcement.pk]),
+        )
+        renewal_response = self.client.post(
+            reverse('api:management-owner-announcement-renewal', args=[announcement.pk]),
+        )
+
+        self.assertEqual(list_response.status_code, 403)
+        self.assertEqual(detail_response.status_code, 403)
+        self.assertEqual(renewal_response.status_code, 403)
+
+    def test_expired_announcement_broker_renewal_requests_negotiation_without_republishing(self):
+        announcement = self.submit_announcement()
+        today = timezone.localdate()
+        OwnerAnnouncementAgreement.objects.create(
+            announcement=announcement,
+            start_date=today - timedelta(days=32),
+            end_date=today - timedelta(days=1),
+            duration_months=1,
+            terms='Expired advertising agreement.',
+            status=OwnerAnnouncementAgreement.Status.EXPIRED,
+            approved_by=self.broker,
+        )
+        announcement.status = OwnerAnnouncement.Status.EXPIRED
+        announcement.property.publication_status = Property.PublicationStatus.EXPIRED
+        announcement.property.save(update_fields=['publication_status', 'updated_at'])
+        announcement.save(update_fields=['status', 'updated_at'])
+        self.client.force_authenticate(self.broker)
+
+        response = self.client.post(
+            reverse('api:management-owner-announcement-renewal', args=[announcement.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNotNone(response.data['renewal_requested_at'])
+        announcement.refresh_from_db()
+        announcement.property.refresh_from_db()
+        self.assertEqual(announcement.status, OwnerAnnouncement.Status.EXPIRED)
+        self.assertEqual(
+            announcement.property.publication_status,
+            Property.PublicationStatus.EXPIRED,
+        )
+        self.assertTrue(InAppNotification.objects.filter(
+            announcement=announcement,
+            recipient=self.owner,
+            notification_type='renewal_requested',
+        ).exists())
+        self.assertTrue(OwnerAnnouncementEvent.objects.filter(
+            announcement=announcement,
+            actor=self.broker,
+            event_type=OwnerAnnouncementEvent.Type.RENEWAL_REQUESTED,
+            details={'initiated_by_broker': True},
+        ).exists())
+
+    def test_expiry_negative_filters_keep_announcements_without_agreements(self):
+        announcement = self.submit_announcement()
+        self.client.force_authenticate(self.broker)
+
+        expiring_response = self.client.get(
+            reverse('api:management-owner-announcement-list'),
+            {'expiring_soon': 'false'},
+        )
+        expired_response = self.client.get(
+            reverse('api:management-owner-announcement-list'),
+            {'expired': 'false'},
+        )
+
+        self.assertEqual(expiring_response.status_code, 200, expiring_response.data)
+        self.assertEqual(expired_response.status_code, 200, expired_response.data)
+        self.assertEqual([item['id'] for item in expiring_response.data['results']], [announcement.pk])
+        self.assertEqual([item['id'] for item in expired_response.data['results']], [announcement.pk])
+
+        announcement.status = OwnerAnnouncement.Status.EXPIRED
+        announcement.save(update_fields=['status', 'updated_at'])
+        expired_response = self.client.get(
+            reverse('api:management-owner-announcement-list'),
+            {'expired': 'false'},
+        )
+        self.assertEqual(expired_response.status_code, 200, expired_response.data)
+        self.assertEqual(expired_response.data['results'], [])
+
+    def test_expiry_queues_and_counters_follow_active_agreement_dates(self):
+        announcement = self.submit_announcement()
+        today = timezone.localdate()
+        agreement = OwnerAnnouncementAgreement.objects.create(
+            announcement=announcement,
+            start_date=today,
+            end_date=today + timedelta(days=10),
+            duration_months=1,
+            terms='Current advertising agreement.',
+            status=OwnerAnnouncementAgreement.Status.ACTIVE,
+            approved_by=self.broker,
+        )
+        announcement.status = OwnerAnnouncement.Status.APPROVED
+        announcement.property.publication_status = Property.PublicationStatus.PUBLISHED
+        announcement.property.save(update_fields=['publication_status', 'updated_at'])
+        announcement.save(update_fields=['status', 'updated_at'])
+        self.client.force_authenticate(self.broker)
+
+        expiring_response = self.client.get(
+            reverse('api:management-owner-announcement-list'),
+            {'queue': 'expiring_soon'},
+        )
+        self.assertEqual(expiring_response.status_code, 200, expiring_response.data)
+        self.assertEqual(expiring_response.data['summary']['expiring_soon'], 1)
+        self.assertEqual([item['id'] for item in expiring_response.data['results']], [announcement.pk])
+
+        agreement.start_date = today - timedelta(days=40)
+        agreement.end_date = today - timedelta(days=1)
+        agreement.save(update_fields=['start_date', 'end_date'])
+        expired_response = self.client.get(
+            reverse('api:management-owner-announcement-list'),
+            {'queue': 'expired'},
+        )
+        self.assertEqual(expired_response.status_code, 200, expired_response.data)
+        self.assertEqual(expired_response.data['summary']['expired'], 1)
+        self.assertEqual([item['id'] for item in expired_response.data['results']], [announcement.pk])
+
     def test_expired_announcement_can_be_renewed_and_republished_by_authorized_broker(self):
         announcement = self.submit_announcement()
         today = timezone.localdate()

@@ -21,6 +21,8 @@ export interface OwnerAnnouncement {
     location: string;
     administrative_location: number | null;
     administrative_location_name: string;
+    administrative_location_path: string[];
+    publication_status: string;
     property_type: string;
     listing_type: 'sale' | 'rent';
     rental_frequency: string;
@@ -32,9 +34,12 @@ export interface OwnerAnnouncement {
     bedrooms: number;
     bathrooms: number;
     area_sqft: number;
+    area_value: string | null;
+    area_unit: string;
     images: { id: number; url: string | null; caption: string; is_primary: boolean }[];
   };
   status: string;
+  submitter_name: string;
   broker_feedback: string;
   owner_contact_name: string;
   owner_contact_phone: string;
@@ -53,6 +58,49 @@ export interface OwnerAnnouncement {
     status: string;
   }[];
   submitted_at: string;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BrokerAnnouncementQueue =
+  | 'pending_review'
+  | 'approved'
+  | 'changes'
+  | 'renewal_requested'
+  | 'expiring_soon'
+  | 'expired'
+  | 'closed';
+
+export interface BrokerAnnouncementFilters {
+  queue?: BrokerAnnouncementQueue;
+  search?: string;
+  property_type?: string;
+  listing_type?: 'sale' | 'rent';
+  publication_status?: string;
+  location?: string;
+  expiring_soon?: boolean;
+  expired?: boolean;
+  ordering?: 'submitted_at' | '-submitted_at' | 'updated_at' | '-updated_at'
+    | 'property__title' | '-property__title'
+    | 'active_agreement_end_date' | '-active_agreement_end_date';
+  page?: number;
+  page_size?: number;
+}
+
+export interface BrokerAnnouncementSummary {
+  total: number;
+  pending_review: number;
+  approved: number;
+  changes: number;
+  renewal_requested: number;
+  expiring_soon: number;
+  expired: number;
+  closed: number;
+}
+
+export interface BrokerAnnouncementPage extends PaginatedResponse<OwnerAnnouncement> {
+  summary: BrokerAnnouncementSummary;
 }
 
 export interface OwnerAnnouncementPayload {
@@ -160,8 +208,24 @@ export async function requestAnnouncementRenewal(id: number): Promise<void> {
   await apiClient.post(`/owner/announcements/${id}/renew/`);
 }
 
-export async function getBrokerAnnouncements(signal?: AbortSignal): Promise<PaginatedResponse<OwnerAnnouncement>> {
-  const response = await apiClient.get<PaginatedResponse<OwnerAnnouncement>>('/management/owner-announcements/', { signal });
+export async function getBrokerAnnouncements(
+  filters: BrokerAnnouncementFilters = {},
+  signal?: AbortSignal,
+): Promise<BrokerAnnouncementPage> {
+  const response = await apiClient.get<BrokerAnnouncementPage>('/management/owner-announcements/', {
+    params: filters,
+    signal,
+  });
+  return response.data;
+}
+
+export async function getBrokerAnnouncement(id: number, signal?: AbortSignal): Promise<OwnerAnnouncement> {
+  const response = await apiClient.get<OwnerAnnouncement>(`/management/owner-announcements/${id}/`, { signal });
+  return response.data;
+}
+
+export async function requestBrokerAnnouncementRenewal(id: number): Promise<OwnerAnnouncement> {
+  const response = await apiClient.post<OwnerAnnouncement>(`/management/owner-announcements/${id}/renewal/`);
   return response.data;
 }
 

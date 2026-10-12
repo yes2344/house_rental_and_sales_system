@@ -9,13 +9,32 @@ export type ManagedPropertyStatus = 'available' | 'rented' | 'sold' | 'inactive'
 export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended';
 export type ManagedAreaUnit = 'sqm' | 'sqft' | '';
 export type ManagedRentalFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
-export type ViewingRequestStatus = 'pending' | 'proposed' | 'confirmed' | 'rejected' | 'declined';
+export type ViewingRequestStatus =
+  | 'pending'
+  | 'proposed'
+  | 'confirmed'
+  | 'rejected'
+  | 'declined'
+  | 'cancelled'
+  | 'completed';
 
 export interface AmenityOption {
   id: number;
   name: string;
   name_am: string;
   slug: string;
+}
+
+export async function actOnManagedViewingRequest(
+  id: number,
+  action: 'confirm_requested' | 'cancel' | 'complete',
+  message = '',
+): Promise<ManagedViewingRequest> {
+  const response = await apiClient.post<ManagedViewingRequest>(
+    `/management/viewing-requests/${id}/action/`,
+    { action, message },
+  );
+  return response.data;
 }
 
 export interface ManagedProperty {
@@ -112,6 +131,7 @@ export interface ManagedViewingRequest {
     proposed_date: string | null;
     proposed_time: string | null;
     actor_name: string | null;
+    message: string;
     created_at: string;
   }[];
   created_at: string;

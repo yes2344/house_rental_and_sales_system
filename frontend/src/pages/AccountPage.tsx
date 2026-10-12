@@ -25,6 +25,8 @@ const statusMessage: Record<string, MessageKey> = {
   confirmed: 'viewingConfirmed',
   rejected: 'viewingRejected',
   declined: 'viewingVisitorDeclined',
+  cancelled: 'viewingCancelled',
+  completed: 'viewingCompleted',
 };
 
 const roleMessage: Record<string, MessageKey> = {
@@ -207,7 +209,10 @@ export function AccountPage({ locale, text }: AccountPageProps) {
         <section className="customer-panel">
           <div className="customer-panel-heading">
             <div><h2>{text('viewingActivity')}</h2><p>{text('viewingActivityIntro')}</p></div>
-            <Link to="/favorites" className="customer-inline-link">{text('savedHomesTitle')}<ArrowRight size={14} aria-hidden="true" /></Link>
+            <div className="customer-panel-links">
+              <Link to="/viewing-requests" className="customer-inline-link">{text('yourViewingRequests')}<ArrowRight size={14} aria-hidden="true" /></Link>
+              <Link to="/favorites" className="customer-inline-link">{text('savedHomesTitle')}<ArrowRight size={14} aria-hidden="true" /></Link>
+            </div>
           </div>
           {activityLoading ? (
             <div className="listing-state" role="status"><span className="loading-spinner" />{text('loadingActivity')}</div>

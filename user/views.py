@@ -4,7 +4,8 @@ import secrets
 from decimal import Decimal
 from urllib.parse import urlencode
 
-from django.db import transaction
+from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
@@ -14,6 +15,7 @@ from admin.models import BrokerageSettings, HomepageNote, SocialMediaLink
 from .forms import ViewingRequestForm
 from .models import Property, ViewingRequest
 from viewings.models import ViewingRequestEvent
+from viewings.notifications import notify_viewing_request_event
 from viewings.serializers import appointment_is_in_past
 from properties.access import public_properties
 
@@ -152,6 +154,7 @@ def property_detail(request, slug):
 
 
 @never_cache
+@login_required
 def viewing_request(request, property_id=None):
     property_obj = None
     if property_id:
@@ -176,25 +179,53 @@ def viewing_request(request, property_id=None):
             property_ref = public_properties.filter(pk=selected).first() if selected else None
             if property_ref is None:
                 form.add_error(None, 'Select an available property before submitting a request.')
+            elif ViewingRequest.objects.filter(
+                requester=request.user,
+                property=property_ref,
+                status__in=[
+                    ViewingRequest.Status.PENDING,
+                    ViewingRequest.Status.PROPOSED,
+                    ViewingRequest.Status.CONFIRMED,
+                    ViewingRequest.Status.DECLINED,
+                ],
+            ).exists():
+                form.add_error(None, 'You already have an active request for this property.')
             else:
                 receipt_token = secrets.token_urlsafe(32)
-                with transaction.atomic():
-                    viewing = form.save(commit=False)
-                    viewing.property = property_ref
-                    viewing.requester = request.user if request.user.is_authenticated else None
-                    viewing.receipt_token_digest = hashlib.sha256(receipt_token.encode()).hexdigest()
-                    viewing.save()
-                    ViewingRequestEvent.objects.create(
-                        viewing_request=viewing,
-                        actor=viewing.requester,
-                        event_type=ViewingRequestEvent.Type.SUBMITTED,
-                        to_status=viewing.status,
+                try:
+                    with transaction.atomic():
+                        viewing = form.save(commit=False)
+                        viewing.property = property_ref
+                        viewing.requester = request.user
+                        viewing.receipt_token_digest = hashlib.sha256(receipt_token.encode()).hexdigest()
+                        viewing.save()
+                        event = ViewingRequestEvent.objects.create(
+                            viewing_request=viewing,
+                            actor=viewing.requester,
+                            event_type=ViewingRequestEvent.Type.SUBMITTED,
+                            to_status=viewing.status,
+                        )
+                        notify_viewing_request_event(viewing, event, to_requester=False)
+                except IntegrityError:
+                    if ViewingRequest.objects.filter(
+                        requester=request.user,
+                        property=property_ref,
+                        status__in=[
+                            ViewingRequest.Status.PENDING,
+                            ViewingRequest.Status.PROPOSED,
+                            ViewingRequest.Status.CONFIRMED,
+                            ViewingRequest.Status.DECLINED,
+                        ],
+                    ).exists():
+                        form.add_error(None, 'You already have an active request for this property.')
+                    else:
+                        raise
+                else:
+                    return render(
+                        request,
+                        'user/viewing_request_receipt.html',
+                        _public_context(viewing=viewing, receipt_token=receipt_token),
                     )
-                return render(
-                    request,
-                    'user/viewing_request_receipt.html',
-                    _public_context(viewing=viewing, receipt_token=receipt_token),
-                )
     else:
         form = ViewingRequestForm(initial={'property_id': property_obj.id if property_obj else None})
 
@@ -232,9 +263,10 @@ def viewing_request_status(request):
                     if viewing.status != ViewingRequest.Status.PROPOSED:
                         error = 'There is no pending appointment proposal to decide.'
                         viewing = None
-                    elif decision == 'accept' and appointment_is_in_past(
-                        viewing.proposed_date,
-                        viewing.proposed_time,
+                    elif decision == 'accept' and (
+                        viewing.proposed_date is None
+                        or viewing.proposed_time is None
+                        or appointment_is_in_past(viewing.proposed_date, viewing.proposed_time)
                     ):
                         error = 'This appointment proposal has expired. Contact the property manager.'
                         viewing = None
@@ -255,7 +287,7 @@ def viewing_request_status(request):
                             'scheduled_time',
                             'guest_responded_at',
                         ])
-                        ViewingRequestEvent.objects.create(
+                        event = ViewingRequestEvent.objects.create(
                             viewing_request=viewing,
                             event_type=event_type,
                             from_status=previous_status,
@@ -263,6 +295,7 @@ def viewing_request_status(request):
                             proposed_date=viewing.proposed_date,
                             proposed_time=viewing.proposed_time,
                         )
+                        notify_viewing_request_event(viewing, event, to_requester=False)
         else:
             error = 'Enter the private receipt token provided when the request was submitted.'
         if viewing is None and not error:

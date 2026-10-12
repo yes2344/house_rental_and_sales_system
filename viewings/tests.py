@@ -4,18 +4,26 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.models import Profile
+from owner_announcements.models import InAppNotification
 from properties.models import Property, PropertyBrokerAssignment
-from viewings.models import ViewingRequest
+from viewings.models import ViewingRequest, ViewingRequestEvent
 
 
 class PublicViewingRequestApiTests(APITestCase):
     def setUp(self):
+        self.customer = get_user_model().objects.create_user(
+            username='viewing-request-customer',
+            email='customer@example.com',
+        )
+        Profile.objects.create(user=self.customer)
+        self.client.force_authenticate(user=self.customer)
         self.property = Property.objects.create(
             title='Viewing request house',
             slug='viewing-request-house-api',
@@ -26,7 +34,8 @@ class PublicViewingRequestApiTests(APITestCase):
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
 
-    def test_anonymous_visitor_can_submit_request_without_pii_in_response(self):
+    def test_anonymous_visitor_must_authenticate_before_submitting(self):
+        self.client.force_authenticate(user=None)
         response = self.client.post(
             reverse('api:viewing-request-create'),
             {
@@ -40,10 +49,8 @@ class PublicViewingRequestApiTests(APITestCase):
             format='json',
         )
 
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['status'], 'pending')
-        self.assertNotIn('email', response.data)
-        self.assertNotIn('phone', response.data)
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(ViewingRequest.objects.exists())
 
     def test_past_date_returns_consistent_validation_error(self):
         response = self.client.post(
@@ -87,7 +94,7 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertEqual(response.status_code, 405)
 
     @patch.object(ScopedRateThrottle, 'get_rate', return_value='1/hour')
-    def test_anonymous_submission_is_rate_limited(self, _get_rate):
+    def test_authenticated_submission_is_rate_limited(self, _get_rate):
         cache.clear()
         self.addCleanup(cache.clear)
         payload = {
@@ -114,9 +121,34 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertEqual(limited_response.data['error']['status_code'], 429)
 
     def test_authenticated_public_submission_is_linked_to_requester(self):
-        user = get_user_model().objects.create_user(username='requester-customer')
-        Profile.objects.create(user=user)
-        self.client.force_authenticate(user=user)
+        response = self.client.post(
+            reverse('api:viewing-request-create'),
+            {
+                'property_id': self.property.pk,
+                'full_name': 'Registered Visitor',
+                'email': 'registered@example.com',
+                'phone': '+251900000000',
+                'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertNotIn('receipt_token', response.data)
+        viewing = ViewingRequest.objects.get(pk=response.data['id'])
+        self.assertEqual(
+            viewing.requester_id,
+            self.customer.pk,
+        )
+
+    def test_submitting_request_notifies_approved_brokers(self):
+        broker = get_user_model().objects.create_user(username='request-notification-broker')
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+        )
+        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
 
         response = self.client.post(
             reverse('api:viewing-request-create'),
@@ -131,40 +163,130 @@ class PublicViewingRequestApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        self.assertTrue(response.data['receipt_token'])
-        viewing = ViewingRequest.objects.get(pk=response.data['id'])
-        self.assertEqual(
-            viewing.receipt_token_digest,
-            hashlib.sha256(response.data['receipt_token'].encode()).hexdigest(),
-        )
-        self.assertNotEqual(viewing.receipt_token_digest, response.data['receipt_token'])
-        self.assertEqual(
-            viewing.requester_id,
-            user.pk,
-        )
+        notification = InAppNotification.objects.get(recipient=broker)
+        self.assertEqual(notification.notification_type, 'viewing_request_updated')
+        self.assertIn(str(response.data['id']), notification.idempotency_key)
 
-    def test_receipt_token_is_required_and_does_not_disclose_requester_details(self):
-        created = self.client.post(
+    def test_active_duplicate_request_is_conflict_and_database_constraint_is_race_safe(self):
+        payload = {
+            'property_id': self.property.pk,
+            'full_name': 'Registered Visitor',
+            'email': 'registered@example.com',
+            'phone': '+251900000000',
+            'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
+        }
+        first = self.client.post(reverse('api:viewing-request-create'), payload, format='json')
+        duplicate = self.client.post(reverse('api:viewing-request-create'), payload, format='json')
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertEqual(ViewingRequest.objects.filter(requester=self.customer).count(), 1)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ViewingRequest.objects.create(
+                    requester=self.customer,
+                    property=self.property,
+                    full_name='Duplicate',
+                    email='duplicate@example.com',
+                    phone='+251900000000',
+                    preferred_date=timezone.localdate() + timedelta(days=2),
+                )
+
+    def test_customer_can_submit_again_after_request_is_rejected(self):
+        first = self.client.post(
             reverse('api:viewing-request-create'),
             {
                 'property_id': self.property.pk,
-                'full_name': 'Private Visitor',
-                'email': 'private@example.com',
+                'full_name': 'Registered Visitor',
+                'email': 'registered@example.com',
                 'phone': '+251900000000',
                 'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
             },
             format='json',
         )
+        ViewingRequest.objects.filter(pk=first.data['id']).update(status=ViewingRequest.Status.REJECTED)
+
+        retry = self.client.post(
+            reverse('api:viewing-request-create'),
+            {
+                'property_id': self.property.pk,
+                'full_name': 'Registered Visitor',
+                'email': 'registered@example.com',
+                'phone': '+251900000000',
+                'preferred_date': (timezone.localdate() + timedelta(days=2)).isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(retry.status_code, 201)
+        self.assertEqual(ViewingRequest.objects.filter(requester=self.customer).count(), 2)
+
+    def test_customer_requests_are_paginated_private_and_cancel_keeps_history(self):
+        request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=self.property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=2),
+            preferred_time='10:30',
+        )
+        list_response = self.client.get(reverse('api:customer-viewing-list'))
+        canceled = self.client.post(
+            reverse('api:customer-viewing-cancel', kwargs={'pk': request.pk}),
+            {'message': 'My plans changed.'},
+            format='json',
+        )
+        request.refresh_from_db()
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_response.data['count'], 1)
+        self.assertEqual(list_response.data['results'][0]['property']['id'], self.property.pk)
+        self.assertEqual(canceled.status_code, 200)
+        self.assertEqual(canceled.data['status'], ViewingRequest.Status.CANCELLED)
+        self.assertEqual(request.events.count(), 1)
+        self.assertEqual(request.events.get().message, 'My plans changed.')
+
+    def test_customer_cannot_read_another_users_viewing_request(self):
+        request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=self.property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=2),
+        )
+        other_customer = get_user_model().objects.create_user(username='other-viewing-customer')
+        self.client.force_authenticate(user=other_customer)
+
+        listed = self.client.get(reverse('api:customer-viewing-list'))
+        detail = self.client.get(
+            reverse('api:customer-viewing-detail', kwargs={'pk': request.pk})
+        )
+
+        self.assertEqual(listed.data['count'], 0)
+        self.assertEqual(detail.status_code, 404)
+
+    def test_receipt_token_is_required_and_does_not_disclose_requester_details(self):
+        receipt_token = 'legacy-guest-private-token'
+        viewing = ViewingRequest.objects.create(
+            property=self.property,
+            full_name='Private Visitor',
+            email='private@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=1),
+            receipt_token_digest=hashlib.sha256(receipt_token.encode()).hexdigest(),
+        )
         receipt_url = reverse('api:viewing-request-receipt')
         unauthorized = self.client.get(receipt_url)
         authorized = self.client.get(
             receipt_url,
-            HTTP_X_VIEWING_RECEIPT=created.data['receipt_token'],
+            HTTP_X_VIEWING_RECEIPT=receipt_token,
         )
 
         self.assertEqual(unauthorized.status_code, 404)
         self.assertEqual(authorized.status_code, 200)
-        self.assertEqual(authorized.data['id'], created.data['id'])
+        self.assertEqual(authorized.data['id'], viewing.pk)
         self.assertNotIn('email', authorized.data)
         self.assertNotIn('phone', authorized.data)
         self.assertNotIn('full_name', authorized.data)
@@ -227,16 +349,16 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertIsNone(proposal.data['scheduled_date'])
         self.assertEqual(len(proposal.data['events']), 2)
 
-        guest_response = self.client.post(
-            reverse('api:viewing-request-receipt'),
+        self.client.force_authenticate(user=self.customer)
+        customer_response = self.client.post(
+            reverse('api:customer-viewing-response', kwargs={'pk': request.pk}),
             {'decision': 'accept'},
             format='json',
-            HTTP_X_VIEWING_RECEIPT=created.data['receipt_token'],
         )
-        self.assertEqual(guest_response.status_code, 200)
-        self.assertEqual(guest_response.data['status'], ViewingRequest.Status.CONFIRMED)
+        self.assertEqual(customer_response.status_code, 200)
+        self.assertEqual(customer_response.data['status'], ViewingRequest.Status.CONFIRMED)
         self.assertEqual(
-            guest_response.data['scheduled_date'],
+            customer_response.data['scheduled_date'],
             (timezone.localdate() + timedelta(days=2)).isoformat(),
         )
         request.refresh_from_db()
@@ -244,22 +366,20 @@ class PublicViewingRequestApiTests(APITestCase):
             request.events.order_by('-created_at', '-pk').first().event_type,
             'proposal_accepted',
         )
+        self.assertTrue(InAppNotification.objects.filter(recipient=self.customer).exists())
+        self.assertTrue(InAppNotification.objects.filter(recipient=manager).exists())
 
     def test_guest_reference_number_is_not_sufficient_to_retrieve_request(self):
-        created = self.client.post(
-            reverse('api:viewing-request-create'),
-            {
-                'property_id': self.property.pk,
-                'full_name': 'Private Visitor',
-                'email': 'private@example.com',
-                'phone': '+251900000000',
-                'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
-            },
-            format='json',
+        guest = ViewingRequest.objects.create(
+            property=self.property,
+            full_name='Private Visitor',
+            email='private@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=1),
         )
 
         response = self.client.get(
-            f"{reverse('api:viewing-request-receipt')}?id={created.data['id']}"
+            f"{reverse('api:viewing-request-receipt')}?id={guest.pk}"
         )
 
         self.assertEqual(response.status_code, 404)
@@ -450,3 +570,63 @@ class ManagedViewingRequestApiTests(APITestCase):
 
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(hidden.status_code, 403)
+
+    def test_broker_can_confirm_requested_slot_and_customer_is_notified(self):
+        customer = get_user_model().objects.create_user(username='appointment-customer')
+        Profile.objects.create(user=customer)
+        request = ViewingRequest.objects.create(
+            property=self.property,
+            requester=customer,
+            full_name='Appointment Customer',
+            email='appointment@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=3),
+            preferred_time='11:30',
+        )
+        self.client.force_authenticate(user=self.broker)
+
+        response = self.client.post(
+            reverse('api:managed-viewing-action', kwargs={'pk': request.pk}),
+            {'action': 'confirm_requested', 'message': 'We will meet at the entrance.'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], ViewingRequest.Status.CONFIRMED)
+        self.assertEqual(response.data['scheduled_time'], '11:30:00')
+        self.assertTrue(InAppNotification.objects.filter(recipient=customer).exists())
+        request.refresh_from_db()
+        event = request.events.latest('pk')
+        self.assertEqual(event.event_type, ViewingRequestEvent.Type.REQUEST_CONFIRMED)
+        self.assertEqual(event.message, 'We will meet at the entrance.')
+
+    def test_broker_cannot_complete_a_viewing_before_its_scheduled_time(self):
+        request = ViewingRequest.objects.create(
+            property=self.property,
+            full_name='Completed Test Customer',
+            email='completed@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=3),
+            status=ViewingRequest.Status.CONFIRMED,
+            scheduled_date=timezone.localdate() + timedelta(days=2),
+            scheduled_time='14:00',
+        )
+        self.client.force_authenticate(user=self.broker)
+
+        early_response = self.client.post(
+            reverse('api:managed-viewing-action', kwargs={'pk': request.pk}),
+            {'action': 'complete'},
+            format='json',
+        )
+        self.assertEqual(early_response.status_code, 409)
+
+        request.scheduled_date = timezone.localdate() - timedelta(days=1)
+        request.save(update_fields=['scheduled_date'])
+        completed = self.client.post(
+            reverse('api:managed-viewing-action', kwargs={'pk': request.pk}),
+            {'action': 'complete'},
+            format='json',
+        )
+
+        self.assertEqual(completed.status_code, 200)
+        self.assertEqual(completed.data['status'], ViewingRequest.Status.COMPLETED)

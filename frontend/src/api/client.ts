@@ -98,6 +98,8 @@ export function getErrorMessage(error: unknown): string {
     if (Object.keys(fieldErrors).length) return Object.values(fieldErrors).join(' ');
     const apiMessage = error.response?.data?.error?.message;
     if (typeof apiMessage === 'string') return apiMessage;
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
     if (error.response) return `The server returned an error (${error.response.status}).`;
     return 'The server could not be reached. Check that the Django API is running.';
   }

@@ -3,12 +3,13 @@ import axios from 'axios';
 import { ArrowLeft, CalendarDays, CheckCircle2, MapPin } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { useAuth } from '../AuthContext';
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import { getProperty, type PropertyDetail } from '../api/properties';
 import { createViewingRequest, type ViewingRequestReceipt } from '../api/viewings';
 import type { Locale, MessageKey } from '../i18n';
 
-type ViewingRequestField = 'full_name' | 'email' | 'phone' | 'preferred_date' | 'message';
+type ViewingRequestField = 'full_name' | 'email' | 'phone' | 'preferred_date' | 'preferred_time' | 'message';
 type FieldErrors = Partial<Record<ViewingRequestField, string>>;
 
 interface ViewingRequestPageProps {
@@ -21,6 +22,7 @@ interface FormValues {
   email: string;
   phone: string;
   preferred_date: string;
+  preferred_time: string;
   message: string;
 }
 
@@ -29,6 +31,7 @@ const emptyForm: FormValues = {
   email: '',
   phone: '',
   preferred_date: '',
+  preferred_time: '',
   message: '',
 };
 
@@ -38,6 +41,7 @@ function localDateString(date: Date): string {
 }
 
 export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
+  const { account } = useAuth();
   const [searchParams] = useSearchParams();
   const propertyIdParam = searchParams.get('property_id');
   const propertyId = Number(propertyIdParam);
@@ -55,6 +59,16 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<ViewingRequestReceipt | null>(null);
   const minimumDate = useMemo(() => localDateString(new Date()), []);
+
+  useEffect(() => {
+    if (!account) return;
+    setValues((previous) => ({
+      ...previous,
+      full_name: previous.full_name || [account.first_name, account.last_name].filter(Boolean).join(' ') || account.username,
+      email: previous.email || account.email,
+      phone: previous.phone || account.phone,
+    }));
+  }, [account]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,6 +121,7 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
         email: values.email.trim(),
         phone: values.phone.trim(),
         preferred_date: values.preferred_date,
+        ...(values.preferred_time ? { preferred_time: values.preferred_time } : {}),
         message: values.message.trim(),
       });
       setReceipt(response);
@@ -117,6 +132,7 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
         email: apiErrors.email,
         phone: apiErrors.phone,
         preferred_date: apiErrors.preferred_date,
+        preferred_time: apiErrors.preferred_time,
         message: apiErrors.message,
       });
       if (apiErrors.property_id) {
@@ -195,20 +211,12 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
                 <p>{text('requestSuccessBody')}</p>
                 <p className="viewing-receipt">{text('requestReference')}: #{receipt.id} · {text('requestPending')}</p>
                 {values.message.trim() && <p className="viewing-submitted-message"><strong>{text('yourMessage')}:</strong> {values.message.trim()}</p>}
-                <p>{text('receiptTokenHelp')}</p>
-                <details className="viewing-token-details">
-                  <summary>{text('showRequestToken')}</summary>
-                  <code className="viewing-receipt-token">{receipt.receipt_token}</code>
-                </details>
-                <Link
-                  className="button button-outline"
-                  to="/viewing-requests/status"
-                  state={{ token: receipt.receipt_token }}
-                >
-                  {text('checkRequestStatus')}
-                </Link>
+                <p>{text('requestTrackedInAccount')}</p>
               </div>
               <div className="viewing-success-actions">
+                <Link className="button button-outline" to="/viewing-requests">
+                  {text('yourViewingRequests')}
+                </Link>
                 <Link className="button button-primary" to={`/properties/${encodeURIComponent(property.slug)}`}>
                   {text('backToListing')}
                 </Link>
@@ -284,6 +292,19 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
                       />
                     </span>
                     {fieldErrors.preferred_date && <small id="viewing-date-error" className="viewing-field-error">{fieldErrors.preferred_date}</small>}
+                  </label>
+                  <label className="viewing-form-field" htmlFor="viewing-preferred-time">
+                    <span>{text('preferredTime')} <b aria-hidden="true">*</b></span>
+                    <input
+                      id="viewing-preferred-time"
+                      name="preferred_time"
+                      type="time"
+                      value={values.preferred_time}
+                      aria-invalid={Boolean(fieldErrors.preferred_time)}
+                      aria-describedby={fieldErrors.preferred_time ? 'viewing-time-error' : undefined}
+                      onChange={(event) => updateField('preferred_time', event.target.value)}
+                    />
+                    {fieldErrors.preferred_time && <small id="viewing-time-error" className="viewing-field-error">{fieldErrors.preferred_time}</small>}
                   </label>
                   <label className="viewing-form-field viewing-message-field" htmlFor="viewing-message">
                     <span>{text('optionalMessage')}</span>

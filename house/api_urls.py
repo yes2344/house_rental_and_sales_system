@@ -45,7 +45,9 @@ from properties.views import (
 )
 from owner_announcements.api_views import (
     BrokerAnnouncementDecisionView,
+    BrokerAnnouncementDetailView,
     BrokerAnnouncementListView,
+    BrokerAnnouncementRenewalView,
     BrokerAgreementOverviewView,
     InAppNotificationListView,
     InAppNotificationReadView,
@@ -57,6 +59,11 @@ from owner_announcements.api_views import (
     OwnerAnnouncementWithdrawView,
 )
 from viewings.views import (
+    CustomerViewingRequestCancelView,
+    CustomerViewingRequestDetailView,
+    CustomerViewingRequestListView,
+    CustomerViewingRequestResponseView,
+    ManagedViewingRequestActionView,
     ManagedViewingRequestDetailView,
     ManagedViewingRequestListView,
     PrivateGuestReceiptView,
@@ -91,7 +98,9 @@ urlpatterns = [
     path('owner/announcements/<int:pk>/renew/', OwnerAnnouncementRenewalView.as_view(), name='owner-announcement-renewal'),
     path('owner/announcements/<int:pk>/withdraw/', OwnerAnnouncementWithdrawView.as_view(), name='owner-announcement-withdraw'),
     path('management/owner-announcements/', BrokerAnnouncementListView.as_view(), name='management-owner-announcement-list'),
+    path('management/owner-announcements/<int:pk>/', BrokerAnnouncementDetailView.as_view(), name='management-owner-announcement-detail'),
     path('management/owner-announcements/<int:pk>/decision/', BrokerAnnouncementDecisionView.as_view(), name='management-owner-announcement-decision'),
+    path('management/owner-announcements/<int:pk>/renewal/', BrokerAnnouncementRenewalView.as_view(), name='management-owner-announcement-renewal'),
     path('management/owner-announcements/agreements/', BrokerAgreementOverviewView.as_view(), name='management-owner-agreement-overview'),
     path('notifications/', InAppNotificationListView.as_view(), name='notification-list'),
     path('notifications/<int:pk>/read/', InAppNotificationReadView.as_view(), name='notification-read'),
@@ -102,6 +111,22 @@ urlpatterns = [
         'viewing-requests/receipt/',
         PrivateGuestReceiptView.as_view(),
         name='viewing-request-receipt',
+    ),
+    path('viewing-requests/mine/', CustomerViewingRequestListView.as_view(), name='customer-viewing-list'),
+    path(
+        'viewing-requests/mine/<int:pk>/',
+        CustomerViewingRequestDetailView.as_view(),
+        name='customer-viewing-detail',
+    ),
+    path(
+        'viewing-requests/mine/<int:pk>/respond/',
+        CustomerViewingRequestResponseView.as_view(),
+        name='customer-viewing-response',
+    ),
+    path(
+        'viewing-requests/mine/<int:pk>/cancel/',
+        CustomerViewingRequestCancelView.as_view(),
+        name='customer-viewing-cancel',
     ),
     path('management/properties/', ManagedPropertyListCreateView.as_view(), name='managed-property-list'),
     path('management/homepage-notes/', ManagedHomepageNoteListCreateView.as_view(), name='managed-homepage-note-list'),
@@ -127,6 +152,11 @@ urlpatterns = [
         'management/viewing-requests/<int:pk>/',
         ManagedViewingRequestDetailView.as_view(),
         name='managed-viewing-detail',
+    ),
+    path(
+        'management/viewing-requests/<int:pk>/action/',
+        ManagedViewingRequestActionView.as_view(),
+        name='managed-viewing-action',
     ),
     path('admin/users/', AdminUserListView.as_view(), name='admin-user-list'),
     path('admin/users/<int:pk>/', AdminUserDetailView.as_view(), name='admin-user-detail'),

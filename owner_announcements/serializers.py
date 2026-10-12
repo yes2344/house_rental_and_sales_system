@@ -45,6 +45,7 @@ class AnnouncementPropertySerializer(serializers.ModelSerializer):
         read_only=True,
         default='',
     )
+    administrative_location_path = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
 
     class Meta:
@@ -56,6 +57,8 @@ class AnnouncementPropertySerializer(serializers.ModelSerializer):
             'location',
             'administrative_location',
             'administrative_location_name',
+            'administrative_location_path',
+            'publication_status',
             'property_type',
             'listing_type',
             'price',
@@ -82,6 +85,14 @@ class AnnouncementPropertySerializer(serializers.ModelSerializer):
             }
             for image in obj.images.all()
         ]
+
+    def get_administrative_location_path(self, obj):
+        location = obj.administrative_location
+        labels = []
+        while location is not None:
+            labels.append(location.name)
+            location = location.parent
+        return list(reversed(labels))
 
 
 class OwnerAnnouncementEventSerializer(serializers.ModelSerializer):
@@ -317,14 +328,21 @@ class OwnerAnnouncementSubmissionSerializer(serializers.Serializer):
 
 
 class BrokerAnnouncementSerializer(OwnerAnnouncementSerializer):
+    submitter_name = serializers.SerializerMethodField()
+
     class Meta(OwnerAnnouncementSerializer.Meta):
         fields = OwnerAnnouncementSerializer.Meta.fields + [
+            'submitter_name',
             'authorization_confirmed',
             'terms_accepted_at',
             'reviewed_by_id',
             'created_at',
             'updated_at',
         ]
+
+    def get_submitter_name(self, obj):
+        full_name = obj.submitter.get_full_name().strip()
+        return full_name or obj.submitter.get_username()
 
 
 class BrokerAnnouncementDecisionSerializer(serializers.Serializer):

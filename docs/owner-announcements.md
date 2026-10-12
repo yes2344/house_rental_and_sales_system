@@ -6,9 +6,20 @@ The owner-announcement service is separate from broker-managed listings:
 2. The submission creates a property with `service_type=owner_announced` and `publication_status=pending_review`. It does not appear in public search.
 3. Active brokers with `announcements.review` receive in-app notifications when an owner submits or resubmits a property. An authorized broker reviews it, records an agreement period, and explicitly chooses whether owner contact details and exact coordinates may be public.
 4. The public property API and server-rendered listing pages show an owner-announced property only while its status is approved and an active agreement includes the current date. Contact details are separately gated by the agreement's public-contact choice.
-5. Owners can request renewal, withdraw an announcement, review its status, and read in-app notifications. Brokers can review submissions and suspend an approved announcement.
+5. Owners can request renewal, withdraw an announcement, review its status, and read in-app notifications. Brokers can review submissions, suspend an approved announcement, and request an owner-led renewal discussion for an expired announcement. Renewal discussion does not republish a listing; a new agreement must still be approved.
 
 Private owner contact details are kept on `OwnerAnnouncement`; they are not copied to public property fields. Owners must still provide accurate details, and their authorization checkbox is a self-attestation, not document or identity verification. The current project has no email/phone verification, email delivery, or SMS provider. Notifications are in-app only, and owners' listings remain pending until broker approval.
+
+## Broker announcement dashboard
+
+The broker dashboard is backed by management endpoints protected by the `announcements.review` permission:
+
+- `GET /api/v1/management/owner-announcements/` returns paginated announcements, real queue summary counts, and server-side `queue`, `search`, `location`, `property_type`, `listing_type`, `publication_status`, expiry, and ordering filters.
+- `GET /api/v1/management/owner-announcements/{id}/` returns protected review details, including private owner contact information and agreement history.
+- `POST /api/v1/management/owner-announcements/{id}/decision/` records a validated review decision. Approval requires the agreement dates/terms and explicit contact/location visibility choices.
+- `POST /api/v1/management/owner-announcements/{id}/renewal/` lets a broker start renewal discussions only for an expired announcement. It records an audit event and notifies the owner without changing publication status.
+
+The dashboard keeps filters and pagination in the URL, displays agreement dates and approaching expiries on compact responsive cards, and keeps review forms in the protected details dialog. Public property cards do not expose broker actions or private owner details.
 
 ## Locations
 
