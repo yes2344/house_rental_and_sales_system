@@ -163,6 +163,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const [makePrimary, setMakePrimary] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [gpsMessage, setGpsMessage] = useState('');
+  const [gpsLoading, setGpsLoading] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -243,10 +244,11 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
 
   const useCurrentLocation = () => {
     setGpsMessage('');
-    if (!navigator.geolocation) {
+    if (!window.isSecureContext || !navigator.geolocation) {
       setGpsMessage(text('gpsUnavailable'));
       return;
     }
+    setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         updateCoordinates({
@@ -254,15 +256,21 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           longitude: coords.longitude,
         });
         setGpsMessage(text('gpsLocationLoaded'));
+        setGpsLoading(false);
       },
       (error) => {
         setGpsMessage(
           error.code === error.PERMISSION_DENIED
             ? text('gpsPermissionDenied')
-            : text('gpsUnavailable'),
+            : error.code === error.POSITION_UNAVAILABLE
+              ? text('gpsPositionUnavailable')
+              : error.code === error.TIMEOUT
+                ? text('gpsTimeout')
+                : text('gpsUnavailable'),
         );
+        setGpsLoading(false);
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
   };
 
@@ -584,8 +592,14 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           <h2>{text('propertyLocation')}</h2>
           <p className="manager-hint">{text('propertyLocationHint')}</p>
           <div className="location-picker-actions">
-            <button className="button button-outline button-small" type="button" onClick={useCurrentLocation}>
-              <LocateFixed size={15} aria-hidden="true" />{text('useCurrentLocation')}
+            <button
+              className="button button-outline button-small"
+              type="button"
+              onClick={useCurrentLocation}
+              disabled={gpsLoading}
+            >
+              <LocateFixed size={15} aria-hidden="true" />
+              {gpsLoading ? text('gpsLoading') : text('useCurrentLocation')}
             </button>
             <button
               className="button button-outline button-small"

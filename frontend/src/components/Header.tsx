@@ -22,14 +22,18 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const [loggingOut, setLoggingOut] = useState(false);
   const { account, authLoading, signOut } = useAuth();
   const { contact } = useBrokerageContact();
-  const canManageListings = Boolean(account?.is_platform_owner || account?.management_permissions.some(
-    (permission) => [
-      'properties.view_all',
-      'properties.moderate',
-      'properties.edit_all',
-      'properties.manage_assigned',
-    ].includes(permission),
-  ));
+  const canManageListings = Boolean(
+    account?.is_platform_owner
+    || (
+      (account?.role === 'broker' || account?.role === 'administrator')
+      && account.management_permissions.some((permission) => [
+        'properties.view_all',
+        'properties.moderate',
+        'properties.edit_all',
+        'properties.manage_assigned',
+      ].includes(permission))
+    ),
+  );
   const closeMenu = () => setMenuOpen(false);
   const logout = () => {
     setLogoutError('');

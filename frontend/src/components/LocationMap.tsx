@@ -35,8 +35,7 @@ interface LocationMapProps {
   zoom?: number;
 }
 
-// Approximate city center returned by OpenStreetMap Nominatim.
-const ADDIS_ABABA_MAP_VIEW: L.LatLngTuple = [9.0358119, 38.7524315];
+const DEFAULT_MAP_VIEW: L.LatLngTuple = [9.145, 40.489];
 
 function formatCoordinates(coordinates: PropertyCoordinates): string {
   return `${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}`;
@@ -63,7 +62,7 @@ function MapFocus({ coordinates }: { coordinates: PropertyCoordinates | null }) 
     if (coordinates) {
       map.setView([coordinates.latitude, coordinates.longitude], Math.max(map.getZoom(), 16));
     }
-  }, [coordinates, map]);
+  }, [coordinates?.latitude, coordinates?.longitude, map]);
 
   return null;
 }
@@ -80,7 +79,7 @@ export function LocationMap({
   const markerRef = useRef<L.Marker>(null);
   const center: L.LatLngExpression = coordinates
     ? [coordinates.latitude, coordinates.longitude]
-    : ADDIS_ABABA_MAP_VIEW;
+    : DEFAULT_MAP_VIEW;
 
   return (
     <MapContainer
