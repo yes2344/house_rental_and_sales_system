@@ -3,7 +3,17 @@ import { ArrowRight, ChevronDown, ListFilter, Search, SlidersHorizontal } from '
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
-import { getProperties, type ListingType, type PaginatedResponse, type PropertyFilters, type PropertySummary, type PropertyType } from '../api/properties';
+import {
+  getLocations,
+  getLocationsByTypes,
+  getProperties,
+  type ListingType,
+  type MarketplaceLocation,
+  type PaginatedResponse,
+  type PropertyFilters,
+  type PropertySummary,
+  type PropertyType,
+} from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
 import { LocationCascade } from '../components/LocationCascade';
 import { LocationSearchInput } from '../components/LocationSearchInput';
@@ -17,6 +27,7 @@ interface FilterValues {
   property_type: string;
   location: string;
   location_id: string;
+  city_id: string;
   min_price: string;
   max_price: string;
   min_bedrooms: string;
@@ -36,6 +47,7 @@ function readFilters(params: URLSearchParams): FilterValues {
     property_type: params.get('property_type') ?? '',
     location: params.get('location') ?? '',
     location_id: params.get('location_id') ?? '',
+    city_id: params.get('city_id') ?? '',
     min_price: params.get('min_price') ?? '',
     max_price: params.get('max_price') ?? '',
     min_bedrooms: params.get('min_bedrooms') ?? '',
@@ -76,6 +88,7 @@ function toApiFilters(params: URLSearchParams): PropertyFilters {
     property_type: validPropertyTypes.includes(propertyType ?? '') ? propertyType as PropertyType : undefined,
     location: params.get('location') || undefined,
     location_id: Number(params.get('location_id')) > 0 ? Number(params.get('location_id')) : undefined,
+    city_id: Number(params.get('city_id')) > 0 ? Number(params.get('city_id')) : undefined,
     min_price: params.get('min_price') || undefined,
     max_price: params.get('max_price') || undefined,
     min_bedrooms: params.get('min_bedrooms') || undefined,
@@ -101,9 +114,40 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
   const [moreError, setMoreError] = useState('');
   const [filterError, setFilterError] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [cities, setCities] = useState<MarketplaceLocation[]>([]);
+  const [cityOptionsError, setCityOptionsError] = useState('');
+  const [childLocations, setChildLocations] = useState<MarketplaceLocation[]>([]);
   const moreRequestController = useRef<AbortController | null>(null);
   const apiFilters = useMemo(() => toApiFilters(searchParams), [searchParams]);
   const currentPage = apiFilters.page ?? 1;
+  const selectedCityId = Number(searchParams.get('city_id')) || 0;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getLocationsByTypes(['city', 'city_administration'], controller.signal)
+      .then((options) => {
+        setCities(options);
+        setCityOptionsError('');
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCityOptionsError(text('locationLoadError'));
+      });
+    return () => controller.abort();
+  }, [text]);
+
+  useEffect(() => {
+    if (!selectedCityId) {
+      setChildLocations([]);
+      return undefined;
+    }
+    const controller = new AbortController();
+    void getLocations(selectedCityId, controller.signal)
+      .then(setChildLocations)
+      .catch(() => {
+        if (!controller.signal.aborted) setChildLocations([]);
+      });
+    return () => controller.abort();
+  }, [selectedCityId]);
 
   const loadProperties = useCallback(async (signal?: AbortSignal) => {
     moreRequestController.current?.abort();
@@ -183,6 +227,25 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
     setSearchParams({});
   };
 
+  const selectCity = (cityId: number | null) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('page');
+    params.delete('location');
+    params.delete('location_id');
+    if (cityId === null) params.delete('city_id');
+    else params.set('city_id', String(cityId));
+    setSearchParams(params);
+  };
+
+  const selectChildLocation = (locationId: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete('page');
+    params.delete('location');
+    if (locationId) params.set('location_id', locationId);
+    else params.delete('location_id');
+    setSearchParams(params);
+  };
+
   const firstResult = result?.count ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
   const loadedProperties = [...(result?.results ?? []), ...additionalProperties];
   const lastResult = result ? Math.min(firstResult + loadedProperties.length - 1, result.count) : 0;
@@ -223,6 +286,47 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
             </select>
           </label>
         </div>
+
+        <nav className="city-filter-bar" aria-label={text('filterByCity')}>
+          <button
+            type="button"
+            className={`city-filter-chip${selectedCityId === 0 ? ' is-active' : ''}`}
+            aria-pressed={selectedCityId === 0}
+            onClick={() => selectCity(null)}
+          >
+            {text('allCities')}
+          </button>
+          {cities.map((city) => (
+            <button
+              className={`city-filter-chip${selectedCityId === city.id ? ' is-active' : ''}`}
+              key={city.id}
+              type="button"
+              aria-pressed={selectedCityId === city.id}
+              onClick={() => selectCity(city.id)}
+            >
+              {locale === 'am' && city.name_am ? city.name_am : city.name}
+            </button>
+          ))}
+          {cityOptionsError && <span className="city-filter-error" role="status">{cityOptionsError}</span>}
+          {selectedCityId > 0 && childLocations.length > 0 && (
+            <label className="city-subdivision-filter">
+              <span>{text('filterByArea')}</span>
+              <select
+                value={childLocations.some((item) => item.id === Number(formValues.location_id))
+                  ? formValues.location_id
+                  : ''}
+                onChange={(event) => selectChildLocation(event.target.value)}
+              >
+                <option value="">{text('allAreas')}</option>
+                {childLocations.map((child) => (
+                  <option value={child.id} key={child.id}>
+                    {locale === 'am' && child.name_am ? child.name_am : child.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </nav>
 
         <div className="results-layout">
           <aside className={`filter-sidebar${filtersExpanded ? ' is-expanded' : ''}`}>
@@ -276,19 +380,23 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
                   onChange={(value) => {
                     updateValue('location', value);
                     updateValue('location_id', '');
+                    updateValue('city_id', '');
                   }}
                   onSelect={(location) => {
                     updateValue('location', locale === 'am' && location.name_am ? location.name_am : location.name);
                     updateValue('location_id', String(location.id));
+                    updateValue('city_id', location.city_id ? String(location.city_id) : '');
                   }}
                 />
               </div>
               <LocationCascade
                 value={formValues.location_id}
                 locale={locale}
+                text={text}
                 onChange={(value) => {
                   updateValue('location_id', value);
                   updateValue('location', '');
+                  updateValue('city_id', '');
                 }}
               />
 

@@ -27,6 +27,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
         {canViewProperties && <NavLink to="/management/listings" end>{text('managerListings')}</NavLink>}
         {canViewRequests && <NavLink to="/management/viewing-requests">{text('managerViewingRequests')}</NavLink>}
         {canManageSettings && <NavLink to="/management/brokerage">{text('managerContactSettings')}</NavLink>}
+        {canManageSettings && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
         {canManageBrokers && <a href="/admin-portal/delegated-accounts/">{text('managerBrokerAccounts')}</a>}
       </nav>
       <Outlet />

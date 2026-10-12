@@ -23,6 +23,7 @@ class PublicPropertyFilter(django_filters.FilterSet):
     location = django_filters.CharFilter(method='filter_location_text')
     amenities = django_filters.CharFilter(method='filter_amenities')
     location_id = django_filters.NumberFilter(method='filter_location')
+    city_id = django_filters.NumberFilter(method='filter_location')
 
     class Meta:
         model = Property

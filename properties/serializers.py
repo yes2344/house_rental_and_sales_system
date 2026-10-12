@@ -1,3 +1,4 @@
+from copy import copy
 from decimal import Decimal
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.text import slugify
@@ -12,6 +13,8 @@ from properties.search_terms import normalize_search_text
 
 class LocationSerializer(serializers.ModelSerializer):
     parent_id = serializers.IntegerField(read_only=True, allow_null=True)
+    city_id = serializers.SerializerMethodField()
+    slug = serializers.SlugField(required=False, allow_blank=True, max_length=140)
     parent = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         required=False,
@@ -22,11 +25,12 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields = [
-            'id', 'name', 'name_am', 'aliases_en', 'aliases_am', 'slug', 'location_type', 'parent_id', 'parent',
+            'id', 'name', 'name_am', 'aliases_en', 'aliases_am', 'slug', 'location_type', 'parent_id',
+            'city_id', 'parent',
             'is_active', 'display_order', 'latitude', 'longitude',
         ]
-        extra_kwargs = {'slug': {'required': False}}
         read_only_fields = ['id', 'parent_id']
+        validators = []
 
     aliases_en = serializers.ListField(
         child=serializers.CharField(max_length=120, allow_blank=False, trim_whitespace=True),
@@ -44,7 +48,21 @@ class LocationSerializer(serializers.ModelSerializer):
     def validate_parent(self, value):
         if value is not None and not value.is_active:
             raise serializers.ValidationError('An active location must have an active parent.')
+        ancestor = value
+        while ancestor is not None:
+            if self.instance is not None and ancestor.pk == self.instance.pk:
+                raise serializers.ValidationError('A location cannot be placed beneath itself or one of its descendants.')
+            ancestor = ancestor.parent
         return value
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_city_id(self, obj):
+        current = obj
+        while current is not None:
+            if current.location_type in (Location.Type.CITY, Location.Type.CITY_ADMINISTRATION):
+                return current.pk
+            current = current.parent
+        return None
 
     def validate_aliases_en(self, value):
         return self._normalize_aliases(value)
@@ -62,16 +80,104 @@ class LocationSerializer(serializers.ModelSerializer):
         return aliases
 
     def validate(self, attrs):
-        location = self.instance or Location()
+        location = copy(self.instance) if self.instance is not None else Location()
         for field, value in attrs.items():
             setattr(location, field, value)
-        if not location.slug:
-            location.slug = slugify(location.name)
+        if (
+            self.instance is not None
+            and self.instance.is_active
+            and attrs.get('is_active') is False
+            and _location_has_active_descendants(self.instance)
+        ):
+            raise serializers.ValidationError({
+                'is_active': 'Deactivate active descendant locations before deactivating this location.',
+            })
+        if location.is_active:
+            ancestor = location.parent
+            while ancestor is not None:
+                if not ancestor.is_active:
+                    raise serializers.ValidationError({
+                        'is_active': 'Every parent location must be active for this location to be active.',
+                    })
+                ancestor = ancestor.parent
+        if (
+            self.instance is not None
+            and 'parent' in attrs
+            and attrs['parent'] != self.instance.parent
+            and _location_subtree_has_properties(self.instance)
+        ):
+            raise serializers.ValidationError({
+                'parent': 'This location or its descendants are used by property records; reassign them before changing the hierarchy.',
+            })
+
+        candidate_slug = (attrs.get('slug') or getattr(location, 'slug', None) or '').strip()
+        if not candidate_slug:
+            candidate_slug = slugify(location.name)
+        candidate_parent = attrs.get('parent', getattr(location, 'parent', None))
+
+        query = Location.objects.filter(slug=candidate_slug)
+        if self.instance is not None:
+            query = query.exclude(pk=self.instance.pk)
+        if candidate_parent is None:
+            if query.filter(parent__isnull=True).exists():
+                raise serializers.ValidationError({'slug': 'A root location with this slug already exists.'})
+        else:
+            if query.filter(parent=candidate_parent).exists():
+                raise serializers.ValidationError({'slug': 'A location with this slug already exists beneath the selected parent.'})
+
+        location.slug = candidate_slug
+        attrs['slug'] = candidate_slug
+        if candidate_parent is not None and 'parent' not in attrs:
+            attrs['parent'] = candidate_parent
         try:
             location.full_clean()
         except DjangoValidationError as error:
             raise serializers.ValidationError(error.message_dict if hasattr(error, 'message_dict') else error.messages) from error
         return attrs
+
+
+def _location_subtree_has_properties(location):
+    frontier = {location.pk}
+    visited = set()
+    while frontier:
+        visited.update(frontier)
+        if Property.objects.filter(administrative_location_id__in=frontier).exists():
+            return True
+        frontier = set(
+            Location.objects.filter(parent_id__in=frontier)
+            .exclude(pk__in=visited)
+            .values_list('pk', flat=True)
+        )
+    return False
+
+
+def _location_has_active_descendants(location):
+    frontier = set(location.children.values_list('pk', flat=True))
+    visited = set()
+    while frontier:
+        if Location.objects.filter(pk__in=frontier, is_active=True).exists():
+            return True
+        visited.update(frontier)
+        frontier = set(
+            Location.objects.filter(parent_id__in=frontier)
+            .exclude(pk__in=visited)
+            .values_list('pk', flat=True)
+        )
+    return False
+
+
+def _location_path(location):
+    path = []
+    current = location
+    while current is not None:
+        path.append({
+            'id': current.pk,
+            'name': current.name,
+            'name_am': current.name_am,
+            'location_type': current.location_type,
+        })
+        current = current.parent
+    return list(reversed(path))
 
 
 class AmenitySerializer(serializers.ModelSerializer):
@@ -105,6 +211,7 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     latitude = serializers.SerializerMethodField()
     longitude = serializers.SerializerMethodField()
     location_name = serializers.SerializerMethodField()
+    location_path = serializers.SerializerMethodField()
     service_type = serializers.CharField(read_only=True)
     public_contact_name = serializers.SerializerMethodField()
     public_contact_phone = serializers.SerializerMethodField()
@@ -119,6 +226,7 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
             'location',
             'administrative_location',
             'location_name',
+            'location_path',
             'latitude',
             'longitude',
             'category',
@@ -162,6 +270,10 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_location_name(self, obj):
         return obj.administrative_location.name if obj.administrative_location_id else ''
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_location_path(self, obj):
+        return _location_path(obj.administrative_location) if obj.administrative_location_id else []
 
     def _public_broker_managed_listing(self, obj):
         broker = obj.submitted_by
@@ -222,10 +334,11 @@ class PublicPropertyDetailSerializer(PublicPropertyListSerializer):
 
 class PropertyManagementSerializer(serializers.ModelSerializer):
     administrative_location = serializers.PrimaryKeyRelatedField(
-        queryset=Location.objects.filter(is_active=True),
+        queryset=Location.objects.all(),
         required=False,
         allow_null=True,
     )
+    location_path = serializers.SerializerMethodField()
     category = serializers.ChoiceField(source='property_type', choices=Property.PROPERTY_TYPES)
     listing_type = serializers.ChoiceField(choices=Property.ListingType.choices)
     status = serializers.ChoiceField(
@@ -293,6 +406,7 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'slug',
             'location',
             'administrative_location',
+            'location_path',
             'latitude',
             'longitude',
             'exact_location_is_public',
@@ -334,6 +448,10 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField())
     def get_currency(self, obj):
         return 'ETB'
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_location_path(self, obj):
+        return _location_path(obj.administrative_location) if obj.administrative_location_id else []
 
     def validate(self, attrs):
         listing_type = attrs.get(
@@ -378,6 +496,61 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'latitude': 'Provide both latitude and longitude, or leave both empty.'}
             )
+        location_submitted = 'administrative_location' in attrs
+        administrative_location = attrs.get(
+            'administrative_location',
+            self.instance.administrative_location if self.instance else None,
+        )
+        if (self.instance is None or location_submitted) and administrative_location is None:
+            raise serializers.ValidationError({
+                'administrative_location': 'Select a configured city or town and its applicable area.',
+            })
+        if administrative_location is not None:
+            location_is_unchanged = (
+                self.instance is not None
+                and administrative_location.pk == self.instance.administrative_location_id
+            )
+            if not administrative_location.is_active and not location_is_unchanged:
+                raise serializers.ValidationError({
+                    'administrative_location': 'Choose an active location for a new or changed listing.',
+                })
+            if not location_is_unchanged:
+                path = []
+                current = administrative_location
+                while current is not None:
+                    path.append(current)
+                    current = current.parent
+                if any(not item.is_active for item in path):
+                    raise serializers.ValidationError({
+                        'administrative_location': 'Every level in the selected location path must be active.',
+                    })
+                city_ids = [
+                    item.pk for item in path
+                    if item.location_type in (Location.Type.CITY, Location.Type.CITY_ADMINISTRATION)
+                ]
+                if not city_ids:
+                    raise serializers.ValidationError({
+                        'administrative_location': 'Select a city or town in the location hierarchy.',
+                    })
+                subcity_parent_ids = set(
+                    Location.objects.filter(
+                        parent_id__in=city_ids,
+                        location_type=Location.Type.SUBCITY,
+                        is_active=True,
+                    ).values_list('parent_id', flat=True)
+                )
+                if any(
+                    item.pk in subcity_parent_ids
+                    and not any(
+                        path_item.location_type == Location.Type.SUBCITY
+                        and path_item.parent_id == item.pk
+                        for path_item in path
+                    )
+                    for item in path
+                ):
+                    raise serializers.ValidationError({
+                        'administrative_location': 'Select a sub-city/kifle ketema for this city.',
+                    })
         return attrs
 
     @transaction.atomic

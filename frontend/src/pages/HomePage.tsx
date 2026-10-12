@@ -22,8 +22,9 @@ export function HomePage({ locale, text }: HomePageProps) {
   const { contact } = useBrokerageContact();
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [propertyType, setPropertyType] = useState('');
-  const [location, setLocation] = useState('Addis Ababa');
+  const [location, setLocation] = useState('');
   const [locationId, setLocationId] = useState<number | null>(null);
+  const [cityId, setCityId] = useState<number | null>(null);
   const [properties, setProperties] = useState<PropertySummary[]>([]);
   const [listingsLoading, setListingsLoading] = useState(true);
   const [listingsError, setListingsError] = useState('');
@@ -49,6 +50,7 @@ export function HomePage({ locale, text }: HomePageProps) {
     const query = new URLSearchParams({ listing_type: listingType });
     if (locationId) query.set('location_id', String(locationId));
     else if (location.trim()) query.set('location', location.trim());
+    if (cityId) query.set('city_id', String(cityId));
     if (propertyType) query.set('property_type', propertyType);
     navigate(`/properties?${query.toString()}`);
   };
@@ -109,10 +111,12 @@ export function HomePage({ locale, text }: HomePageProps) {
                   onChange={(value) => {
                     setLocation(value);
                     setLocationId(null);
+                    setCityId(null);
                   }}
                   onSelect={(selected: PropertyLocationSuggestion) => {
                     setLocation(locale === 'am' && selected.name_am ? selected.name_am : selected.name);
                     setLocationId(selected.id);
+                    setCityId(selected.city_id);
                   }}
                 />
               </div>

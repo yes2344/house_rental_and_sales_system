@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
+import { LocationCascade } from '../components/LocationCascade';
 import type { PropertyCoordinates } from '../components/LocationMap';
 import {
   createManagedProperty,
@@ -39,6 +40,7 @@ interface OwnerPropertyFormPageProps {
 interface PropertyFormValues {
   title: string;
   location: string;
+  administrative_location: string;
   latitude: string;
   longitude: string;
   exact_location_is_public: boolean;
@@ -63,6 +65,7 @@ interface PropertyFormValues {
 const initialValues: PropertyFormValues = {
   title: '',
   location: '',
+  administrative_location: '',
   latitude: '',
   longitude: '',
   exact_location_is_public: false,
@@ -88,6 +91,9 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
   return {
     title: property.title,
     location: property.location,
+    administrative_location: property.administrative_location === null
+      ? ''
+      : String(property.administrative_location),
     latitude: property.latitude === null ? '' : String(property.latitude),
     longitude: property.longitude === null ? '' : String(property.longitude),
     exact_location_is_public: property.exact_location_is_public,
@@ -268,6 +274,9 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
     setFieldErrors({});
     const payload: ManagedPropertyPayload = {
       ...values,
+      administrative_location: values.administrative_location
+        ? Number(values.administrative_location)
+        : null,
       latitude: values.latitude.trim() || null,
       longitude: values.longitude.trim() || null,
       price: values.price.trim(),
@@ -604,6 +613,17 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           </Suspense>
           <p className="manager-hint location-map-hint">{text('mapSelectionHint')}</p>
           <div className="manager-form-grid">
+            <div className="manager-field manager-field-wide">
+              <LocationCascade
+                value={values.administrative_location}
+                locale={locale}
+                text={text}
+                required
+                management
+                onChange={(value) => updateValue('administrative_location', value)}
+              />
+              {fieldError('administrative_location')}
+            </div>
             <label className="manager-field">
               <span>{text('latitude')}</span>
               <input

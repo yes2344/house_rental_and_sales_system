@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { getErrorMessage } from '../api/client';
 import { formatPropertyPrice, formatRegistrationDate } from '../components/propertyDisplay';
+import { formatPropertyLocation } from '../components/locationDisplay';
 import {
   getManagedProperties,
   updateManagedPropertyPublication,
@@ -210,7 +211,7 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
                   <tr key={property.id}>
                     <td>
                       <strong>{property.title}</strong>
-                      <span className="manager-row-secondary">{property.location}</span>
+                      <span className="manager-row-secondary">{formatPropertyLocation(property, locale)}</span>
                       {formatRegistrationDate(property.created_at, locale) && (
                         <span className="manager-row-secondary">
                           {text('registeredDate')} {formatRegistrationDate(property.created_at, locale)}

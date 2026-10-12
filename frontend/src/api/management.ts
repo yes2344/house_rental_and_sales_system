@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { PaginatedResponse } from './properties';
+import type { LocationType, MarketplaceLocation, PaginatedResponse, PropertyLocationPathItem } from './properties';
 
 export type ManagedListingType = 'sale' | 'rent';
 export type ManagedPropertyType =
@@ -25,6 +25,40 @@ export interface AmenityOption {
   slug: string;
 }
 
+export type ManagedLocationType = LocationType;
+
+export interface ManagedLocationPayload {
+  name: string;
+  name_am: string;
+  aliases_en: string[];
+  aliases_am: string[];
+  location_type: ManagedLocationType;
+  parent: number | null;
+  is_active: boolean;
+  display_order: number;
+}
+
+export async function getManagedLocations(signal?: AbortSignal): Promise<MarketplaceLocation[]> {
+  const response = await apiClient.get<MarketplaceLocation[]>('/management/locations/', {
+    params: { all: 1 },
+    signal,
+  });
+  return response.data;
+}
+
+export async function createManagedLocation(payload: ManagedLocationPayload): Promise<MarketplaceLocation> {
+  const response = await apiClient.post<MarketplaceLocation>('/management/locations/', payload);
+  return response.data;
+}
+
+export async function updateManagedLocation(
+  id: number,
+  payload: Partial<ManagedLocationPayload>,
+): Promise<MarketplaceLocation> {
+  const response = await apiClient.patch<MarketplaceLocation>(`/management/locations/${id}/`, payload);
+  return response.data;
+}
+
 export async function actOnManagedViewingRequest(
   id: number,
   action: 'confirm_requested' | 'cancel' | 'complete',
@@ -42,6 +76,8 @@ export interface ManagedProperty {
   title: string;
   slug: string;
   location: string;
+  administrative_location: number | null;
+  location_path: PropertyLocationPathItem[];
   latitude: number | string | null;
   longitude: number | string | null;
   exact_location_is_public: boolean;
@@ -74,6 +110,7 @@ export interface ManagedProperty {
 export interface ManagedPropertyPayload {
   title: string;
   location: string;
+  administrative_location: number | null;
   latitude: string | null;
   longitude: string | null;
   exact_location_is_public: boolean;

@@ -53,21 +53,46 @@ class PublicLocationListView(generics.ListAPIView):
         if search_term:
             return (
                 queryset.filter(pk__in=matching_location_ids(search_term))
+                .select_related(
+                    'parent',
+                    'parent__parent',
+                    'parent__parent__parent',
+                    'parent__parent__parent__parent',
+                    'parent__parent__parent__parent__parent',
+                )
                 .order_by('display_order', 'name')[:20]
             )
         if self.request.query_params.get('all') == '1':
-            return queryset.order_by('display_order', 'name')
+            return queryset.select_related(
+                'parent',
+                'parent__parent',
+                'parent__parent__parent',
+                'parent__parent__parent__parent',
+                'parent__parent__parent__parent__parent',
+            ).order_by('display_order', 'name')
         parent_id = self.request.query_params.get('parent_id')
         if parent_id:
             if not Location.objects.filter(pk=parent_id, is_active=True).exists():
                 return queryset.none()
             queryset = queryset.filter(parent_id=parent_id)
-        else:
-            queryset = queryset.filter(parent__isnull=True)
+        location_types = self.request.query_params.get('types')
         location_type = self.request.query_params.get('type')
-        if location_type:
-            queryset = queryset.filter(location_type=location_type)
-        return queryset.order_by('display_order', 'name')
+        if location_types or location_type:
+            values = [
+                value.strip()
+                for value in (location_types or location_type or '').split(',')
+                if value.strip()
+            ]
+            queryset = queryset.filter(location_type__in=values)
+        elif not parent_id:
+            queryset = queryset.filter(parent__isnull=True)
+        return queryset.select_related(
+            'parent',
+            'parent__parent',
+            'parent__parent__parent',
+            'parent__parent__parent__parent',
+            'parent__parent__parent__parent__parent',
+        ).order_by('display_order', 'name')
 
 
 class ManagedLocationListCreateView(generics.ListCreateAPIView):
@@ -77,11 +102,26 @@ class ManagedLocationListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = Location.objects.all()
+        if self.request.query_params.get('all') == '1':
+            return queryset.select_related(
+                'parent',
+                'parent__parent',
+                'parent__parent__parent',
+                'parent__parent__parent__parent',
+                'parent__parent__parent__parent__parent',
+            ).order_by('display_order', 'name', 'pk')
         parent_id = self.request.query_params.get('parent_id')
         return queryset.filter(parent_id=parent_id) if parent_id else queryset.filter(parent__isnull=True)
 
     def perform_create(self, serializer):
-        serializer.save()
+        location = serializer.save()
+        record_admin_action(
+            self.request.user,
+            action='location_created',
+            object_type='location',
+            object_id=location.pk,
+            changes={'name': location.name, 'location_type': location.location_type, 'parent_id': location.parent_id},
+        )
 
 
 class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -92,7 +132,41 @@ class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
     http_method_names = ['get', 'patch', 'head', 'options']
 
     def perform_update(self, serializer):
-        serializer.save()
+        instance = serializer.instance
+        before = {
+            'name': instance.name,
+            'name_am': instance.name_am,
+            'location_type': instance.location_type,
+            'parent_id': instance.parent_id,
+            'is_active': instance.is_active,
+            'display_order': instance.display_order,
+            'aliases_en': instance.aliases_en,
+            'aliases_am': instance.aliases_am,
+        }
+        location = serializer.save()
+        after = {
+            'name': location.name,
+            'name_am': location.name_am,
+            'location_type': location.location_type,
+            'parent_id': location.parent_id,
+            'is_active': location.is_active,
+            'display_order': location.display_order,
+            'aliases_en': location.aliases_en,
+            'aliases_am': location.aliases_am,
+        }
+        changes = {
+            key: {'from': before[key], 'to': after[key]}
+            for key in before
+            if before[key] != after[key]
+        }
+        if changes:
+            record_admin_action(
+                self.request.user,
+                action='location_updated',
+                object_type='location',
+                object_id=location.pk,
+                changes=changes,
+            )
 
 
 class PublicPropertyListView(generics.ListAPIView):
@@ -111,6 +185,14 @@ class PublicPropertyListView(generics.ListAPIView):
                 'images',
                 'amenities',
                 'broker_assignments__broker__profile',
+            )
+            .select_related(
+                'administrative_location',
+                'administrative_location__parent',
+                'administrative_location__parent__parent',
+                'administrative_location__parent__parent__parent',
+                'administrative_location__parent__parent__parent__parent',
+                'administrative_location__parent__parent__parent__parent__parent',
             )
             .order_by(*self.ordering)
         )
@@ -139,6 +221,13 @@ class PublicPropertyDetailView(generics.RetrieveAPIView):
         'images',
         'amenities',
         'broker_assignments__broker__profile',
+    ).select_related(
+        'administrative_location',
+        'administrative_location__parent',
+        'administrative_location__parent__parent',
+        'administrative_location__parent__parent__parent',
+        'administrative_location__parent__parent__parent__parent',
+        'administrative_location__parent__parent__parent__parent__parent',
     )
 
     @extend_schema(summary='Retrieve a published available property')
@@ -158,7 +247,15 @@ class ManagedPropertyListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return (
             managed_properties(self.request.user)
-            .select_related('owner')
+            .select_related(
+                'owner',
+                'administrative_location',
+                'administrative_location__parent',
+                'administrative_location__parent__parent',
+                'administrative_location__parent__parent__parent',
+                'administrative_location__parent__parent__parent__parent',
+                'administrative_location__parent__parent__parent__parent__parent',
+            )
             .prefetch_related('amenities', 'images')
         )
 
@@ -182,7 +279,15 @@ class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return (
             managed_properties(self.request.user)
-            .select_related('owner')
+            .select_related(
+                'owner',
+                'administrative_location',
+                'administrative_location__parent',
+                'administrative_location__parent__parent',
+                'administrative_location__parent__parent__parent',
+                'administrative_location__parent__parent__parent__parent',
+                'administrative_location__parent__parent__parent__parent__parent',
+            )
             .prefetch_related('amenities', 'images')
         )
 

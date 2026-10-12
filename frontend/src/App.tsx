@@ -6,6 +6,7 @@ import { HomepageContentProvider } from './HomepageContentContext';
 import { PageLayout } from './components/PageLayout';
 import { RequireAuth } from './components/RequireAuth';
 import { RequireListingManager } from './components/RequireListingManager';
+import { RequireSettingsManager } from './components/RequireSettingsManager';
 import { OwnerDashboardLayout } from './components/OwnerDashboardLayout';
 import { usePreferences } from './PreferencesContext';
 import { messages, type MessageKey } from './i18n';
@@ -57,6 +58,9 @@ const OwnerViewingRequestsPage = lazy(() =>
 );
 const BrokerageSettingsPage = lazy(() =>
   import('./pages/BrokerageSettingsPage').then(({ BrokerageSettingsPage }) => ({ default: BrokerageSettingsPage })),
+);
+const LocationManagementPage = lazy(() =>
+  import('./pages/LocationManagementPage').then(({ LocationManagementPage }) => ({ default: LocationManagementPage })),
 );
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then(({ SettingsPage }) => ({ default: SettingsPage })),
@@ -119,6 +123,9 @@ export default function App() {
                     <Route path="management/listings/:id/edit" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
                     <Route path="management/viewing-requests" element={<OwnerViewingRequestsPage text={text} />} />
                     <Route path="management/brokerage" element={<BrokerageSettingsPage text={text} />} />
+                    <Route element={<RequireSettingsManager text={text} />}>
+                      <Route path="management/locations" element={<LocationManagementPage locale={locale} text={text} />} />
+                    </Route>
                   </Route>
                 </Route>
               </Route>

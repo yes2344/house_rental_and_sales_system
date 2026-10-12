@@ -41,8 +41,11 @@ records. Authorized settings managers can maintain `aliases_en` and
 are bounded to 20 entries, normalized on write, and do not create duplicate
 location records. Search suggestions use `GET /api/v1/locations/?search=...`
 and return at most 20 matches. Selecting a suggestion submits its stable
-`location_id`; typed text remains supported when no suggestion is selected.
-The existing administrative location cascade also uses stable IDs.
+`location_id` and its configured `city_id`; typed text remains supported when
+no suggestion is selected. The property form, city bar, area filter, and
+administrative location cascade use stable IDs. See
+[location management](./location-management.md) for authorized setup and the
+current no-seed-data limitation.
 
 No Debre Markos or Addis Ababa location aliases are seeded by this feature.
 Administrators must enter verified local names and aliases from an authoritative

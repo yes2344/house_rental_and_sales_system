@@ -5,11 +5,29 @@ export interface MarketplaceLocation {
   name: string;
   name_am: string;
   slug: string;
-  location_type: string;
+  location_type: LocationType;
   parent_id: number | null;
+  aliases_en: string[];
+  aliases_am: string[];
   is_active: boolean;
   display_order: number;
 }
+
+export interface PropertyLocationPathItem {
+  id: number;
+  name: string;
+  name_am: string;
+  location_type: LocationType;
+}
+
+export type LocationType =
+  | 'country'
+  | 'region'
+  | 'city_administration'
+  | 'city'
+  | 'subcity'
+  | 'woreda'
+  | 'neighborhood';
 
 export type ListingType = 'sale' | 'rent';
 export type PropertyType =
@@ -21,6 +39,8 @@ export interface PropertySummary {
   title: string;
   slug: string;
   location: string;
+  administrative_location: number | null;
+  location_path: PropertyLocationPathItem[];
   latitude: number | string | null;
   longitude: number | string | null;
   category: string;
@@ -54,6 +74,7 @@ export interface PropertyFilters {
   property_type?: PropertyType;
   location?: string;
   location_id?: number;
+  city_id?: number;
   min_price?: string;
   max_price?: string;
   min_bedrooms?: string;
@@ -74,15 +95,33 @@ export interface PropertyLocationSuggestion {
   name_am: string;
   location_type: string;
   parent_id: number | null;
+  city_id: number | null;
 }
 
 export async function getLocations(
   parentId?: number,
   signal?: AbortSignal,
   includeAll = false,
+  locationType?: string,
 ): Promise<MarketplaceLocation[]> {
   const response = await apiClient.get<MarketplaceLocation[]>('/locations/', {
-    params: includeAll ? { all: 1 } : parentId ? { parent_id: parentId } : undefined,
+    params: includeAll
+      ? { all: 1 }
+      : {
+        ...(parentId ? { parent_id: parentId } : {}),
+        ...(locationType ? { type: locationType } : {}),
+      },
+    signal,
+  });
+  return response.data;
+}
+
+export async function getLocationsByTypes(
+  locationTypes: string[],
+  signal?: AbortSignal,
+): Promise<MarketplaceLocation[]> {
+  const response = await apiClient.get<MarketplaceLocation[]>('/locations/', {
+    params: { types: locationTypes.join(',') },
     signal,
   });
   return response.data;

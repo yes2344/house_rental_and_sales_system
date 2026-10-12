@@ -7,6 +7,7 @@ import { getErrorMessage } from '../api/client';
 import { getProperty, type PropertyDetail } from '../api/properties';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { formatPropertyPrice, formatRegistrationDate } from '../components/propertyDisplay';
+import { formatPropertyLocation } from '../components/locationDisplay';
 import { PropertyGallery } from '../components/PropertyGallery';
 import { hasPublicCoordinates, openStreetMapDirectionsUrl } from '../components/propertyLocation';
 const LocationMap = lazy(() =>
@@ -88,6 +89,7 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
   const coordinates = hasCoordinates
     ? { latitude: Number(property.latitude), longitude: Number(property.longitude) }
     : null;
+  const formattedLocation = formatPropertyLocation(property, locale);
 
   return (
     <main id="main-content" className="detail-page">
@@ -95,7 +97,7 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
         <div className="breadcrumbs"><Link to="/">{text('home')}</Link><span>/</span><Link to="/properties">{text('explore')}</Link><span>/</span><span>{property.title}</span></div>
         <Link className="back-link" to="/properties"><ArrowLeft size={15} aria-hidden="true" />{text('backToProperties')}</Link>
         <div className="detail-title-row">
-          <div><p className="detail-location"><MapPin size={15} aria-hidden="true" />{property.location}</p><h1>{property.title}</h1></div>
+          <div><p className="detail-location"><MapPin size={15} aria-hidden="true" />{formattedLocation}</p><h1>{property.title}</h1></div>
           <div className="detail-actions">
             <FavoriteButton propertyId={property.id} text={text} variant="detail" />
             <button className="share-button" type="button" onClick={() => void shareProperty()}><Share2 size={15} aria-hidden="true" />{text('shareProperty')}</button>
@@ -142,7 +144,7 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
           )}
           <section className="detail-section property-location-section">
             <h2>{text('propertyLocation')}</h2>
-            <p className="detail-location-address"><MapPin size={15} aria-hidden="true" />{property.location}</p>
+            <p className="detail-location-address"><MapPin size={15} aria-hidden="true" />{formattedLocation}</p>
             {coordinates ? (
               <>
                 <Suspense fallback={<div className="property-map map-loading" role="status">{text('loadingMap')}</div>}>

@@ -5,6 +5,7 @@ import type { PropertySummary } from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
 import { formatPropertyPrice, formatRegistrationDate } from './propertyDisplay';
+import { formatPropertyLocation } from './locationDisplay';
 import { hasPublicCoordinates, openStreetMapUrl } from './propertyLocation';
 import { PropertySlideshow } from './PropertySlideshow';
 
@@ -63,7 +64,7 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
       <div className="listing-card-content">
         <div className="listing-location">
           <MapPin size={14} aria-hidden="true" />
-          <span>{property.location}</span>
+          <span>{formatPropertyLocation(property, locale)}</span>
           {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer">{text('viewOnMap')}</a>}
         </div>
         <h3><Link to={`/properties/${property.slug}`}>{property.title}</Link></h3>
