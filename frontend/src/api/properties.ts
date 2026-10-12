@@ -57,11 +57,30 @@ export interface PropertyFilters {
   page_size?: number;
 }
 
+export interface PropertyLocationSuggestion {
+  id: number;
+  name: string;
+  name_am: string;
+  location_type: string;
+  parent_id: number | null;
+}
+
 export interface PaginatedResponse<T> {
   count: number;
   next: string | null;
   previous: string | null;
   results: T[];
+}
+
+export async function searchLocations(
+  search: string,
+  signal?: AbortSignal,
+): Promise<PropertyLocationSuggestion[]> {
+  const response = await apiClient.get<PropertyLocationSuggestion[]>('/locations/', {
+    params: { search },
+    signal,
+  });
+  return response.data;
 }
 
 export async function getLatestProperties(signal?: AbortSignal): Promise<PropertySummary[]> {

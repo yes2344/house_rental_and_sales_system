@@ -24,6 +24,8 @@ class Location(models.Model):
 
     name = models.CharField(max_length=120)
     name_am = models.CharField(max_length=120, blank=True)
+    aliases_en = models.JSONField(default=list, blank=True)
+    aliases_am = models.JSONField(default=list, blank=True)
     slug = models.SlugField(max_length=140)
     location_type = models.CharField(max_length=24, choices=Type.choices)
     parent = models.ForeignKey(

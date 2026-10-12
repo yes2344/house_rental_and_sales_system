@@ -8,6 +8,7 @@ from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import Profile
 from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
+from properties.search_terms import normalize_search_text
 from owner_announcements.models import OwnerAnnouncement, OwnerAnnouncementAgreement
 
 
@@ -23,15 +24,44 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields = [
-            'id', 'name', 'name_am', 'slug', 'location_type', 'parent_id', 'parent',
+            'id', 'name', 'name_am', 'aliases_en', 'aliases_am', 'slug', 'location_type', 'parent_id', 'parent',
             'is_active', 'display_order', 'latitude', 'longitude',
         ]
         extra_kwargs = {'slug': {'required': False}}
+        read_only_fields = ['id', 'parent_id']
+
+    aliases_en = serializers.ListField(
+        child=serializers.CharField(max_length=120, allow_blank=False, trim_whitespace=True),
+        required=False,
+        allow_empty=True,
+        max_length=20,
+    )
+    aliases_am = serializers.ListField(
+        child=serializers.CharField(max_length=120, allow_blank=False, trim_whitespace=True),
+        required=False,
+        allow_empty=True,
+        max_length=20,
+    )
 
     def validate_parent(self, value):
         if value is not None and not value.is_active:
             raise serializers.ValidationError('An active location must have an active parent.')
         return value
+
+    def validate_aliases_en(self, value):
+        return self._normalize_aliases(value)
+
+    def validate_aliases_am(self, value):
+        return self._normalize_aliases(value)
+
+    @staticmethod
+    def _normalize_aliases(value):
+        aliases = []
+        for alias in value:
+            normalized = normalize_search_text(alias)
+            if normalized and normalized not in aliases:
+                aliases.append(normalized)
+        return aliases
 
     def validate(self, attrs):
         location = self.instance or Location()

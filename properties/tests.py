@@ -6,15 +6,17 @@ from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework.test import APITestCase
 from PIL import Image
 
 from accounts.models import Profile
 from admin.models import AdminAuditEvent
-from properties.models import Amenity, Property, PropertyBrokerAssignment, PropertyImage
+from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
+from properties.serializers import LocationSerializer
 
 
 class PropertyConstraintTests(TestCase):
@@ -241,6 +243,214 @@ class PublicPropertyApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['count'], 1)
         self.assertEqual(response.data['results'][0]['slug'], self.property.slug)
+
+    def test_english_and_amharic_bathroom_search_use_structured_count(self):
+        Property.objects.create(
+            title='No bathroom count',
+            slug='no-bathroom-count-search',
+            location='Submitted location',
+            property_type='house',
+            listing_type=Property.ListingType.SALE,
+            price=250000,
+            bathrooms=0,
+            description='Does not match the structured bathroom filter.',
+            status=Property.Status.AVAILABLE,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+
+        for term in ('bathroom', 'መታጠቢያ'):
+            with self.subTest(term=term):
+                response = self.client.get(reverse('api:property-list'), {'search': term})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data['count'], 1)
+                self.assertEqual(response.data['results'][0]['slug'], self.property.slug)
+
+    def test_mixed_language_search_applies_concepts_and_english_connectors(self):
+        response = self.client.get(
+            reverse('api:property-list'),
+            {'search': 'house and መታጠቢያ'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['slug'], self.property.slug)
+
+    def test_bedroom_and_bathroom_counts_are_structured_filters(self):
+        Property.objects.create(
+            title='One bathroom property',
+            slug='one-bathroom-count-search',
+            location='Submitted location',
+            property_type='house',
+            listing_type=Property.ListingType.SALE,
+            price=250000,
+            bedrooms=1,
+            bathrooms=1,
+            description='Available listing.',
+            status=Property.Status.AVAILABLE,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+
+        bathroom_response = self.client.get(
+            reverse('api:property-list'),
+            {'search': 'bathroom 2'},
+        )
+        bedroom_response = self.client.get(
+            reverse('api:property-list'),
+            {'search': '3 bedrooms'},
+        )
+
+        self.assertEqual(bathroom_response.data['count'], 1)
+        self.assertEqual(bathroom_response.data['results'][0]['slug'], self.property.slug)
+        self.assertEqual(bedroom_response.data['count'], 1)
+        self.assertEqual(bedroom_response.data['results'][0]['slug'], self.property.slug)
+
+    def test_english_amenity_search_uses_the_existing_amenity_relation(self):
+        response = self.client.get(
+            reverse('api:property-list'),
+            {'search': 'garden'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['slug'], self.property.slug)
+
+    def test_location_alias_search_and_suggestions_resolve_the_same_location(self):
+        country = Location.objects.create(
+            name='Test Country',
+            slug='test-country-search',
+            location_type=Location.Type.COUNTRY,
+        )
+        city = Location.objects.create(
+            name='Test City Administration',
+            slug='test-city-administration-search',
+            location_type=Location.Type.CITY_ADMINISTRATION,
+            parent=country,
+        )
+        subcity = Location.objects.create(
+            name='Test Subcity',
+            slug='test-subcity-search',
+            aliases_am=['የሙከራ አካባቢ'],
+            location_type=Location.Type.SUBCITY,
+            parent=city,
+        )
+        self.property.administrative_location = subcity
+        self.property.save(update_fields=['administrative_location'])
+
+        property_response = self.client.get(
+            reverse('api:property-list'),
+            {'search': 'የሙከራ አካባቢ'},
+        )
+        location_response = self.client.get(
+            reverse('api:location-list'),
+            {'search': 'የሙከራ'},
+        )
+
+        self.assertEqual(property_response.data['count'], 1)
+        self.assertEqual(property_response.data['results'][0]['slug'], self.property.slug)
+        self.assertEqual([item['id'] for item in location_response.data], [subcity.id])
+
+    def test_search_combines_location_price_and_listing_type_filters(self):
+        country = Location.objects.create(
+            name='Test Country Combined',
+            slug='test-country-combined-search',
+            location_type=Location.Type.COUNTRY,
+        )
+        city = Location.objects.create(
+            name='Test City Administration Combined',
+            slug='test-city-administration-combined',
+            location_type=Location.Type.CITY_ADMINISTRATION,
+            parent=country,
+        )
+        self.property.administrative_location = city
+        self.property.save(update_fields=['administrative_location'])
+
+        response = self.client.get(
+            reverse('api:property-list'),
+            {
+                'search': 'bathroom',
+                'location_id': city.id,
+                'listing_type': 'sale',
+                'min_price': '400000',
+                'max_price': '600000',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['slug'], self.property.slug)
+
+    def test_bathroom_search_preserves_pagination_and_price_sorting(self):
+        Property.objects.create(
+            title='Lower priced bathroom property',
+            slug='lower-priced-bathroom-property',
+            location='Submitted location',
+            property_type='apartment',
+            listing_type=Property.ListingType.RENT,
+            price=100000,
+            bathrooms=1,
+            description='Available apartment.',
+            status=Property.Status.AVAILABLE,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+
+        response = self.client.get(
+            reverse('api:property-list'),
+            {'search': 'bathroom', 'ordering': 'price', 'page_size': 1},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 2)
+        self.assertIsNotNone(response.data['next'])
+        self.assertEqual(response.data['results'][0]['slug'], 'lower-priced-bathroom-property')
+
+    def test_unknown_amharic_search_is_safe_and_does_not_match_unrelated_listings(self):
+        response = self.client.get(
+            reverse('api:property-list'),
+            {'search': 'ጽሑፍ ያልታወቀ'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 0)
+
+    def test_location_alias_serializer_normalizes_unicode_and_duplicate_terms(self):
+        serializer = LocationSerializer(data={
+            'name': 'Test Location',
+            'slug': 'test-location',
+            'location_type': Location.Type.COUNTRY,
+            'parent': None,
+            'aliases_en': ['  Test   Place ', 'test place'],
+            'aliases_am': [' መታጠቢያ '],
+        })
+
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['aliases_en'], ['test place'])
+        self.assertEqual(serializer.validated_data['aliases_am'], ['መታጠቢያ'])
+
+    def test_search_query_count_is_bounded_as_matching_results_grow(self):
+        for index in range(8):
+            Property.objects.create(
+                title=f'Additional bathroom property {index}',
+                slug=f'additional-bathroom-property-{index}',
+                location='Submitted location',
+                property_type='house',
+                listing_type=Property.ListingType.SALE,
+                price=300000 + index,
+                bathrooms=1,
+                description='Available listing.',
+                status=Property.Status.AVAILABLE,
+                publication_status=Property.PublicationStatus.PUBLISHED,
+            )
+
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(
+                reverse('api:property-list'),
+                {'search': 'bathroom', 'page_size': 20},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 9)
+        self.assertLessEqual(len(queries), 20)
 
     def test_invalid_filter_returns_consistent_validation_error(self):
         response = self.client.get(

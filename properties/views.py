@@ -16,7 +16,9 @@ from accounts.models import Profile
 from admin.audit import record_admin_action
 from properties.access import editable_properties, managed_properties, public_properties
 from properties.filters import PublicPropertyFilter
+from properties.location_search import matching_location_ids
 from properties.models import Amenity, Location, Property, PropertyImage
+from properties.search import BilingualPropertySearchFilter
 from properties.serializers import (
     AmenitySerializer,
     PropertyImageManagementSerializer,
@@ -47,6 +49,12 @@ class PublicLocationListView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Location.objects.filter(is_active=True)
+        search_term = self.request.query_params.get('search', '').strip()
+        if search_term:
+            return (
+                queryset.filter(pk__in=matching_location_ids(search_term))
+                .order_by('display_order', 'name')[:20]
+            )
         if self.request.query_params.get('all') == '1':
             return queryset.order_by('display_order', 'name')
         parent_id = self.request.query_params.get('parent_id')
@@ -90,9 +98,8 @@ class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
 class PublicPropertyListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublicPropertyListSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, BilingualPropertySearchFilter, filters.OrderingFilter]
     filterset_class = PublicPropertyFilter
-    search_fields = ['title', 'location', 'description', 'features', 'amenities__name']
     ordering_fields = ['created_at', 'price', 'bedrooms', 'bathrooms', 'area_sqft']
     ordering = ['-created_at']
 

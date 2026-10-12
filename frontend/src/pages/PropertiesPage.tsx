@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowRight, ChevronDown, ListFilter, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, ChevronDown, ListFilter, Search, SlidersHorizontal } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
 import { getProperties, type ListingType, type PaginatedResponse, type PropertyFilters, type PropertySummary, type PropertyType } from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
 import { LocationCascade } from '../components/LocationCascade';
+import { LocationSearchInput } from '../components/LocationSearchInput';
 import type { HomePageProps } from './HomePage';
 
 const PAGE_SIZE = 12;
@@ -265,14 +266,30 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
                 <option value="other">Other</option>
               </select>
 
-              <label className="filter-label" htmlFor="filter-location">{text('location')}</label>
-              <span className="filter-search-wrap"><MapPin size={16} aria-hidden="true" />
-                <input id="filter-location" value={formValues.location} onChange={(event) => updateValue('location', event.target.value)} placeholder={text('locationPlaceholder')} />
-              </span>
+              <div className="filter-label">
+                <label htmlFor="filter-location">{text('location')}</label>
+                <LocationSearchInput
+                  id="filter-location"
+                  value={formValues.location}
+                  locale={locale}
+                  placeholder={text('locationPlaceholder')}
+                  onChange={(value) => {
+                    updateValue('location', value);
+                    updateValue('location_id', '');
+                  }}
+                  onSelect={(location) => {
+                    updateValue('location', locale === 'am' && location.name_am ? location.name_am : location.name);
+                    updateValue('location_id', String(location.id));
+                  }}
+                />
+              </div>
               <LocationCascade
                 value={formValues.location_id}
                 locale={locale}
-                onChange={(value) => updateValue('location_id', value)}
+                onChange={(value) => {
+                  updateValue('location_id', value);
+                  updateValue('location', '');
+                }}
               />
 
               <div className="filter-price-heading">{text('priceLabel')}</div>

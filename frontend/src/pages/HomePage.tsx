@@ -3,8 +3,9 @@ import { ArrowDown, ArrowRight, ArrowUpRight, Check, House, MapPin, Search, Shie
 import { Link, useNavigate } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
-import { getLatestProperties, type PropertySummary } from '../api/properties';
+import { getLatestProperties, type PropertyLocationSuggestion, type PropertySummary } from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
+import { LocationSearchInput } from '../components/LocationSearchInput';
 import { useHomepageContent } from '../HomepageContentContext';
 import { SocialMark, socialPlatformNames } from '../components/SocialMark';
 import { useBrokerageContact } from '../BrokerageContactContext';
@@ -22,6 +23,7 @@ export function HomePage({ locale, text }: HomePageProps) {
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [propertyType, setPropertyType] = useState('');
   const [location, setLocation] = useState('Addis Ababa');
+  const [locationId, setLocationId] = useState<number | null>(null);
   const [properties, setProperties] = useState<PropertySummary[]>([]);
   const [listingsLoading, setListingsLoading] = useState(true);
   const [listingsError, setListingsError] = useState('');
@@ -45,7 +47,8 @@ export function HomePage({ locale, text }: HomePageProps) {
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const query = new URLSearchParams({ listing_type: listingType });
-    if (location.trim()) query.set('location', location.trim());
+    if (locationId) query.set('location_id', String(locationId));
+    else if (location.trim()) query.set('location', location.trim());
     if (propertyType) query.set('property_type', propertyType);
     navigate(`/properties?${query.toString()}`);
   };
@@ -96,17 +99,23 @@ export function HomePage({ locale, text }: HomePageProps) {
               </div>
             </div>
             <div className="search-fields">
-              <label className="search-field">
-                <span>{text('location')}</span>
-                <span className="search-input-wrap"><MapPin size={17} aria-hidden="true" />
-                  <input
-                    value={location}
-                    onChange={(event) => setLocation(event.target.value)}
-                    placeholder={text('locationPlaceholder')}
-                    autoComplete="address-level2"
-                  />
-                </span>
-              </label>
+              <div className="search-field">
+                <label htmlFor="home-location">{text('location')}</label>
+                <LocationSearchInput
+                  id="home-location"
+                  value={location}
+                  locale={locale}
+                  placeholder={text('locationPlaceholder')}
+                  onChange={(value) => {
+                    setLocation(value);
+                    setLocationId(null);
+                  }}
+                  onSelect={(selected: PropertyLocationSuggestion) => {
+                    setLocation(locale === 'am' && selected.name_am ? selected.name_am : selected.name);
+                    setLocationId(selected.id);
+                  }}
+                />
+              </div>
               <label className="search-field search-field-type">
                 <span>{text('propertyType')}</span>
                 <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>

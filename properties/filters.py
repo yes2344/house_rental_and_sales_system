@@ -1,7 +1,8 @@
 import django_filters
+from django.db.models import Q
 
+from properties.location_search import location_subtree_ids, matching_location_subtree_ids
 from properties.models import Property
-from properties.models import Location
 
 
 class PublicPropertyFilter(django_filters.FilterSet):
@@ -19,7 +20,7 @@ class PublicPropertyFilter(django_filters.FilterSet):
     max_bathrooms = django_filters.NumberFilter(field_name='bathrooms', lookup_expr='lte')
     min_size = django_filters.NumberFilter(field_name='area_sqft', lookup_expr='gte')
     max_size = django_filters.NumberFilter(field_name='area_sqft', lookup_expr='lte')
-    location = django_filters.CharFilter(field_name='location', lookup_expr='icontains')
+    location = django_filters.CharFilter(method='filter_location_text')
     amenities = django_filters.CharFilter(method='filter_amenities')
     location_id = django_filters.NumberFilter(method='filter_location')
 
@@ -34,19 +35,13 @@ class PublicPropertyFilter(django_filters.FilterSet):
         return queryset.distinct()
 
     def filter_location(self, queryset, name, value):
-        root_id = int(value)
-        if not Location.objects.filter(pk=root_id, is_active=True).exists():
-            return queryset.none()
+        return queryset.filter(
+            administrative_location_id__in=location_subtree_ids({int(value)})
+        )
 
-        matching_ids = {root_id}
-        frontier = {root_id}
-        while frontier:
-            child_ids = set(
-                Location.objects.filter(
-                    parent_id__in=frontier,
-                    is_active=True,
-                ).values_list('id', flat=True)
-            )
-            frontier = child_ids - matching_ids
-            matching_ids.update(frontier)
-        return queryset.filter(administrative_location_id__in=matching_ids)
+    def filter_location_text(self, queryset, name, value):
+        matching_ids = matching_location_subtree_ids(value)
+        location_match = Q(location__icontains=value)
+        if matching_ids:
+            location_match |= Q(administrative_location_id__in=matching_ids)
+        return queryset.filter(location_match)
