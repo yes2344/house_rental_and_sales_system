@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { MapPinned, Plus, Save, X } from 'lucide-react';
 
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
@@ -85,6 +85,7 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState('');
+  const editorRef = useRef<HTMLElement>(null);
 
   const loadLocations = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -108,6 +109,7 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     () => new Map(locations.map((location) => [location.id, location])),
     [locations],
   );
+  const editingLocation = editingId === null ? null : locationById.get(editingId) ?? null;
   const filteredLocations = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase();
     return locations.filter((location) => {
@@ -124,6 +126,10 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     setFieldErrors({});
     setError('');
     setSuccess('');
+    requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      editorRef.current?.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true });
+    });
   };
 
   const resetForm = () => {
@@ -148,9 +154,15 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     setSuccess('');
     setFieldErrors({});
     try {
-      const payload = toPayload(values);
-      if (editingId === null) await createManagedLocation(payload);
-      else await updateManagedLocation(editingId, payload);
+      if (editingId === null) {
+        await createManagedLocation(toPayload(values));
+      } else {
+        await updateManagedLocation(editingId, {
+          name: values.name.trim(),
+          name_am: values.name_am.trim(),
+          is_active: values.is_active,
+        });
+      }
       setLocations(await getManagedLocations());
       resetForm();
       setSuccess(text(editingId === null ? 'locationCreated' : 'locationUpdated'));
@@ -185,9 +197,13 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
       </header>
 
       <div className="location-management-grid">
-        <section className="manager-panel location-editor">
+        <section ref={editorRef} className="manager-panel location-editor">
           <div className="manager-panel-heading">
-            <h2>{editingId === null ? text('addLocation') : text('editLocation')}</h2>
+            <h2>
+              {editingLocation
+                ? `${text('editLocation')}: ${editingLocation.name}`
+                : text('addLocation')}
+            </h2>
             {editingId !== null && (
               <button className="button button-secondary" type="button" onClick={resetForm}>
                 <X size={15} aria-hidden="true" />{text('cancelEdit')}
@@ -203,36 +219,39 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
               <input className="filter-input" maxLength={120} value={values.name_am} onChange={(event) => updateValue('name_am', event.target.value)} />
               {fieldErrors.name_am && <small role="alert">{fieldErrors.name_am}</small>}
             </label>
-            <label className="filter-label">{text('locationType')}
-              <select className="filter-select" value={values.location_type} onChange={(event) => {
-                const selectedType = locationTypes.find((type) => type === event.target.value);
-                if (selectedType) updateValue('location_type', selectedType);
-              }}>
-                {locationTypes.map((type) => <option key={type} value={type}>{localizedLocationType(type)}</option>)}
-              </select>
-            </label>
-            <label className="filter-label">{text('locationParent')}
-              <select className="filter-select" value={values.parent} onChange={(event) => updateValue('parent', event.target.value)}>
-                <option value="">{text('noParent')}</option>
-                {locations.filter((location) => location.id !== editingId).map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name} · {localizedLocationType(location.location_type)}
-                    {!location.is_active ? ` (${text('statusInactive')})` : ''}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.parent && <small role="alert">{fieldErrors.parent}</small>}
-            </label>
-            <label className="filter-label">{text('locationAliasesEn')}
-              <input className="filter-input" value={values.aliases_en} onChange={(event) => updateValue('aliases_en', event.target.value)} placeholder={text('locationAliasesEnPlaceholder')} />
-            </label>
-            <label className="filter-label">{text('locationAliasesAm')}
-              <input className="filter-input" value={values.aliases_am} onChange={(event) => updateValue('aliases_am', event.target.value)} placeholder={text('locationAliasesAmPlaceholder')} />
-            </label>
-            <label className="filter-label">{text('displayOrder')}
-              <input className="filter-input" type="number" min="0" step="1" value={values.display_order} onChange={(event) => updateValue('display_order', event.target.value)} />
-            </label>
-            {editingId !== null && (
+            {editingId === null ? (
+              <>
+                <label className="filter-label">{text('locationType')}
+                  <select className="filter-select" value={values.location_type} onChange={(event) => {
+                    const selectedType = locationTypes.find((type) => type === event.target.value);
+                    if (selectedType) updateValue('location_type', selectedType);
+                  }}>
+                    {locationTypes.map((type) => <option key={type} value={type}>{localizedLocationType(type)}</option>)}
+                  </select>
+                </label>
+                <label className="filter-label">{text('locationParent')}
+                  <select className="filter-select" value={values.parent} onChange={(event) => updateValue('parent', event.target.value)}>
+                    <option value="">{text('noParent')}</option>
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name} · {localizedLocationType(location.location_type)}
+                        {!location.is_active ? ` (${text('statusInactive')})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.parent && <small role="alert">{fieldErrors.parent}</small>}
+                </label>
+                <label className="filter-label">{text('locationAliasesEn')}
+                  <input className="filter-input" value={values.aliases_en} onChange={(event) => updateValue('aliases_en', event.target.value)} placeholder={text('locationAliasesEnPlaceholder')} />
+                </label>
+                <label className="filter-label">{text('locationAliasesAm')}
+                  <input className="filter-input" value={values.aliases_am} onChange={(event) => updateValue('aliases_am', event.target.value)} placeholder={text('locationAliasesAmPlaceholder')} />
+                </label>
+                <label className="filter-label">{text('displayOrder')}
+                  <input className="filter-input" type="number" min="0" step="1" value={values.display_order} onChange={(event) => updateValue('display_order', event.target.value)} />
+                </label>
+              </>
+            ) : (
               <label className="location-active-toggle">
                 <input type="checkbox" checked={values.is_active} onChange={(event) => updateValue('is_active', event.target.checked)} />
                 {text('locationActive')}
