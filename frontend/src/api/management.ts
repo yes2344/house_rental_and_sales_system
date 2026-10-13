@@ -25,6 +25,23 @@ export interface AmenityOption {
   slug: string;
 }
 
+export interface ManagedBrokerAccount {
+  id: number;
+  username: string;
+  email: string;
+  role: 'broker';
+  is_active: boolean;
+  broker_approved: boolean;
+  management_permissions: string[];
+  date_joined: string;
+}
+
+export interface BrokerInvitationResult {
+  account: ManagedBrokerAccount;
+  invitation_token: string;
+  invitation_expires_at: string;
+}
+
 export type ManagedLocationType = LocationType;
 
 export interface ManagedLocationPayload {
@@ -56,6 +73,39 @@ export async function updateManagedLocation(
   payload: Partial<ManagedLocationPayload>,
 ): Promise<MarketplaceLocation> {
   const response = await apiClient.patch<MarketplaceLocation>(`/management/locations/${id}/`, payload);
+  return response.data;
+}
+
+export async function getManagedBrokerAccounts(signal?: AbortSignal): Promise<ManagedBrokerAccount[]> {
+  const accounts: ManagedBrokerAccount[] = [];
+  let nextPage: string | null = '/admin/delegated-accounts/';
+  while (nextPage) {
+    const currentPage: string = nextPage;
+    const pageResponse = await apiClient.get<PaginatedResponse<ManagedBrokerAccount>>(
+      currentPage,
+      { signal },
+    );
+    accounts.push(...pageResponse.data.results);
+    nextPage = pageResponse.data.next;
+  }
+  return accounts;
+}
+
+export async function createManagedBrokerInvitation(
+  payload: { username: string; email: string },
+): Promise<BrokerInvitationResult> {
+  const response = await apiClient.post<BrokerInvitationResult>('/admin/delegated-accounts/', {
+    ...payload,
+    role: 'broker',
+  });
+  return response.data;
+}
+
+export async function updateManagedBrokerAccount(
+  id: number,
+  payload: { is_active: boolean },
+): Promise<ManagedBrokerAccount> {
+  const response = await apiClient.patch<ManagedBrokerAccount>(`/admin/delegated-accounts/${id}/`, payload);
   return response.data;
 }
 

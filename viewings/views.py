@@ -15,9 +15,9 @@ from rest_framework.views import APIView
 
 from accounts.models import Profile
 from accounts.permissions import (
+    IsNotBrokerAccount,
     IsViewingRequestManager,
     has_management_permission,
-    is_platform_administrator,
 )
 from viewings.models import ViewingRequest
 from viewings.serializers import (
@@ -43,7 +43,7 @@ class ActiveViewingRequestConflict(APIException):
 
 
 class PublicViewingRequestCreateView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsNotBrokerAccount]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'public_viewing_request'
     serializer_class = PublicViewingRequestCreateSerializer
@@ -195,7 +195,7 @@ class PrivateGuestReceiptView(APIView):
 
 
 def manageable_viewing_requests(user):
-    if is_platform_administrator(user) or has_management_permission(
+    if has_management_permission(
         user,
         Profile.Permission.VIEWING_VIEW_ALL,
     ) or has_management_permission(user, Profile.Permission.VIEWING_MANAGE_ALL):
@@ -208,7 +208,7 @@ def manageable_viewing_requests(user):
 
 
 class CustomerViewingRequestListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsNotBrokerAccount]
     serializer_class = CustomerViewingRequestSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status']
@@ -225,7 +225,7 @@ class CustomerViewingRequestListView(generics.ListAPIView):
 
 
 class CustomerViewingRequestDetailView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsNotBrokerAccount]
     serializer_class = CustomerViewingRequestSerializer
 
     def get_queryset(self):
@@ -237,7 +237,7 @@ class CustomerViewingRequestDetailView(generics.RetrieveAPIView):
 
 
 class CustomerViewingRequestResponseView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsNotBrokerAccount]
     serializer_class = ViewingRequestResponseSerializer
 
     @transaction.atomic
@@ -296,7 +296,7 @@ class CustomerViewingRequestResponseView(generics.GenericAPIView):
 
 
 class CustomerViewingRequestCancelView(generics.GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsNotBrokerAccount]
     serializer_class = ViewingRequestCancellationSerializer
 
     @transaction.atomic

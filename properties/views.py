@@ -99,6 +99,7 @@ class ManagedLocationListCreateView(generics.ListCreateAPIView):
     permission_classes = [HasManagementPermission]
     required_management_permission = Profile.Permission.SETTINGS_MANAGE
     serializer_class = LocationSerializer
+    pagination_class = None
 
     def get_queryset(self):
         queryset = Location.objects.all()

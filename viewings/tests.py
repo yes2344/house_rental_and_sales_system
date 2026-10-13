@@ -14,6 +14,7 @@ from accounts.models import Profile
 from owner_announcements.models import InAppNotification
 from properties.models import Property, PropertyBrokerAssignment
 from viewings.models import ViewingRequest, ViewingRequestEvent
+from viewings.notifications import notify_viewing_request_event
 
 
 class PublicViewingRequestApiTests(APITestCase):
@@ -68,6 +69,37 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data['error']['status_code'], 400)
         self.assertIn('preferred_date', response.data['error']['details'])
+
+    def test_missing_required_fields_are_rejected_without_creating_a_request(self):
+        response = self.client.post(
+            reverse('api:viewing-request-create'),
+            {'property_id': self.property.pk},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        for field in ('full_name', 'email', 'phone', 'preferred_date'):
+            self.assertIn(field, response.data['error']['details'])
+        self.assertFalse(ViewingRequest.objects.exists())
+
+    def test_past_preferred_time_today_is_rejected(self):
+        past = timezone.localtime() - timedelta(minutes=5)
+        response = self.client.post(
+            reverse('api:viewing-request-create'),
+            {
+                'property_id': self.property.pk,
+                'full_name': 'Test Visitor',
+                'email': 'visitor@example.com',
+                'phone': '+251900000000',
+                'preferred_date': past.date().isoformat(),
+                'preferred_time': past.time().replace(microsecond=0).isoformat(),
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('preferred_time', response.data['error']['details'])
+        self.assertFalse(ViewingRequest.objects.exists())
 
     def test_unavailable_property_cannot_receive_request(self):
         self.property.status = Property.Status.SOLD
@@ -140,6 +172,32 @@ class PublicViewingRequestApiTests(APITestCase):
             viewing.requester_id,
             self.customer.pk,
         )
+
+    def test_broker_cannot_submit_or_open_customer_viewing_requests(self):
+        broker = get_user_model().objects.create_user(username='broker-cannot-request')
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+        )
+        self.client.force_authenticate(user=broker)
+
+        create_response = self.client.post(
+            reverse('api:viewing-request-create'),
+            {
+                'property_id': self.property.pk,
+                'full_name': 'Broker Account',
+                'email': 'broker@example.com',
+                'phone': '+251900000000',
+                'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
+            },
+            format='json',
+        )
+        list_response = self.client.get(reverse('api:customer-viewing-list'))
+
+        self.assertEqual(create_response.status_code, 403)
+        self.assertEqual(list_response.status_code, 403)
+        self.assertFalse(ViewingRequest.objects.filter(requester=broker).exists())
 
     def test_different_customers_can_request_the_same_property_and_only_see_their_own(self):
         payload = {
@@ -216,6 +274,13 @@ class PublicViewingRequestApiTests(APITestCase):
         notification = InAppNotification.objects.get(recipient=broker)
         self.assertEqual(notification.notification_type, 'viewing_request_updated')
         self.assertIn(str(response.data['id']), notification.idempotency_key)
+        event = ViewingRequestEvent.objects.get(viewing_request_id=response.data['id'])
+        notify_viewing_request_event(
+            event.viewing_request,
+            event,
+            to_requester=False,
+        )
+        self.assertEqual(InAppNotification.objects.filter(recipient=broker).count(), 1)
 
     def test_active_duplicate_request_is_conflict_and_database_constraint_is_race_safe(self):
         payload = {
@@ -297,6 +362,67 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertEqual(request.events.count(), 1)
         self.assertEqual(request.events.get().message, 'My plans changed.')
 
+    def test_customer_request_list_supports_status_filter_ordering_and_pagination(self):
+        earlier_property = Property.objects.create(
+            title='Earlier viewing property',
+            slug='earlier-viewing-property',
+            location='Submitted location',
+            price=450000,
+            description='An earlier appointment request.',
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        later_property = Property.objects.create(
+            title='Later viewing property',
+            slug='later-viewing-property',
+            location='Submitted location',
+            price=550000,
+            description='A later appointment request.',
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        earlier_request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=earlier_property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=2),
+            status=ViewingRequest.Status.PENDING,
+        )
+        later_request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=later_property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=3),
+            status=ViewingRequest.Status.PENDING,
+        )
+        ViewingRequest.objects.create(
+            requester=self.customer,
+            property=self.property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=1),
+            status=ViewingRequest.Status.CANCELLED,
+        )
+
+        first_page = self.client.get(
+            reverse('api:customer-viewing-list'),
+            {'status': 'pending', 'ordering': 'preferred_date', 'page_size': 1},
+        )
+        second_page = self.client.get(
+            reverse('api:customer-viewing-list'),
+            {'status': 'pending', 'ordering': 'preferred_date', 'page_size': 1, 'page': 2},
+        )
+
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(first_page.data['count'], 2)
+        self.assertIsNotNone(first_page.data['next'])
+        self.assertEqual(first_page.data['results'][0]['id'], earlier_request.pk)
+        self.assertEqual(second_page.data['results'][0]['id'], later_request.pk)
+        self.assertEqual(second_page.data['results'][0]['status'], ViewingRequest.Status.PENDING)
+
     def test_customer_cannot_read_another_users_viewing_request(self):
         request = ViewingRequest.objects.create(
             requester=self.customer,
@@ -313,9 +439,24 @@ class PublicViewingRequestApiTests(APITestCase):
         detail = self.client.get(
             reverse('api:customer-viewing-detail', kwargs={'pk': request.pk})
         )
+        respond = self.client.post(
+            reverse('api:customer-viewing-response', kwargs={'pk': request.pk}),
+            {'decision': 'accept'},
+            format='json',
+        )
+        cancel = self.client.post(
+            reverse('api:customer-viewing-cancel', kwargs={'pk': request.pk}),
+            {'message': 'Not my request.'},
+            format='json',
+        )
+        request.refresh_from_db()
 
         self.assertEqual(listed.data['count'], 0)
         self.assertEqual(detail.status_code, 404)
+        self.assertEqual(respond.status_code, 404)
+        self.assertEqual(cancel.status_code, 404)
+        self.assertEqual(request.status, ViewingRequest.Status.PENDING)
+        self.assertFalse(request.events.exists())
 
     def test_receipt_token_is_required_and_does_not_disclose_requester_details(self):
         receipt_token = 'legacy-guest-private-token'
@@ -418,6 +559,102 @@ class PublicViewingRequestApiTests(APITestCase):
         )
         self.assertTrue(InAppNotification.objects.filter(recipient=self.customer).exists())
         self.assertTrue(InAppNotification.objects.filter(recipient=manager).exists())
+
+    def test_broker_can_revise_proposal_and_customer_sees_the_updated_schedule_and_history(self):
+        broker = get_user_model().objects.create_user(username='revising-proposal-broker')
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
+        )
+        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+        request = ViewingRequest.objects.create(
+            property=self.property,
+            requester=self.customer,
+            full_name='Appointment Customer',
+            email='appointment@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=1),
+        )
+        self.client.force_authenticate(user=broker)
+        first_date = timezone.localdate() + timedelta(days=2)
+        revised_date = timezone.localdate() + timedelta(days=3)
+
+        first_proposal = self.client.patch(
+            reverse('api:managed-viewing-detail', kwargs={'pk': request.pk}),
+            {'proposed_date': first_date.isoformat(), 'proposed_time': '10:00'},
+            format='json',
+        )
+        revised_proposal = self.client.patch(
+            reverse('api:managed-viewing-detail', kwargs={'pk': request.pk}),
+            {'proposed_date': revised_date.isoformat(), 'proposed_time': '11:30'},
+            format='json',
+        )
+        self.client.force_authenticate(user=self.customer)
+        customer_requests = self.client.get(reverse('api:customer-viewing-list'))
+
+        self.assertEqual(first_proposal.status_code, 200)
+        self.assertEqual(revised_proposal.status_code, 200)
+        self.assertEqual(revised_proposal.data['status'], ViewingRequest.Status.PROPOSED)
+        self.assertEqual(len(revised_proposal.data['events']), 2)
+        self.assertEqual(revised_proposal.data['events'][-1]['event_type'], 'proposal_revised')
+        self.assertEqual(customer_requests.status_code, 200)
+        customer_request = customer_requests.data['results'][0]
+        self.assertEqual(customer_request['proposed_date'], revised_date.isoformat())
+        self.assertEqual(customer_request['proposed_time'], '11:30:00')
+        self.assertEqual(customer_request['appointment_timezone'], 'Africa/Addis_Ababa')
+        self.assertEqual(
+            InAppNotification.objects.filter(
+                recipient=self.customer,
+                notification_type='viewing_request_updated',
+            ).count(),
+            2,
+        )
+
+    def test_customer_can_decline_a_proposal_and_broker_receives_notification(self):
+        broker = get_user_model().objects.create_user(username='proposal-decline-broker')
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
+        )
+        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+        customer = get_user_model().objects.create_user(username='declining-appointment-customer')
+        Profile.objects.create(user=customer)
+        request = ViewingRequest.objects.create(
+            property=self.property,
+            requester=customer,
+            full_name='Declining Customer',
+            email='declining@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=1),
+            status=ViewingRequest.Status.PROPOSED,
+            proposed_date=timezone.localdate() + timedelta(days=2),
+            proposed_time='12:00',
+        )
+        self.client.force_authenticate(user=customer)
+
+        declined = self.client.post(
+            reverse('api:customer-viewing-response', kwargs={'pk': request.pk}),
+            {'decision': 'decline'},
+            format='json',
+        )
+
+        self.assertEqual(declined.status_code, 200)
+        self.assertEqual(declined.data['status'], ViewingRequest.Status.DECLINED)
+        request.refresh_from_db()
+        self.assertEqual(
+            request.events.latest('pk').event_type,
+            ViewingRequestEvent.Type.PROPOSAL_DECLINED,
+        )
+        self.assertTrue(
+            InAppNotification.objects.filter(
+                recipient=broker,
+                notification_type='viewing_request_updated',
+            ).exists()
+        )
 
     def test_guest_reference_number_is_not_sufficient_to_retrieve_request(self):
         guest = ViewingRequest.objects.create(

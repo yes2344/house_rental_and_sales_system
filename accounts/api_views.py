@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from accounts.models import TabSessionToken, UserPreferences
+from accounts.models import Profile, TabSessionToken, UserPreferences
 from accounts.serializers import (
     AccountActivitySerializer,
     AccountSerializer,
@@ -183,13 +183,19 @@ class AccountActivityView(generics.GenericAPIView):
 
     @extend_schema(summary='List the authenticated user’s saved properties and viewing requests')
     def get(self, request):
+        viewing_requests = ViewingRequest.objects.none()
+        profile_role = Profile.objects.filter(user_id=request.user.pk).values_list('role', flat=True).first()
+        if profile_role != Profile.Role.BROKER:
+            viewing_requests = (
+                ViewingRequest.objects.filter(requester=request.user)
+                .select_related('property')
+                .order_by('-created_at')
+            )
         activity = {
             'favorites': Favorite.objects.filter(user=request.user)
             .select_related('property')
             .order_by('-created_at'),
-            'viewing_requests': ViewingRequest.objects.filter(requester=request.user)
-            .select_related('property')
-            .order_by('-created_at'),
+            'viewing_requests': viewing_requests,
         }
         serializer = self.get_serializer(instance=activity)
         return Response(serializer.data)

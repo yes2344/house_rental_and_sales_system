@@ -5,6 +5,8 @@ import { BrokerageContactProvider } from './BrokerageContactContext';
 import { HomepageContentProvider } from './HomepageContentContext';
 import { PageLayout } from './components/PageLayout';
 import { RequireAuth } from './components/RequireAuth';
+import { RequireBrokerAccountManager } from './components/RequireBrokerAccountManager';
+import { RequireNonBroker } from './components/RequireNonBroker';
 import { RequireListingManager } from './components/RequireListingManager';
 import { RequireSettingsManager } from './components/RequireSettingsManager';
 import { OwnerDashboardLayout } from './components/OwnerDashboardLayout';
@@ -35,6 +37,9 @@ const CustomerViewingRequestsPage = lazy(() =>
 const AccountPage = lazy(() =>
   import('./pages/AccountPage').then(({ AccountPage }) => ({ default: AccountPage })),
 );
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then(({ DashboardPage }) => ({ default: DashboardPage })),
+);
 const FavoritesPage = lazy(() =>
   import('./pages/FavoritesPage').then(({ FavoritesPage }) => ({ default: FavoritesPage })),
 );
@@ -61,6 +66,9 @@ const BrokerageSettingsPage = lazy(() =>
 );
 const LocationManagementPage = lazy(() =>
   import('./pages/LocationManagementPage').then(({ LocationManagementPage }) => ({ default: LocationManagementPage })),
+);
+const BrokerAccountManagementPage = lazy(() =>
+  import('./pages/BrokerAccountManagementPage').then(({ BrokerAccountManagementPage }) => ({ default: BrokerAccountManagementPage })),
 );
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then(({ SettingsPage }) => ({ default: SettingsPage })),
@@ -112,10 +120,16 @@ export default function App() {
               <Route path="register" element={<RegisterPage text={text} />} />
               <Route path="settings" element={<SettingsPage text={text} />} />
               <Route element={<RequireAuth text={text} />}>
-                <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
-                <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
+                <Route path="dashboard" element={<DashboardPage text={text} />} />
+                <Route element={<RequireNonBroker />}>
+                  <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
+                  <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
+                </Route>
                 <Route path="account" element={<AccountPage locale={locale} text={text} />} />
                 <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
+                <Route element={<RequireBrokerAccountManager text={text} />}>
+                  <Route path="management/brokers" element={<BrokerAccountManagementPage locale={locale} text={text} />} />
+                </Route>
                 <Route element={<RequireListingManager text={text} />}>
                   <Route element={<OwnerDashboardLayout text={text} />}>
                     <Route path="management/listings" element={<OwnerListingsPage locale={locale} text={text} />} />

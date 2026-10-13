@@ -116,7 +116,9 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
   };
 }
 
-function isCreatedNavigationState(state: unknown): state is { created: true; available: boolean } {
+function isCreatedNavigationState(
+  state: unknown,
+): state is { created: true; available: boolean; imageUploadFailures?: string[] } {
   return typeof state === 'object' && state !== null && 'created' in state
     && state.created === true && 'available' in state && typeof state.available === 'boolean';
 }
@@ -159,6 +161,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const [imageError, setImageError] = useState('');
   const [imageBusyId, setImageBusyId] = useState<number | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [stagedImages, setStagedImages] = useState<File[]>([]);
   const [imageCaption, setImageCaption] = useState('');
   const [makePrimary, setMakePrimary] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -305,9 +308,23 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         setSaveSuccess(text('listingSaved'));
       } else {
         const created = await createManagedProperty(payload);
+        const imageUploadFailures: string[] = [];
+        let hasPrimaryImage = false;
+        for (const image of stagedImages) {
+          try {
+            await uploadManagedImage(created.id, image, '', !hasPrimaryImage);
+            hasPrimaryImage = true;
+          } catch (imageUploadError: unknown) {
+            imageUploadFailures.push(`${image.name}: ${getErrorMessage(imageUploadError)}`);
+          }
+        }
         navigate(`/management/listings/${created.id}/edit`, {
           replace: true,
-          state: { created: true, available: created.status === 'available' },
+          state: {
+            created: true,
+            available: created.status === 'available',
+            ...(imageUploadFailures.length ? { imageUploadFailures } : {}),
+          },
         });
       }
     } catch (error: unknown) {
@@ -345,6 +362,31 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         setImageFile(null);
       }
     }
+  };
+
+  const chooseNewImages = (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files ?? []);
+    const nextImages = [...stagedImages];
+    let selectionError = '';
+    for (const file of selectedFiles) {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (!['jpg', 'jpeg', 'png', 'webp'].includes(extension ?? '')) {
+        selectionError = text('imageTypeError');
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        selectionError = text('imageSizeError');
+        continue;
+      }
+      if (nextImages.length >= 10) {
+        selectionError = text('imageLimitError');
+        break;
+      }
+      nextImages.push(file);
+    }
+    setStagedImages(nextImages);
+    setImageError(selectionError);
+    event.target.value = '';
   };
 
   const submitImage = async (event: FormEvent<HTMLFormElement>) => {
@@ -482,6 +524,12 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           {text(location.state.available ? 'listingCreated' : 'listingCreatedUnavailable')}
         </div>
       )}
+      {isCreatedNavigationState(location.state) && location.state.imageUploadFailures?.length ? (
+        <div className="manager-form-error" role="alert">
+          <p>{text('imageUploadAfterSaveFailure')}</p>
+          <ul>{location.state.imageUploadFailures.map((failure) => <li key={failure}>{failure}</li>)}</ul>
+        </div>
+      ) : null}
       {saveSuccess && <div className="manager-success" role="status">{saveSuccess}</div>}
       {saveError && <div className="manager-form-error" role="alert">{saveError}</div>}
 
@@ -632,7 +680,9 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
                 value={values.administrative_location}
                 locale={locale}
                 text={text}
-                required
+                required={!property || values.administrative_location !== (
+                  property.administrative_location === null ? '' : String(property.administrative_location)
+                )}
                 management
                 onChange={(value) => updateValue('administrative_location', value)}
               />
@@ -718,6 +768,43 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
             </label>
           </div>
         </section>
+
+        {!isEditing && (
+          <section className="manager-form-section">
+            <div className="manager-section-heading">
+              <div><h2>{text('managePhotos')}</h2><p>{text('imageUploadAfterSave')}</p></div>
+              <span className="manager-count">{stagedImages.length} / 10</span>
+            </div>
+            {imageError && <p className="manager-inline-error" role="alert">{imageError}</p>}
+            <label className="manager-field">
+              <span>{text('chooseImage')}</span>
+              <input
+                id="new-property-image-files"
+                type="file"
+                multiple
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                onChange={chooseNewImages}
+              />
+            </label>
+            {stagedImages.length > 0 && (
+              <ul className="staged-image-list">
+                {stagedImages.map((image, index) => (
+                  <li key={`${image.name}-${image.lastModified}-${index}`}>
+                    <span>{image.name}</span>
+                    <button
+                      className="manager-text-button danger-text"
+                      type="button"
+                      aria-label={`${text('removeSelectedImage')}: ${image.name}`}
+                      onClick={() => setStagedImages((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />{text('removeSelectedImage')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
 
         <div className="manager-form-actions">
           <button className="button button-primary" type="submit" disabled={saving || deleting}>

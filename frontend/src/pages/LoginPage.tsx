@@ -23,7 +23,7 @@ function returnPath(state: LoginLocationState | null): string {
   if (from && typeof from === 'object' && from.pathname?.startsWith('/')) {
     return `${from.pathname}${from.search ?? ''}${from.hash ?? ''}`;
   }
-  return '/account';
+  return '/dashboard';
 }
 
 export function LoginPage({ text }: LoginPageProps) {

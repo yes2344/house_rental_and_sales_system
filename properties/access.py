@@ -4,7 +4,6 @@ from accounts.models import Profile
 from accounts.permissions import (
     has_management_permission,
     has_listing_role,
-    is_platform_administrator,
 )
 from properties.models import Property
 
@@ -21,8 +20,6 @@ def public_properties():
 
 def managed_properties(user):
     broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
-    if is_platform_administrator(user):
-        return broker_managed
     if has_management_permission(user, Profile.Permission.PROPERTY_VIEW_ALL) or has_management_permission(
         user,
         Profile.Permission.PROPERTY_MODERATE,
@@ -40,8 +37,6 @@ def managed_properties(user):
 
 def editable_properties(user):
     broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
-    if is_platform_administrator(user):
-        return broker_managed
     if has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL):
         return broker_managed
 

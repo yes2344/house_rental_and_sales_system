@@ -94,6 +94,9 @@ apiClient.interceptors.response.use(
 
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
+    if (error.response && error.response.status >= 500) {
+      return 'The server encountered an error. Please try again later.';
+    }
     const fieldErrors = getApiFieldErrors(error);
     if (Object.keys(fieldErrors).length) return Object.values(fieldErrors).join(' ');
     const apiMessage = error.response?.data?.error?.message;

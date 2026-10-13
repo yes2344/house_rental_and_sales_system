@@ -10,17 +10,17 @@ interface OwnerDashboardLayoutProps {
 export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   const { account } = useAuth();
   const permissions = account?.management_permissions ?? [];
-  const isOwner = Boolean(account?.is_platform_owner);
   const isAuthorizedBroker = account?.role === 'broker';
-  const canViewProperties = isOwner || (isAuthorizedBroker && permissions.some((permission) => [
+  const isDjangoAdmin = account?.is_django_admin === true;
+  const canViewProperties = isDjangoAdmin || (isAuthorizedBroker && permissions.some((permission) => [
     'properties.view_all',
     'properties.moderate',
     'properties.edit_all',
     'properties.manage_assigned',
   ].includes(permission)));
-  const canViewRequests = isOwner || (isAuthorizedBroker && permissions.some((permission) => permission.startsWith('viewings.')));
-  const canManageSettings = isOwner || (isAuthorizedBroker && permissions.includes('settings.manage'));
-  const canManageBrokers = isOwner;
+  const canViewRequests = isDjangoAdmin || (isAuthorizedBroker && permissions.some((permission) => permission.startsWith('viewings.')));
+  const canManageSettings = isDjangoAdmin || (isAuthorizedBroker && permissions.includes('settings.manage'));
+  const canManageBrokers = account?.role === 'administrator' && permissions.includes('users.manage');
 
   return (
     <div className="manager-shell">
@@ -29,7 +29,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
         {canViewRequests && <NavLink to="/management/viewing-requests">{text('managerViewingRequests')}</NavLink>}
         {canManageSettings && <NavLink to="/management/brokerage">{text('managerContactSettings')}</NavLink>}
         {canManageSettings && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
-        {canManageBrokers && <a href="/admin-portal/delegated-accounts/">{text('managerBrokerAccounts')}</a>}
+        {canManageBrokers && <NavLink to="/management/brokers">{text('managerBrokerAccounts')}</NavLink>}
       </nav>
       <Outlet />
     </div>

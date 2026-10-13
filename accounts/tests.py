@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
 from accounts.models import Profile, TabSessionToken, UserPreferences
@@ -10,6 +13,7 @@ from accounts.permissions import (
     IsPropertyManagerOrAdministrator,
     IsViewingRequestManager,
     effective_management_permissions,
+    has_management_permission,
 )
 from favorites.models import Favorite
 from properties.models import Property, PropertyBrokerAssignment
@@ -25,6 +29,44 @@ class ProfileConstraintTests(TestCase):
 
 
 class AccountApiTests(APITestCase):
+    def test_django_superuser_can_sign_in_through_the_shared_account_endpoint(self):
+        administrator = get_user_model().objects.create_superuser(
+            username='shared-login-django-admin',
+            password='SecurePass123!value',
+        )
+
+        response = self.client.post(
+            reverse('api:login'),
+            {'username': administrator.username, 'password': 'SecurePass123!value'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['username'], administrator.username)
+        self.assertEqual(response.data['management_permissions'], list(Profile.Permission.values))
+        self.assertTrue(response.data['is_django_admin'])
+
+    def test_django_superuser_gets_full_platform_management_permissions(self):
+        administrator = get_user_model().objects.create_superuser(
+            username='django-admin-only',
+            password='SecurePass123!value',
+        )
+        self.client.force_authenticate(user=administrator)
+
+        response = self.client.get(reverse('api:me'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['role'], Profile.Role.ADMINISTRATOR)
+        self.assertEqual(response.data['management_permissions'], list(Profile.Permission.values))
+        self.assertFalse(response.data['is_platform_owner'])
+        self.assertTrue(response.data['is_django_admin'])
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.PROPERTY_VIEW_ALL))
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.USERS_MANAGE))
+        self.assertEqual(
+            self.client.get(reverse('api:admin-property-list')).status_code,
+            200,
+        )
+
     def test_approved_broker_role_has_all_marketplace_permissions_except_account_control(self):
         broker = get_user_model().objects.create_user(username='full-access-broker')
         profile = Profile.objects.create(
@@ -73,6 +115,69 @@ class AccountApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn('password', response.data['error']['details'])
+
+    def test_malformed_json_returns_standard_api_error(self):
+        response = self.client.post(
+            reverse('api:login'),
+            data='{"username":',
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['error']['status_code'], 400)
+        self.assertIsInstance(response.data['error']['message'], str)
+
+    def test_unknown_account_and_incorrect_password_share_login_error(self):
+        user = get_user_model().objects.create_user(
+            username='known-login-account',
+            password='Evergreen!Place42',
+        )
+        responses = [
+            self.client.post(
+                reverse('api:login'),
+                {'username': user.username, 'password': 'incorrect-password'},
+                format='json',
+            ),
+            self.client.post(
+                reverse('api:login'),
+                {'username': 'unknown-login-account', 'password': 'incorrect-password'},
+                format='json',
+            ),
+        ]
+
+        self.assertEqual([response.status_code for response in responses], [400, 400])
+        self.assertEqual(
+            responses[0].data['error']['details'],
+            responses[1].data['error']['details'],
+        )
+        self.assertEqual(
+            responses[0].data['error']['details']['non_field_errors'],
+            ['Invalid username or password.'],
+        )
+
+    def test_login_rejects_missing_credentials(self):
+        response = self.client.post(reverse('api:login'), {}, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['error']['status_code'], 400)
+        self.assertIn('username', response.data['error']['details'])
+        self.assertIn('password', response.data['error']['details'])
+
+    def test_expired_tab_token_cannot_access_authenticated_account(self):
+        user = get_user_model().objects.create_user(username='expired-token-account')
+        session, token = TabSessionToken.issue(user)
+        TabSessionToken.objects.filter(pk=session.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+
+        for supplied_token in (token, 'not-a-valid-token'):
+            with self.subTest(token_type='expired' if supplied_token == token else 'invalid'):
+                response = self.client.get(
+                    reverse('api:me'),
+                    HTTP_AUTHORIZATION=f'Bearer {supplied_token}',
+                )
+
+                self.assertIn(response.status_code, [401, 403])
 
     def test_login_requires_csrf_token_and_returns_tab_session_token(self):
         user = get_user_model().objects.create_user(
@@ -309,6 +414,35 @@ class AccountActivityApiTests(APITestCase):
         self.assertEqual(response.data['viewing_requests'][0]['id'], own_request.pk)
         self.assertNotIn('email', response.data['viewing_requests'][0])
         self.assertNotIn('phone', response.data['viewing_requests'][0])
+
+    def test_broker_activity_does_not_include_customer_viewing_requests(self):
+        broker = get_user_model().objects.create_user(username='activity-broker')
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+        )
+        property_obj = Property.objects.create(
+            title='Broker activity property',
+            slug='broker-activity-property',
+            location='Submitted location',
+            price=100000,
+            description='A test listing.',
+        )
+        ViewingRequest.objects.create(
+            property=property_obj,
+            requester=broker,
+            full_name='Broker Account',
+            email='broker@example.com',
+            phone='+251900000000',
+            preferred_date='2026-11-01',
+        )
+        self.client.force_authenticate(user=broker)
+
+        response = self.client.get(reverse('api:activity'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['viewing_requests'], [])
 
 
 class AccountPreferencesApiTests(APITestCase):

@@ -8,7 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 env = environ.Env(
-    DEBUG=(bool, True),
+    DEBUG=(bool, False),
 )
 env_file = BASE_DIR / '.env'
 if env_file.is_file():
@@ -17,7 +17,7 @@ if env_file.is_file():
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-DEBUG = env.bool('DJANGO_DEBUG', default=True)
+DEBUG = env.bool('DJANGO_DEBUG', default=False)
 SECRET_KEY = env('DJANGO_SECRET_KEY', default='')
 if not SECRET_KEY:
     if not DEBUG:

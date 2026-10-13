@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
 import { getProperty, type PropertyDetail } from '../api/properties';
+import { useAuth } from '../AuthContext';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { formatPropertyPrice, formatRegistrationDate } from '../components/propertyDisplay';
 import { formatPropertyLocation } from '../components/locationDisplay';
@@ -19,6 +20,7 @@ import type { HomePageProps } from './HomePage';
 
 export function PropertyDetailPage({ locale, text }: HomePageProps) {
   const { slug = '' } = useParams();
+  const { account } = useAuth();
   const { contact, error: contactError } = useBrokerageContact();
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,8 +201,12 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
           {contact.email && (
             <a className="contact-method" href={`mailto:${contact.email}`}><Mail size={17} aria-hidden="true" /><span><small>{text('contactByEmail')}</small><strong>{contact.email}</strong></span></a>
           )}
-          <Link className="button button-primary viewing-cta" to={`/viewing-requests/new?property_id=${property.id}&property_slug=${encodeURIComponent(property.slug)}`}><CalendarDays size={16} aria-hidden="true" />{text('requestViewing')}</Link>
-          <p className="contact-note">{contactError ? text('brokerContactUnavailable') : text('viewingNoAccount')}</p>
+          {account?.role !== 'broker' && (
+            <>
+              <Link className="button button-primary viewing-cta" to={`/viewing-requests/new?property_id=${property.id}&property_slug=${encodeURIComponent(property.slug)}`}><CalendarDays size={16} aria-hidden="true" />{text('requestViewing')}</Link>
+              <p className="contact-note">{contactError ? text('brokerContactUnavailable') : text('viewingNoAccount')}</p>
+            </>
+          )}
           {!contactError && !contact.phone && !contact.email && !whatsappLink && !telegramLink && (
             <p className="contact-note">{text('brokerContactNotConfigured')}</p>
           )}

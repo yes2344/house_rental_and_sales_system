@@ -524,32 +524,19 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({
                         'administrative_location': 'Every level in the selected location path must be active.',
                     })
-                city_ids = [
-                    item.pk for item in path
-                    if item.location_type in (Location.Type.CITY, Location.Type.CITY_ADMINISTRATION)
-                ]
-                if not city_ids:
-                    raise serializers.ValidationError({
-                        'administrative_location': 'Select a city or town in the location hierarchy.',
-                    })
-                subcity_parent_ids = set(
-                    Location.objects.filter(
-                        parent_id__in=city_ids,
-                        location_type=Location.Type.SUBCITY,
-                        is_active=True,
-                    ).values_list('parent_id', flat=True)
-                )
-                if any(
-                    item.pk in subcity_parent_ids
-                    and not any(
-                        path_item.location_type == Location.Type.SUBCITY
-                        and path_item.parent_id == item.pk
-                        for path_item in path
-                    )
+                if not any(
+                    item.location_type in (Location.Type.CITY, Location.Type.CITY_ADMINISTRATION)
                     for item in path
                 ):
                     raise serializers.ValidationError({
-                        'administrative_location': 'Select a sub-city/kifle ketema for this city.',
+                        'administrative_location': 'Select a city or town in the location hierarchy.',
+                    })
+                if (
+                    any(item.location_type == Location.Type.CITY_ADMINISTRATION for item in path)
+                    and not any(item.location_type == Location.Type.SUBCITY for item in path)
+                ):
+                    raise serializers.ValidationError({
+                        'administrative_location': 'Select a configured sub-city / Kifle Ketema for this city administration.',
                     })
         return attrs
 

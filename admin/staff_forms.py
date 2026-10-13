@@ -14,16 +14,13 @@ OWNER_ONLY_PERMISSIONS = {
 class DelegatedAccountCreateForm(forms.Form):
     username = forms.CharField(max_length=150)
     email = forms.EmailField()
-    role = forms.ChoiceField(choices=[
-        (Profile.Role.ADMINISTRATOR, 'Administrator'),
-        (Profile.Role.BROKER, 'Broker'),
-    ], help_text='Administrators manage broker accounts. Approved brokers manage marketplace operations; delegated-account control remains owner-only.')
+    role = forms.ChoiceField(
+        choices=[(Profile.Role.BROKER, 'Broker')],
+        initial=Profile.Role.BROKER,
+    )
     def __init__(self, *args, actor=None, **kwargs):
         self.actor = actor
         super().__init__(*args, **kwargs)
-        if actor and not actor.is_superuser:
-            self.fields['role'].choices = [(Profile.Role.BROKER, 'Broker')]
-            self.fields['role'].initial = Profile.Role.BROKER
 
     def clean_username(self):
         username = self.cleaned_data['username'].strip()
@@ -46,30 +43,23 @@ class DelegatedAccountCreateForm(forms.Form):
         if role == Profile.Role.BROKER:
             cleaned_data['management_permissions'] = broker_work_permissions()
             permissions = set(cleaned_data['management_permissions'])
-        if self.actor and not self.actor.is_superuser and role != Profile.Role.BROKER:
-            self.add_error('role', 'Administrators may manage broker accounts only.')
+        if role != Profile.Role.BROKER:
+            self.add_error('role', 'This form creates broker accounts only.')
         if OWNER_ONLY_PERMISSIONS.intersection(permissions):
             self.add_error(
                 'management_permissions',
                 'Delegated-account control remains owner-only.',
             )
-        if role == Profile.Role.ADMINISTRATOR and not permissions:
-            cleaned_data['management_permissions'] = [Profile.Permission.USERS_MANAGE]
         return cleaned_data
 
 
 class DelegatedAccountUpdateForm(forms.Form):
-    role = forms.ChoiceField(choices=[
-        (Profile.Role.ADMINISTRATOR, 'Administrator'),
-        (Profile.Role.BROKER, 'Broker'),
-    ], help_text='Administrators manage broker accounts. Approved brokers manage marketplace operations; delegated-account control remains owner-only.')
+    role = forms.ChoiceField(choices=[(Profile.Role.BROKER, 'Broker')])
     is_active = forms.BooleanField(required=False)
     def __init__(self, *args, profile, actor=None, **kwargs):
         self.profile = profile
         self.actor = actor
         super().__init__(*args, **kwargs)
-        if actor and not actor.is_superuser:
-            self.fields['role'].choices = [(Profile.Role.BROKER, 'Broker')]
         if not self.is_bound:
             self.initial.update({
                 'role': profile.role,
@@ -83,10 +73,8 @@ class DelegatedAccountUpdateForm(forms.Form):
         if role == Profile.Role.BROKER:
             cleaned_data['management_permissions'] = broker_work_permissions()
             permissions = set(cleaned_data['management_permissions'])
-        if self.actor and not self.actor.is_superuser and role != Profile.Role.BROKER:
-            self.add_error('role', 'Administrators may manage broker accounts only.')
+        if role != Profile.Role.BROKER:
+            self.add_error('role', 'This form manages broker accounts only.')
         if OWNER_ONLY_PERMISSIONS.intersection(permissions):
             self.add_error('management_permissions', 'These permissions remain owner-only.')
-        if role == Profile.Role.ADMINISTRATOR and not permissions:
-            cleaned_data['management_permissions'] = [Profile.Permission.USERS_MANAGE]
         return cleaned_data

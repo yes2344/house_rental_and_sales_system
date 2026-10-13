@@ -11,12 +11,14 @@ export function RequireListingManager({ text }: RequireListingManagerProps) {
   const { account } = useAuth();
 
   const canManage = Boolean(
-    account?.is_platform_owner
-    || (account?.role === 'broker' && account.management_permissions.some(
-      (permission) => permission.startsWith('properties.')
-        || permission.startsWith('viewings.')
-        || permission === 'settings.manage',
-    )),
+    account?.is_django_admin
+    || (
+      account?.role === 'broker' && account.management_permissions.some(
+        (permission) => permission.startsWith('properties.')
+          || permission.startsWith('viewings.')
+          || permission === 'settings.manage',
+      )
+    ),
   );
 
   if (canManage) {

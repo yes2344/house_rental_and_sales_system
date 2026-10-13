@@ -34,6 +34,7 @@ export function LocationCascade({
   const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState('');
+  const cityFirst = management;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -63,51 +64,90 @@ export function LocationCascade({
     setSelectedIds(path);
   }, [locations, value]);
 
+  const locationById = new Map(locations.map((location) => [location.id, location]));
+  const selectedCityIndex = selectedIds.findIndex((id) => {
+    const type = locationById.get(id)?.location_type;
+    return type === 'city' || type === 'city_administration';
+  });
+  const selectedCityId = selectedCityIndex < 0 ? undefined : selectedIds[selectedCityIndex];
+  const selectedCity = selectedCityId === undefined ? undefined : locationById.get(selectedCityId);
+  const requiresSubcity = cityFirst && selectedCity?.location_type === 'city_administration';
+  const cityOptions = locations.filter((location) => (
+    (location.location_type === 'city' || location.location_type === 'city_administration')
+    && (location.is_active || location.id === selectedCityId)
+  ));
+  const levels: { options: MarketplaceLocation[]; selectedId?: number }[] = [];
+  if (cityFirst) {
+    if (cityOptions.length > 0) {
+      levels.push({ options: cityOptions, selectedId: selectedCityId });
+    }
+
+    let parentId = selectedCityId ?? null;
+    let selectedPathIndex = selectedCityIndex;
+    for (let level = 0; level < 7 && parentId !== null; level += 1) {
+      const selectedAtLevel = selectedPathIndex < 0 ? undefined : selectedIds[selectedPathIndex + 1];
+      const options = locations.filter(
+        (location) => location.parent_id === parentId
+          && !(level === 0 && requiresSubcity && location.location_type !== 'subcity')
+          && (location.is_active || location.id === selectedAtLevel),
+      );
+      if (options.length === 0) break;
+      levels.push({ options, selectedId: selectedAtLevel });
+      parentId = selectedAtLevel ?? null;
+      selectedPathIndex += 1;
+    }
+  } else {
+    let parentId: number | null = null;
+    for (let level = 0; level < 8; level += 1) {
+      const selectedAtLevel = selectedIds[level];
+      const options = locations.filter(
+        (location) => location.parent_id === parentId
+          && (location.is_active || location.id === selectedAtLevel),
+      );
+      if (options.length === 0) break;
+      levels.push({ options, selectedId: selectedAtLevel });
+      parentId = selectedAtLevel ?? null;
+      if (parentId === null) break;
+    }
+  }
+
   const choose = (level: number, rawValue: string) => {
-    const nextIds = selectedIds.slice(0, level);
-    if (rawValue) nextIds.push(Number(rawValue));
+    const selectedLocation = rawValue ? locationById.get(Number(rawValue)) : undefined;
+    let nextIds: number[];
+    if (!cityFirst) {
+      nextIds = selectedIds.slice(0, level);
+      if (selectedLocation) nextIds.push(selectedLocation.id);
+    } else if (level === 0) {
+      nextIds = [];
+      let current = selectedLocation;
+      while (current) {
+        nextIds.unshift(current.id);
+        current = current.parent_id === null ? undefined : locationById.get(current.parent_id);
+      }
+    } else {
+      const cityPathIndex = selectedIds.findIndex((id) => {
+        const type = locationById.get(id)?.location_type;
+        return type === 'city' || type === 'city_administration';
+      });
+      nextIds = selectedIds.slice(0, cityPathIndex + level);
+      if (selectedLocation) nextIds.push(selectedLocation.id);
+    }
     setSelectedIds(nextIds);
     onChange(nextIds.length ? String(nextIds[nextIds.length - 1]) : '');
   };
-
-  const levels: MarketplaceLocation[][] = [];
-  let parentId: number | null = null;
-  for (let level = 0; level < 8; level += 1) {
-    const selectedAtLevel = selectedIds[level];
-    const options = locations.filter(
-      (location) => location.parent_id === parentId
-        && (location.is_active || location.id === selectedAtLevel),
-    );
-    if (options.length === 0) break;
-    levels.push(options);
-    parentId = selectedIds[level] ?? null;
-    if (parentId === null) break;
-  }
-
-  const selectedLocationTypes = selectedIds
-    .map((id) => locations.find((location) => location.id === id)?.location_type);
-  const hasCity = selectedLocationTypes.some(
-    (type) => type === 'city' || type === 'city_administration',
-  );
-  const hasSubcity = selectedLocationTypes.includes('subcity');
 
   return (
     <fieldset className="location-cascade">
       <legend>{text('administrativeLocation')}</legend>
       <div className="filter-two-columns">
-        {levels.map((options, level) => (
+        {levels.map(({ options, selectedId }, level) => (
           <label className="filter-label" key={level}>
-            {text(locationTypeMessages[options[0]?.location_type] ?? 'administrativeLocation')}
+            {text(locationTypeMessages[cityFirst && level === 0 ? 'city' : options[0]?.location_type] ?? 'administrativeLocation')}
             <select
               className="filter-select"
-              value={selectedIds[level] ?? ''}
+              value={selectedId ?? ''}
               disabled={options.every((location) => !location.is_active)}
-              required={required && (
-                level === 0
-                || (options.some((location) => location.location_type === 'city'
-                  || location.location_type === 'city_administration') && !hasCity)
-                || (options.some((location) => location.location_type === 'subcity') && hasCity && !hasSubcity)
-              )}
+              required={required && (!cityFirst || level === 0 || (requiresSubcity && level === 1))}
               onChange={(event) => choose(level, event.target.value)}
             >
               <option value="">{text('selectOption')}</option>
@@ -124,6 +164,9 @@ export function LocationCascade({
           </label>
         ))}
       </div>
+      {required && requiresSubcity && levels.length === 1 && (
+        <small role="alert">{text('locationSubcityRequired')}</small>
+      )}
       {error && <small role="alert">{text('locationLoadError')}</small>}
       {!error && locations.length === 0 && <small>{text('locationOptionsEmpty')}</small>}
     </fieldset>

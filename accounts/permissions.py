@@ -21,13 +21,9 @@ def broker_work_permissions():
     ]
 
 
-def is_platform_administrator(user):
-    return bool(user and user.is_authenticated and user.is_active and user.is_superuser)
-
-
 def effective_management_permissions(user):
     if user.is_superuser:
-        return [permission for permission, _ in Profile.Permission.choices]
+        return list(Profile.Permission.values) if user.is_active else []
     profile = getattr(user, 'profile', None)
     if profile is None:
         return []
@@ -42,7 +38,7 @@ def has_management_permission(user, permission):
     if not user or not user.is_authenticated or not user.is_active:
         return False
     if user.is_superuser:
-        return True
+        return permission in Profile.Permission.values
     profile = Profile.objects.filter(user_id=user.pk).first()
     if profile is None:
         return False
@@ -98,30 +94,33 @@ def has_listing_role(user, role, *, broker_approved=False):
     return Profile.objects.filter(**filters).exists()
 
 
-class IsPlatformAdministrator(BasePermission):
-    def has_permission(self, request, view):
-        return is_platform_administrator(request.user)
-
-
 class IsActiveAuthenticated(BasePermission):
     def has_permission(self, request, view):
         user = request.user
         return bool(user and user.is_authenticated and user.is_active)
 
 
+class IsNotBrokerAccount(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and not Profile.objects.filter(user_id=user.pk, role=Profile.Role.BROKER).exists()
+        )
+
+
 class IsListingManager(BasePermission):
     def has_permission(self, request, view):
         user = request.user
-        return (
-            is_platform_administrator(user)
-            or any(
-                has_management_permission(user, permission)
-                for permission in (
-                    Profile.Permission.PROPERTY_VIEW_ALL,
-                    Profile.Permission.PROPERTY_MODERATE,
-                    Profile.Permission.PROPERTY_EDIT_ALL,
-                    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
-                )
+        return any(
+            has_management_permission(user, permission)
+            for permission in (
+                Profile.Permission.PROPERTY_VIEW_ALL,
+                Profile.Permission.PROPERTY_MODERATE,
+                Profile.Permission.PROPERTY_EDIT_ALL,
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
             )
         )
 
@@ -130,8 +129,6 @@ class IsPropertyManagerOrAdministrator(IsListingManager):
     def has_object_permission(self, request, view, obj):
         user = request.user
         property_obj = getattr(obj, 'property', obj)
-        if is_platform_administrator(user):
-            return True
         assigned_broker = (
             has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
             and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
@@ -182,8 +179,6 @@ class IsViewingRequestManager(IsPropertyManagerOrAdministrator):
         user = request.user
         if not user or not user.is_authenticated or not user.is_active:
             return False
-        if is_platform_administrator(user):
-            return True
         return any(
             has_management_permission(user, permission)
             for permission in (

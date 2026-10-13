@@ -1,6 +1,5 @@
 from django.contrib import messages
 from django.contrib.auth import logout
-from django.contrib.auth.decorators import user_passes_test
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -14,10 +13,12 @@ from user.models import Property, PropertyImage
 
 
 def owner_required(view_func):
-    return user_passes_test(
-        lambda user: user.is_authenticated and user.is_active and user.is_superuser,
-        login_url='/admin/login/',
-    )(view_func)
+    def redirect_to_broker_management(request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.is_active and request.user.is_superuser:
+            return redirect('admin_delegated_accounts')
+        return redirect('/admin/login/')
+
+    return redirect_to_broker_management
 
 
 @require_POST
@@ -125,11 +126,10 @@ def delegated_accounts(request):
         return redirect('/')
 
     profiles = Profile.objects.filter(
-        role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
+        role=Profile.Role.BROKER,
+        user__is_staff=False,
         user__is_superuser=False,
     )
-    if not request.user.is_superuser:
-        profiles = profiles.filter(role=Profile.Role.BROKER)
     profiles = profiles.select_related('user').order_by('user__username')
     invitation_token = None
     selected_profile = None
@@ -187,7 +187,7 @@ def delegated_accounts(request):
                 username=form.cleaned_data['username'],
                 email=form.cleaned_data['email'],
                 is_active=False,
-                is_staff=role == Profile.Role.ADMINISTRATOR,
+                is_staff=False,
             )
             user.set_unusable_password()
             user.save()
@@ -223,7 +223,7 @@ def delegated_accounts(request):
         'edit_form': form if selected_profile is not None else None,
         'selected_profile': selected_profile,
         'invitation_token': invitation_token,
-        'is_platform_owner': request.user.is_superuser,
+        'is_platform_owner': False,
     })
     response['Cache-Control'] = 'no-store'
     response['Referrer-Policy'] = 'no-referrer'

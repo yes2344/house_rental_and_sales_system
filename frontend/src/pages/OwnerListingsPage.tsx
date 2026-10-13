@@ -41,11 +41,10 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
   const { account } = useAuth();
   const permissions = account?.management_permissions ?? [];
   const canCreate = Boolean(
-    account?.is_platform_owner
-    || (permissions.includes('properties.edit_all') && permissions.includes('properties.moderate'))
+    (permissions.includes('properties.edit_all') && permissions.includes('properties.moderate'))
     || (account?.role === 'broker' && permissions.includes('properties.manage_assigned')),
   );
-  const canModerate = Boolean(account?.is_platform_owner || permissions.includes('properties.moderate'));
+  const canModerate = permissions.includes('properties.moderate');
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState(searchParams.get('status') ?? '');

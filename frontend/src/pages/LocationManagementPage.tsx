@@ -33,21 +33,21 @@ const emptyForm: LocationFormValues = {
   name_am: '',
   aliases_en: '',
   aliases_am: '',
-  location_type: 'country',
+  location_type: 'city',
   parent: '',
   is_active: true,
   display_order: '0',
 };
 
-const locationTypes: ManagedLocationType[] = [
-  'country',
-  'region',
-  'city_administration',
-  'city',
-  'subcity',
-  'woreda',
-  'neighborhood',
-];
+const parentTypesByLocationType: Record<ManagedLocationType, ManagedLocationType[]> = {
+  country: [],
+  region: ['country'],
+  city_administration: ['country'],
+  city: ['country', 'region', 'city_administration'],
+  subcity: ['city', 'city_administration'],
+  woreda: ['city', 'city_administration', 'subcity'],
+  neighborhood: ['city', 'city_administration', 'subcity', 'woreda'],
+};
 
 function fromLocation(location: MarketplaceLocation): LocationFormValues {
   return {
@@ -110,6 +110,20 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     [locations],
   );
   const editingLocation = editingId === null ? null : locationById.get(editingId) ?? null;
+  const ethiopia = locations.find(
+    (location) =>
+      location.location_type === 'country'
+      && location.name.trim().toLocaleLowerCase() === 'ethiopia'
+      && location.is_active,
+  );
+  const parentTypes = parentTypesByLocationType[values.location_type];
+  const parentOptions = locations.filter(
+    (location) => location.is_active && parentTypes.includes(location.location_type),
+  );
+  const selectedParent = values.parent
+    || (editingId === null && values.location_type === 'city' && ethiopia
+      ? String(ethiopia.id)
+      : '');
   const filteredLocations = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase();
     return locations.filter((location) => {
@@ -155,12 +169,15 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     setFieldErrors({});
     try {
       if (editingId === null) {
-        await createManagedLocation(toPayload(values));
+        await createManagedLocation(toPayload({ ...values, parent: selectedParent }));
       } else {
         await updateManagedLocation(editingId, {
           name: values.name.trim(),
           name_am: values.name_am.trim(),
+          aliases_en: values.aliases_en.split(',').map((alias) => alias.trim()).filter(Boolean),
+          aliases_am: values.aliases_am.split(',').map((alias) => alias.trim()).filter(Boolean),
           is_active: values.is_active,
+          display_order: Number(values.display_order) || 0,
         });
       }
       setLocations(await getManagedLocations());
@@ -219,44 +236,68 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
               <input className="filter-input" maxLength={120} value={values.name_am} onChange={(event) => updateValue('name_am', event.target.value)} />
               {fieldErrors.name_am && <small role="alert">{fieldErrors.name_am}</small>}
             </label>
-            {editingId === null ? (
+            {editingId === null && (
               <>
                 <label className="filter-label">{text('locationType')}
-                  <select className="filter-select" value={values.location_type} onChange={(event) => {
-                    const selectedType = locationTypes.find((type) => type === event.target.value);
-                    if (selectedType) updateValue('location_type', selectedType);
-                  }}>
-                    {locationTypes.map((type) => <option key={type} value={type}>{localizedLocationType(type)}</option>)}
-                  </select>
-                </label>
-                <label className="filter-label">{text('locationParent')}
-                  <select className="filter-select" value={values.parent} onChange={(event) => updateValue('parent', event.target.value)}>
-                    <option value="">{text('noParent')}</option>
-                    {locations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.name} · {localizedLocationType(location.location_type)}
-                        {!location.is_active ? ` (${text('statusInactive')})` : ''}
-                      </option>
+                  <select
+                    className="filter-select"
+                    value={values.location_type}
+                    onChange={(event) => {
+                      updateValue('location_type', event.target.value as ManagedLocationType);
+                      updateValue('parent', '');
+                    }}
+                  >
+                    {(['country', 'region', 'city_administration', 'city', 'subcity', 'woreda', 'neighborhood'] as const).map((type) => (
+                      <option value={type} key={type}>{localizedLocationType(type)}</option>
                     ))}
                   </select>
-                  {fieldErrors.parent && <small role="alert">{fieldErrors.parent}</small>}
                 </label>
-                <label className="filter-label">{text('locationAliasesEn')}
-                  <input className="filter-input" value={values.aliases_en} onChange={(event) => updateValue('aliases_en', event.target.value)} placeholder={text('locationAliasesEnPlaceholder')} />
-                </label>
-                <label className="filter-label">{text('locationAliasesAm')}
-                  <input className="filter-input" value={values.aliases_am} onChange={(event) => updateValue('aliases_am', event.target.value)} placeholder={text('locationAliasesAmPlaceholder')} />
-                </label>
-                <label className="filter-label">{text('displayOrder')}
-                  <input className="filter-input" type="number" min="0" step="1" value={values.display_order} onChange={(event) => updateValue('display_order', event.target.value)} />
-                </label>
+                {parentTypes.length > 0 && (
+                  <label className="filter-label">{text('locationParent')}
+                    <select
+                      className="filter-select"
+                      value={selectedParent}
+                      required
+                      onChange={(event) => updateValue('parent', event.target.value)}
+                    >
+                      <option value="">{text('selectOption')}</option>
+                      {parentOptions.map((location) => (
+                        <option value={location.id} key={location.id}>
+                          {`${localizedLocationType(location.location_type)}: ${location.name}`}
+                        </option>
+                      ))}
+                    </select>
+                    {values.location_type === 'subcity' && (
+                      <small>{text('locationSubcityParentHint')}</small>
+                    )}
+                    {fieldErrors.parent && <small role="alert">{fieldErrors.parent}</small>}
+                  </label>
+                )}
               </>
-            ) : (
-              <label className="location-active-toggle">
-                <input type="checkbox" checked={values.is_active} onChange={(event) => updateValue('is_active', event.target.checked)} />
-                {text('locationActive')}
-              </label>
             )}
+            <label className="filter-label">{text('locationAliasesEn')}
+              <input className="filter-input" value={values.aliases_en} onChange={(event) => updateValue('aliases_en', event.target.value)} placeholder={text('locationAliasesEnPlaceholder')} />
+              {fieldErrors.aliases_en && <small role="alert">{fieldErrors.aliases_en}</small>}
+            </label>
+            <label className="filter-label">{text('locationAliasesAm')}
+              <input className="filter-input" value={values.aliases_am} onChange={(event) => updateValue('aliases_am', event.target.value)} placeholder={text('locationAliasesAmPlaceholder')} />
+              {fieldErrors.aliases_am && <small role="alert">{fieldErrors.aliases_am}</small>}
+            </label>
+            <label className="filter-label">{text('displayOrder')}
+              <input
+                className="filter-input"
+                type="number"
+                min="0"
+                step="1"
+                value={values.display_order}
+                onChange={(event) => updateValue('display_order', event.target.value)}
+              />
+              {fieldErrors.display_order && <small role="alert">{fieldErrors.display_order}</small>}
+            </label>
+            <label className="location-active-toggle">
+              <input type="checkbox" checked={values.is_active} onChange={(event) => updateValue('is_active', event.target.checked)} />
+              {text('locationActive')}
+            </label>
             {error && <p className="manager-error location-form-message" role="alert">{error}</p>}
             {success && <p className="manager-success location-form-message" role="status">{success}</p>}
             <div className="location-form-actions">

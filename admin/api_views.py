@@ -156,14 +156,11 @@ class AdminUserListView(generics.ListAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return User.objects.none()
-        queryset = User.objects.select_related('profile').order_by(*self.ordering)
-        if not self.request.user.is_superuser:
-            queryset = queryset.filter(
-                is_staff=False,
-                is_superuser=False,
-                profile__role=Profile.Role.BROKER,
-            )
-        return queryset
+        return User.objects.filter(
+            is_staff=False,
+            is_superuser=False,
+            profile__role=Profile.Role.BROKER,
+        ).select_related('profile').order_by(*self.ordering)
 
 
 class AdminUserDetailView(generics.RetrieveUpdateAPIView):
@@ -176,14 +173,11 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return User.objects.none()
-        queryset = User.objects.select_related('profile')
-        if not self.request.user.is_superuser:
-            queryset = queryset.filter(
-                is_staff=False,
-                is_superuser=False,
-                profile__role=Profile.Role.BROKER,
-            )
-        return queryset
+        return User.objects.filter(
+            is_staff=False,
+            is_superuser=False,
+            profile__role=Profile.Role.BROKER,
+        ).select_related('profile')
 
     @transaction.atomic
     def perform_update(self, serializer):
@@ -233,13 +227,11 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
     serializer_class = DelegatedAccountSerializer
 
     def get_queryset(self):
-        queryset = User.objects.filter(
+        return User.objects.filter(
+            is_staff=False,
             is_superuser=False,
-            profile__role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
-        )
-        if not self.request.user.is_superuser:
-            queryset = queryset.filter(profile__role=Profile.Role.BROKER)
-        return queryset.select_related('profile').order_by('username')
+            profile__role=Profile.Role.BROKER,
+        ).select_related('profile').order_by('username')
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -284,13 +276,11 @@ class AdminDelegatedAccountDetailView(generics.RetrieveUpdateAPIView):
     http_method_names = ['get', 'patch', 'head', 'options']
 
     def get_queryset(self):
-        queryset = User.objects.filter(
+        return User.objects.filter(
+            is_staff=False,
             is_superuser=False,
-            profile__role__in=[Profile.Role.ADMINISTRATOR, Profile.Role.BROKER],
-        )
-        if not self.request.user.is_superuser:
-            queryset = queryset.filter(profile__role=Profile.Role.BROKER)
-        return queryset.select_related('profile')
+            profile__role=Profile.Role.BROKER,
+        ).select_related('profile')
 
     @transaction.atomic
     def perform_update(self, serializer):

@@ -9,9 +9,7 @@ interface RequireSettingsManagerProps {
 
 export function RequireSettingsManager({ text }: RequireSettingsManagerProps) {
   const { account } = useAuth();
-  const canManageSettings = Boolean(
-    account?.is_platform_owner || account?.management_permissions.includes('settings.manage'),
-  );
+  const canManageSettings = Boolean(account?.management_permissions.includes('settings.manage'));
 
   if (canManageSettings) return <Outlet />;
 

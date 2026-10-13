@@ -64,7 +64,12 @@ export function AccountPage({ locale, text }: AccountPageProps) {
   }, [account]);
 
   useEffect(() => {
-    if (!account) return;
+    if (!account || account.role === 'broker') {
+      setActivity(null);
+      setActivityLoading(false);
+      setActivityError('');
+      return;
+    }
     const controller = new AbortController();
     setActivityLoading(true);
     setActivityError('');
@@ -77,7 +82,7 @@ export function AccountPage({ locale, text }: AccountPageProps) {
         if (!controller.signal.aborted) setActivityLoading(false);
       });
     return () => controller.abort();
-  }, [account?.id, activityReload]);
+  }, [account?.id, account?.role, activityReload]);
 
   if (!account) return null;
 
@@ -206,7 +211,7 @@ export function AccountPage({ locale, text }: AccountPageProps) {
           </form>
         </section>
 
-        <section className="customer-panel">
+        {account.role !== 'broker' && <section className="customer-panel">
           <div className="customer-panel-heading">
             <div><h2>{text('viewingActivity')}</h2><p>{text('viewingActivityIntro')}</p></div>
             <div className="customer-panel-links">
@@ -243,7 +248,7 @@ export function AccountPage({ locale, text }: AccountPageProps) {
               <Link to="/properties">{text('browseAll')}</Link>
             </div>
           )}
-        </section>
+        </section>}
       </section>
     </main>
   );
