@@ -8,6 +8,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from accounts.models import DelegatedAccountInvitation, Profile
+from accounts.permissions import BROKER_WORK_PERMISSIONS
 from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
@@ -53,7 +54,7 @@ class AdminApiTests(APITestCase):
             owner=self.owner,
         )
 
-    def test_django_superuser_can_manage_brokers_and_marketplace_operations(self):
+    def test_django_superuser_has_same_administrator_scope_as_delegated_admin(self):
         broker = User.objects.create_user(
             username='django-admin-managed-broker',
             email='managed-broker@example.com',
@@ -82,13 +83,28 @@ class AdminApiTests(APITestCase):
         legacy_properties = self.client.get('/admin-portal/properties/')
 
         self.assertEqual(me.data['role'], Profile.Role.ADMINISTRATOR)
-        self.assertEqual(me.data['management_permissions'], list(Profile.Permission.values))
+        self.assertEqual(
+            me.data['management_permissions'],
+            [
+                Profile.Permission.USERS_MANAGE,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.REPORTS_REVIEW,
+                Profile.Permission.STATISTICS_VIEW,
+                Profile.Permission.AUDIT_VIEW,
+                Profile.Permission.BROKERS_ASSIGN,
+                Profile.Permission.STAFF_MANAGE,
+            ],
+        )
         self.assertEqual([account['id'] for account in broker_accounts.data['results']], [broker.pk])
         self.assertEqual([account['id'] for account in users.data['results']], [broker.pk])
-        self.assertEqual(listings.status_code, 200)
+        self.assertEqual(listings.status_code, 403)
         self.assertEqual(
             self.client.get(reverse('api:managed-location-list')).status_code,
-            200,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse('api:managed-viewing-list')).status_code,
+            403,
         )
         self.assertEqual(legacy_dashboard.status_code, 302)
         self.assertEqual(legacy_dashboard.url, '/admin/login/')
@@ -119,7 +135,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(contact_event.changes['email'], 'updated')
         self.assertNotIn('updated-broker@example.com', str(contact_event.changes))
 
-    def test_brokerage_contact_is_public_but_only_brokers_and_superusers_can_update_it(self):
+    def test_brokerage_contact_is_public_but_only_brokers_can_update_it(self):
         public = self.client.get(reverse('api:brokerage-contact'))
         self.assertEqual(public.status_code, 200)
         self.assertEqual(public.data['business_name'], '')
@@ -156,7 +172,7 @@ class AdminApiTests(APITestCase):
         self.assertFalse(BrokerageSettings.objects.exists())
 
         self.client.force_authenticate(user=self.admin_user)
-        superuser_update = self.client.patch(
+        administrator_update = self.client.patch(
             reverse('api:brokerage-contact'),
             {
                 'business_name': 'Brokerage contact',
@@ -165,7 +181,8 @@ class AdminApiTests(APITestCase):
             },
             format='json',
         )
-        self.assertEqual(superuser_update.status_code, 200)
+        self.assertEqual(administrator_update.status_code, 403)
+        self.assertFalse(BrokerageSettings.objects.exists())
         contact_manager = self.create_broker('brokerage-contact-broker')
         self.client.force_authenticate(user=contact_manager)
         updated = self.client.patch(
@@ -182,7 +199,7 @@ class AdminApiTests(APITestCase):
         settings_obj = BrokerageSettings.objects.get(pk=1)
         self.assertEqual(settings_obj.platform_owner, self.admin_user)
         audits = AdminAuditEvent.objects.filter(action='brokerage_settings_updated')
-        self.assertEqual(audits.count(), 2)
+        self.assertEqual(audits.count(), 1)
         for audit in audits:
             self.assertEqual(
                 audit.changes['fields'],
@@ -612,14 +629,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(assigned_properties.data['results'][0]['id'], self.property.pk)
         self.assertEqual(
             set(broker.profile.management_permissions),
-            {
-                permission
-                for permission, _ in Profile.Permission.choices
-                if permission not in {
-                    Profile.Permission.USERS_MANAGE,
-                    Profile.Permission.STAFF_MANAGE,
-                }
-            },
+            BROKER_WORK_PERMISSIONS,
         )
 
     def test_broker_invitation_grants_all_marketplace_permissions_but_not_account_control(self):
@@ -639,14 +649,7 @@ class AdminApiTests(APITestCase):
         broker = User.objects.get(username='overprivileged-broker')
         self.assertEqual(
             set(broker.profile.management_permissions),
-            {
-                permission
-                for permission, _ in Profile.Permission.choices
-                if permission not in {
-                    Profile.Permission.USERS_MANAGE,
-                    Profile.Permission.STAFF_MANAGE,
-                }
-            },
+            BROKER_WORK_PERMISSIONS,
         )
         self.assertEqual(
             self.client.post(
@@ -773,7 +776,18 @@ class AdminApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(current_account.status_code, 200)
-        self.assertEqual(current_account.data['management_permissions'], [Profile.Permission.USERS_MANAGE])
+        self.assertEqual(
+            current_account.data['management_permissions'],
+            [
+                Profile.Permission.USERS_MANAGE,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.REPORTS_REVIEW,
+                Profile.Permission.STATISTICS_VIEW,
+                Profile.Permission.AUDIT_VIEW,
+                Profile.Permission.BROKERS_ASSIGN,
+                Profile.Permission.STAFF_MANAGE,
+            ],
+        )
         self.assertEqual(users.status_code, 200)
         self.assertEqual([row['id'] for row in users.data['results']], [broker.pk])
         self.assertEqual(delegated_accounts.status_code, 200)
@@ -782,14 +796,7 @@ class AdminApiTests(APITestCase):
         created_broker = User.objects.get(username='new-delegated-broker')
         self.assertEqual(
             set(created_broker.profile.management_permissions),
-            {
-                permission
-                for permission, _ in Profile.Permission.choices
-                if permission not in {
-                    Profile.Permission.USERS_MANAGE,
-                    Profile.Permission.STAFF_MANAGE,
-                }
-            },
+            BROKER_WORK_PERMISSIONS,
         )
         self.assertEqual(cannot_create_admin.status_code, 400)
 
@@ -1231,14 +1238,7 @@ class AdminPortalMethodTests(TestCase):
         self.assertEqual(invited.profile.role, Profile.Role.BROKER)
         self.assertEqual(
             set(invited.profile.management_permissions),
-            {
-                permission
-                for permission, _ in Profile.Permission.choices
-                if permission not in {
-                    Profile.Permission.USERS_MANAGE,
-                    Profile.Permission.STAFF_MANAGE,
-                }
-            },
+            BROKER_WORK_PERMISSIONS,
         )
         invitation_token = response.context['invitation_token']
         self.assertEqual(

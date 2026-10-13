@@ -43,10 +43,20 @@ class AccountApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['username'], administrator.username)
-        self.assertEqual(response.data['management_permissions'], list(Profile.Permission.values))
-        self.assertTrue(response.data['is_django_admin'])
+        self.assertEqual(
+            response.data['management_permissions'],
+            [
+                Profile.Permission.USERS_MANAGE,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.REPORTS_REVIEW,
+                Profile.Permission.STATISTICS_VIEW,
+                Profile.Permission.AUDIT_VIEW,
+                Profile.Permission.BROKERS_ASSIGN,
+                Profile.Permission.STAFF_MANAGE,
+            ],
+        )
 
-    def test_django_superuser_gets_full_platform_management_permissions(self):
+    def test_django_superuser_has_the_same_platform_role_as_delegated_administrator(self):
         administrator = get_user_model().objects.create_superuser(
             username='django-admin-only',
             password='SecurePass123!value',
@@ -54,17 +64,44 @@ class AccountApiTests(APITestCase):
         self.client.force_authenticate(user=administrator)
 
         response = self.client.get(reverse('api:me'))
+        broker_admin = get_user_model().objects.create_user(
+            username='delegated-admin',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=broker_admin,
+            role=Profile.Role.ADMINISTRATOR,
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['role'], Profile.Role.ADMINISTRATOR)
-        self.assertEqual(response.data['management_permissions'], list(Profile.Permission.values))
+        self.assertEqual(
+            response.data['management_permissions'],
+            effective_management_permissions(broker_admin),
+        )
         self.assertFalse(response.data['is_platform_owner'])
-        self.assertTrue(response.data['is_django_admin'])
-        self.assertTrue(has_management_permission(administrator, Profile.Permission.PROPERTY_VIEW_ALL))
         self.assertTrue(has_management_permission(administrator, Profile.Permission.USERS_MANAGE))
+        self.assertFalse(has_management_permission(administrator, Profile.Permission.PROPERTY_VIEW_ALL))
+        self.assertFalse(has_management_permission(administrator, Profile.Permission.VIEWING_VIEW_ALL))
+        self.assertFalse(has_management_permission(administrator, Profile.Permission.SETTINGS_MANAGE))
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.AUDIT_VIEW))
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.REPORTS_REVIEW))
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.BROKERS_ASSIGN))
         self.assertEqual(
             self.client.get(reverse('api:admin-property-list')).status_code,
-            200,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse('api:managed-property-list')).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse('api:managed-viewing-list')).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(reverse('api:managed-location-list')).status_code,
+            403,
         )
 
     def test_approved_broker_role_has_all_marketplace_permissions_except_account_control(self):
@@ -79,6 +116,9 @@ class AccountApiTests(APITestCase):
         self.assertEqual(set(effective_management_permissions(broker)), BROKER_WORK_PERMISSIONS)
         self.assertNotIn(Profile.Permission.USERS_MANAGE, effective_management_permissions(broker))
         self.assertNotIn(Profile.Permission.STAFF_MANAGE, effective_management_permissions(broker))
+        self.assertNotIn(Profile.Permission.AUDIT_VIEW, effective_management_permissions(broker))
+        self.assertIn(Profile.Permission.REPORTS_REVIEW, effective_management_permissions(broker))
+        self.assertIn(Profile.Permission.BROKERS_ASSIGN, effective_management_permissions(broker))
         self.assertNotIn(Profile.Permission.USERS_MANAGE, profile.management_permissions)
 
     def test_registration_creates_customer_and_ignores_client_role(self):

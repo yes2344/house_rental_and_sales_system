@@ -3,12 +3,22 @@ from rest_framework.permissions import BasePermission
 from accounts.models import Profile
 
 
+ADMIN_MANAGEMENT_PERMISSIONS = frozenset({
+    Profile.Permission.USERS_MANAGE,
+    Profile.Permission.STAFF_MANAGE,
+    Profile.Permission.BROKERS_ASSIGN,
+    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+    Profile.Permission.REPORTS_REVIEW,
+    Profile.Permission.STATISTICS_VIEW,
+    Profile.Permission.AUDIT_VIEW,
+})
 BROKER_WORK_PERMISSIONS = frozenset(
     permission
     for permission, _ in Profile.Permission.choices
-    if permission not in {
-        Profile.Permission.USERS_MANAGE,
-        Profile.Permission.STAFF_MANAGE,
+    if permission not in ADMIN_MANAGEMENT_PERMISSIONS
+    or permission in {
+        Profile.Permission.BROKERS_ASSIGN,
+        Profile.Permission.REPORTS_REVIEW,
     }
 )
 
@@ -23,12 +33,20 @@ def broker_work_permissions():
 
 def effective_management_permissions(user):
     if user.is_superuser:
-        return list(Profile.Permission.values) if user.is_active else []
+        return [
+            permission
+            for permission, _ in Profile.Permission.choices
+            if user.is_active and permission in ADMIN_MANAGEMENT_PERMISSIONS
+        ]
     profile = getattr(user, 'profile', None)
     if profile is None:
         return []
     if profile.role == Profile.Role.ADMINISTRATOR:
-        return [Profile.Permission.USERS_MANAGE] if user.is_staff else []
+        return [
+            permission
+            for permission, _ in Profile.Permission.choices
+            if user.is_staff and permission in ADMIN_MANAGEMENT_PERMISSIONS
+        ]
     if profile.role == Profile.Role.BROKER and profile.broker_approved:
         return broker_work_permissions()
     return []
@@ -38,12 +56,12 @@ def has_management_permission(user, permission):
     if not user or not user.is_authenticated or not user.is_active:
         return False
     if user.is_superuser:
-        return permission in Profile.Permission.values
+        return permission in ADMIN_MANAGEMENT_PERMISSIONS
     profile = Profile.objects.filter(user_id=user.pk).first()
     if profile is None:
         return False
     if profile.role == Profile.Role.ADMINISTRATOR:
-        return bool(user.is_staff and permission == Profile.Permission.USERS_MANAGE)
+        return bool(user.is_staff and permission in ADMIN_MANAGEMENT_PERMISSIONS)
     if profile.role == Profile.Role.BROKER:
         return profile.broker_approved and permission in BROKER_WORK_PERMISSIONS
     return False

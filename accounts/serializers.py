@@ -39,7 +39,6 @@ class AccountSerializer(serializers.ModelSerializer):
     phone = ProfilePhoneField(required=False, allow_blank=True)
     management_permissions = serializers.SerializerMethodField()
     is_platform_owner = serializers.SerializerMethodField()
-    is_django_admin = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -53,7 +52,6 @@ class AccountSerializer(serializers.ModelSerializer):
             'phone',
             'management_permissions',
             'is_platform_owner',
-            'is_django_admin',
         ]
         read_only_fields = ['id', 'username', 'role', 'management_permissions', 'is_platform_owner']
 
@@ -73,10 +71,6 @@ class AccountSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.BooleanField())
     def get_is_platform_owner(self, obj):
         return False
-
-    @extend_schema_field(serializers.BooleanField())
-    def get_is_django_admin(self, obj):
-        return bool(obj.is_active and obj.is_staff and obj.is_superuser)
 
     @transaction.atomic
     def update(self, instance, validated_data):

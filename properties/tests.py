@@ -875,7 +875,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertIsNone(self.property.latitude)
         self.assertIsNone(self.property.longitude)
 
-    def test_broker_and_django_admin_can_publish_available_properties(self):
+    def test_only_brokers_can_publish_available_properties(self):
         self.property.publication_status = Property.PublicationStatus.DRAFT
         self.property.save(update_fields=['publication_status'])
         publication_url = reverse('api:managed-property-publication', kwargs={'pk': self.property.pk})
@@ -888,7 +888,7 @@ class ManagedPropertyApiTests(APITestCase):
         )
         django_admin = get_user_model().objects.create_superuser(username='listing-django-admin')
         self.client.force_authenticate(user=django_admin)
-        admin_published = self.client.post(
+        administrator_published = self.client.post(
             publication_url,
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
@@ -906,7 +906,7 @@ class ManagedPropertyApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(forbidden.status_code, 403)
-        self.assertEqual(admin_published.status_code, 200)
+        self.assertEqual(administrator_published.status_code, 403)
         self.assertEqual(published.status_code, 200)
         self.property.refresh_from_db()
         self.assertEqual(self.property.publication_status, Property.PublicationStatus.PUBLISHED)

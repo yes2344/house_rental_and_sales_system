@@ -17,7 +17,6 @@ export interface Account {
   phone: string;
   management_permissions: string[];
   is_platform_owner: boolean;
-  is_django_admin: boolean;
 }
 
 export interface RegistrationPayload {

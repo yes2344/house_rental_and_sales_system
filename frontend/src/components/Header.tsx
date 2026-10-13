@@ -125,9 +125,6 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             ) : account ? (
               <>
                 <Link className="header-sign-in" to="/dashboard" onClick={closeMenu}>{text('dashboardTitle')}</Link>
-                {account.is_django_admin && (
-                  <Link className="header-sign-in" to="/admin" onClick={closeMenu}>{text('openPlatformAdmin')}</Link>
-                )}
                 <Link className="header-sign-in" to="/account" onClick={closeMenu}>{text('myAccount')}</Link>
                 {account.role !== 'administrator' && (
                   <Link className="header-sign-in" to="/favorites" onClick={closeMenu}>{text('savedHomesShort')}</Link>

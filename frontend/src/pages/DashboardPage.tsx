@@ -6,7 +6,6 @@ import {
   MapPinned,
   Search,
   Settings,
-  Shield,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -26,7 +25,6 @@ export function DashboardPage({ text }: DashboardPageProps) {
 
   const permissions = account.management_permissions;
   const isAdministrator = account.role === 'administrator';
-  const isDjangoAdmin = account.is_django_admin;
   const isBroker = account.role === 'broker';
   const canManageListings = isBroker && permissions.some((permission) => permission.startsWith('properties.'));
   const canManageRequests = isBroker && permissions.some((permission) => permission.startsWith('viewings.'));
@@ -39,7 +37,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
     icon: ReactNode;
   }[] = [
     ...(isAdministrator
-      ? (canManageBrokers && !isDjangoAdmin ? [
+      ? (canManageBrokers ? [
         { href: '/management/brokers', title: text('managerBrokerAccounts'), icon: <Users aria-hidden="true" /> },
       ] : [])
       : [
@@ -82,14 +80,6 @@ export function DashboardPage({ text }: DashboardPageProps) {
       icon: <MapPinned aria-hidden="true" />,
     });
   }
-  if (canManageBrokers && !isAdministrator) {
-    entries.push({
-      href: '/management/brokers',
-      title: text('managerBrokerAccounts'),
-      icon: <Users aria-hidden="true" />,
-    });
-  }
-
   return (
     <main id="main-content" className="customer-page">
       <section className="customer-heading">
@@ -109,13 +99,6 @@ export function DashboardPage({ text }: DashboardPageProps) {
               <span className="role-dashboard-open">{text('dashboardOpenSection')}<ArrowUpRight size={15} aria-hidden="true" /></span>
             </Link>
           ))}
-          {isDjangoAdmin && (
-            <Link className="role-dashboard-card" to="/admin">
-              <span className="role-dashboard-icon"><Shield aria-hidden="true" /></span>
-              <strong>{text('openPlatformAdmin')}</strong>
-              <span className="role-dashboard-open">{text('dashboardOpenSection')}<ArrowUpRight size={15} aria-hidden="true" /></span>
-            </Link>
-          )}
         </div>
       </section>
     </main>
