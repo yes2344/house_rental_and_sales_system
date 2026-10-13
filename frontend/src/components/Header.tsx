@@ -86,10 +86,6 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             <NavLink to="/properties" onClick={closeMenu}>{text('explore')}</NavLink>
             <NavLink to="/settings" onClick={closeMenu}>{text('settingsTitle')}</NavLink>
             <a href="/#how-it-works" onClick={closeMenu}>{text('howItWorks')}</a>
-            {account?.role === 'administrator'
-              && account.management_permissions.includes('users.manage') && (
-              <Link to="/management/brokers" onClick={closeMenu}>{text('managerBrokerAccounts')}</Link>
-            )}
             {hasBrokerageContact && (
               <section className="mobile-menu-contact" aria-label={text('brokerContactTitle')}>
                 <h2>{text('brokerContactTitle')}</h2>
@@ -130,7 +126,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
               <>
                 <Link className="header-sign-in" to="/dashboard" onClick={closeMenu}>{text('dashboardTitle')}</Link>
                 {account.is_django_admin && (
-                  <a className="header-sign-in" href="/admin/" onClick={closeMenu}>{text('openDjangoAdmin')}</a>
+                  <Link className="header-sign-in" to="/admin" onClick={closeMenu}>{text('openPlatformAdmin')}</Link>
                 )}
                 <Link className="header-sign-in" to="/account" onClick={closeMenu}>{text('myAccount')}</Link>
                 {account.role !== 'administrator' && (

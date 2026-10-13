@@ -71,7 +71,8 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
   const [noteSaveError, setNoteSaveError] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const canEdit = Boolean(
-    account?.role === 'broker' && account.management_permissions.includes('settings.manage'),
+    account?.is_django_admin
+    || (account?.role === 'broker' && account.management_permissions.includes('settings.manage')),
   );
 
   useEffect(() => {

@@ -8,6 +8,7 @@ import { RequireAuth } from './components/RequireAuth';
 import { RequireBrokerAccountManager } from './components/RequireBrokerAccountManager';
 import { RequireNonBroker } from './components/RequireNonBroker';
 import { RequireListingManager } from './components/RequireListingManager';
+import { RequireDjangoAdmin } from './components/RequireDjangoAdmin';
 import { RequireSettingsManager } from './components/RequireSettingsManager';
 import { OwnerDashboardLayout } from './components/OwnerDashboardLayout';
 import { usePreferences } from './PreferencesContext';
@@ -39,6 +40,16 @@ const AccountPage = lazy(() =>
 );
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then(({ DashboardPage }) => ({ default: DashboardPage })),
+);
+const PlatformAdminDashboardPage = lazy(() =>
+  import('./pages/PlatformAdminDashboardPage').then(({ PlatformAdminDashboardPage }) => ({
+    default: PlatformAdminDashboardPage,
+  })),
+);
+const DjangoAdminLoginPage = lazy(() =>
+  import('./pages/DjangoAdminLoginPage').then(({ DjangoAdminLoginPage }) => ({
+    default: DjangoAdminLoginPage,
+  })),
 );
 const FavoritesPage = lazy(() =>
   import('./pages/FavoritesPage').then(({ FavoritesPage }) => ({ default: FavoritesPage })),
@@ -116,11 +127,15 @@ export default function App() {
               <Route path="properties/:slug" element={<PropertyDetailPage locale={locale} text={text} />} />
               <Route path="viewing-requests/status" element={<ViewingRequestStatusPage text={text} />} />
               <Route path="login" element={<LoginPage text={text} />} />
+              <Route path="admin/login" element={<DjangoAdminLoginPage />} />
               <Route path="accept-invitation" element={<InvitationAcceptPage text={text} />} />
               <Route path="register" element={<RegisterPage text={text} />} />
               <Route path="settings" element={<SettingsPage text={text} />} />
               <Route element={<RequireAuth text={text} />}>
                 <Route path="dashboard" element={<DashboardPage text={text} />} />
+                <Route element={<RequireDjangoAdmin text={text} />}>
+                  <Route path="admin" element={<PlatformAdminDashboardPage text={text} />} />
+                </Route>
                 <Route element={<RequireNonBroker />}>
                   <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
                   <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />

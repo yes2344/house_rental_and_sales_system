@@ -38,13 +38,15 @@ export function DashboardPage({ text }: DashboardPageProps) {
     title: string;
     icon: ReactNode;
   }[] = [
-    ...(isAdministrator ? [
-      { href: '/management/brokers', title: text('managerBrokerAccounts'), icon: <Users aria-hidden="true" /> },
-    ] : [
+    ...(isAdministrator
+      ? (canManageBrokers && !isDjangoAdmin ? [
+        { href: '/management/brokers', title: text('managerBrokerAccounts'), icon: <Users aria-hidden="true" /> },
+      ] : [])
+      : [
       { href: '/properties', title: text('explore'), icon: <Search aria-hidden="true" /> },
       { href: '/favorites', title: text('savedHomesTitle'), icon: <Heart aria-hidden="true" /> },
       { href: '/account', title: text('accountTitle'), icon: <UserRound aria-hidden="true" /> },
-    ]),
+      ]),
   ];
 
   if (!isAdministrator && account.role !== 'broker') {
@@ -108,11 +110,11 @@ export function DashboardPage({ text }: DashboardPageProps) {
             </Link>
           ))}
           {isDjangoAdmin && (
-            <a className="role-dashboard-card" href="/admin/">
+            <Link className="role-dashboard-card" to="/admin">
               <span className="role-dashboard-icon"><Shield aria-hidden="true" /></span>
-              <strong>{text('openDjangoAdmin')}</strong>
+              <strong>{text('openPlatformAdmin')}</strong>
               <span className="role-dashboard-open">{text('dashboardOpenSection')}<ArrowUpRight size={15} aria-hidden="true" /></span>
-            </a>
+            </Link>
           )}
         </div>
       </section>
