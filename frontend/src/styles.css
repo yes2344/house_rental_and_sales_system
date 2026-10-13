@@ -54,8 +54,9 @@ img { display: block; max-width: 100%; }
 .brand-copy small { margin-top: 5px; color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: 1.55px; }
 .primary-navigation { height: 82px; display: flex; align-items: center; gap: 36px; color: #5e6c64; font-size: 13px; font-weight: 600; }
 .primary-navigation a { position: relative; display: inline-flex; height: 100%; align-items: center; transition: color .2s ease; }
-.primary-navigation a:hover, .primary-navigation a.active { color: var(--green-900); }
-.primary-navigation a.active::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--green-700); content: ''; }
+.primary-navigation a:hover { color: var(--green-900); }
+.primary-navigation a.active { height: 40px; padding: 0 13px; border-radius: 5px; background: var(--green-900); color: #fffefa; }
+.primary-navigation a.active::after { display: none; }
 .mobile-menu-contact { display: none; }
 .header-actions { position: relative; display: flex; align-items: center; gap: 21px; font-size: 13px; font-weight: 600; }
 .language-toggle, .header-sign-in { padding: 8px 0; border: 0; background: none; color: var(--ink-soft); cursor: pointer; }

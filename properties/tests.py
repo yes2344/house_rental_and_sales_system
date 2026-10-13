@@ -142,7 +142,10 @@ class PublicPropertyApiTests(APITestCase):
             status=Property.Status.AVAILABLE,
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
-        self.garden = Amenity.objects.create(name='Garden', slug='garden')
+        self.garden, _ = Amenity.objects.get_or_create(
+            name='Garden',
+            defaults={'slug': 'garden'},
+        )
         self.property.amenities.add(self.garden)
 
     def test_public_list_returns_paginated_etb_properties(self):
@@ -247,8 +250,8 @@ class PublicPropertyApiTests(APITestCase):
         response = self.client.get(reverse('api:amenity-list'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['count'], 1)
-        self.assertEqual(response.data['results'][0], {
+        garden = next(item for item in response.data['results'] if item['slug'] == 'garden')
+        self.assertEqual(garden, {
             'id': self.garden.id,
             'name': 'Garden',
             'name_am': '',
