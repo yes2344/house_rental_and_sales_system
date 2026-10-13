@@ -34,7 +34,7 @@ export function LocationCascade({
   const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [error, setError] = useState('');
-  const cityFirst = management;
+  const cityFirst = true;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -138,7 +138,7 @@ export function LocationCascade({
 
   return (
     <fieldset className="location-cascade">
-      <legend>{text('administrativeLocation')}</legend>
+      <legend>{text('locationCityAndArea')}</legend>
       <div className="filter-two-columns">
         {levels.map(({ options, selectedId }, level) => (
           <label className="filter-label" key={level}>

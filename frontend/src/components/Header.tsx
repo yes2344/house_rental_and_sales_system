@@ -24,16 +24,13 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const publicSocialLinks = contact.social_links.filter((link) => link.is_enabled && link.url);
   const hasBrokerageContact = Boolean(contact.phone || contact.email || publicSocialLinks.length);
   const canManageListings = Boolean(
-    account?.is_django_admin
-    || (
-      account?.role === 'broker'
-      && account.management_permissions.some((permission) => [
-        'properties.view_all',
-        'properties.moderate',
-        'properties.edit_all',
-        'properties.manage_assigned',
-      ].includes(permission))
-    ),
+    account?.role === 'broker'
+    && account.management_permissions.some((permission) => [
+      'properties.view_all',
+      'properties.moderate',
+      'properties.edit_all',
+      'properties.manage_assigned',
+    ].includes(permission)),
   );
   const closeMenu = () => setMenuOpen(false);
   const logout = () => {
@@ -133,11 +130,13 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
               <>
                 <Link className="header-sign-in" to="/dashboard" onClick={closeMenu}>{text('dashboardTitle')}</Link>
                 {account.is_django_admin && (
-                  <a className="header-sign-in" href="/admin/" onClick={closeMenu}>{text('djangoAdmin')}</a>
+                  <a className="header-sign-in" href="/admin/" onClick={closeMenu}>{text('openDjangoAdmin')}</a>
                 )}
                 <Link className="header-sign-in" to="/account" onClick={closeMenu}>{text('myAccount')}</Link>
-                <Link className="header-sign-in" to="/favorites" onClick={closeMenu}>{text('savedHomesShort')}</Link>
-                {account.role !== 'broker' && (
+                {account.role !== 'administrator' && (
+                  <Link className="header-sign-in" to="/favorites" onClick={closeMenu}>{text('savedHomesShort')}</Link>
+                )}
+                {account.role !== 'broker' && account.role !== 'administrator' && (
                   <Link className="header-sign-in" to="/viewing-requests" onClick={closeMenu}>
                     {text('yourViewingRequests')}
                   </Link>

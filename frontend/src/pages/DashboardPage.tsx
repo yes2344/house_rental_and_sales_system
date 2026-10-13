@@ -25,18 +25,12 @@ export function DashboardPage({ text }: DashboardPageProps) {
   if (!account) return null;
 
   const permissions = account.management_permissions;
+  const isAdministrator = account.role === 'administrator';
   const isDjangoAdmin = account.is_django_admin;
-  const canManageListings = isDjangoAdmin || (
-    account.role === 'broker'
-    && permissions.some((permission) => permission.startsWith('properties.'))
-  );
-  const canManageRequests = isDjangoAdmin || (
-    account.role === 'broker'
-    && permissions.some((permission) => permission.startsWith('viewings.'))
-  );
-  const canManageSettings = isDjangoAdmin || (
-    account.role === 'broker' && permissions.includes('settings.manage')
-  );
+  const isBroker = account.role === 'broker';
+  const canManageListings = isBroker && permissions.some((permission) => permission.startsWith('properties.'));
+  const canManageRequests = isBroker && permissions.some((permission) => permission.startsWith('viewings.'));
+  const canManageSettings = isBroker && permissions.includes('settings.manage');
   const canManageBrokers = account.role === 'administrator' && permissions.includes('users.manage');
 
   const entries: {
@@ -44,12 +38,16 @@ export function DashboardPage({ text }: DashboardPageProps) {
     title: string;
     icon: ReactNode;
   }[] = [
-    { href: '/properties', title: text('explore'), icon: <Search aria-hidden="true" /> },
-    { href: '/favorites', title: text('savedHomesTitle'), icon: <Heart aria-hidden="true" /> },
-    { href: '/account', title: text('accountTitle'), icon: <UserRound aria-hidden="true" /> },
+    ...(isAdministrator ? [
+      { href: '/management/brokers', title: text('managerBrokerAccounts'), icon: <Users aria-hidden="true" /> },
+    ] : [
+      { href: '/properties', title: text('explore'), icon: <Search aria-hidden="true" /> },
+      { href: '/favorites', title: text('savedHomesTitle'), icon: <Heart aria-hidden="true" /> },
+      { href: '/account', title: text('accountTitle'), icon: <UserRound aria-hidden="true" /> },
+    ]),
   ];
 
-  if (account.role !== 'broker') {
+  if (!isAdministrator && account.role !== 'broker') {
     entries.push({
       href: '/viewing-requests',
       title: text('yourViewingRequests'),
@@ -82,7 +80,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
       icon: <MapPinned aria-hidden="true" />,
     });
   }
-  if (canManageBrokers) {
+  if (canManageBrokers && !isAdministrator) {
     entries.push({
       href: '/management/brokers',
       title: text('managerBrokerAccounts'),
@@ -94,10 +92,10 @@ export function DashboardPage({ text }: DashboardPageProps) {
     <main id="main-content" className="customer-page">
       <section className="customer-heading">
         <div className="container">
-          <p className="eyebrow eyebrow-muted"><span className="eyebrow-dot" />{text('dashboardTitle')}</p>
-          <h1>{text('dashboardTitle')}</h1>
+          <p className="eyebrow eyebrow-muted"><span className="eyebrow-dot" />{text(isAdministrator ? 'adminDashboardTitle' : 'dashboardTitle')}</p>
+          <h1>{text(isAdministrator ? 'adminDashboardTitle' : 'dashboardTitle')}</h1>
           <p>{text('accountWelcome')} <strong>{account.username}</strong></p>
-          <p>{text('dashboardIntro')}</p>
+          <p>{text(isAdministrator ? 'adminDashboardIntro' : 'dashboardIntro')}</p>
         </div>
       </section>
       <section className="container customer-content">
@@ -112,7 +110,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
           {isDjangoAdmin && (
             <a className="role-dashboard-card" href="/admin/">
               <span className="role-dashboard-icon"><Shield aria-hidden="true" /></span>
-              <strong>{text('djangoAdmin')}</strong>
+              <strong>{text('openDjangoAdmin')}</strong>
               <span className="role-dashboard-open">{text('dashboardOpenSection')}<ArrowUpRight size={15} aria-hidden="true" /></span>
             </a>
           )}

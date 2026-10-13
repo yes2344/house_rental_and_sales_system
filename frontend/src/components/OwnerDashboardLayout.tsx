@@ -11,15 +11,14 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   const { account } = useAuth();
   const permissions = account?.management_permissions ?? [];
   const isAuthorizedBroker = account?.role === 'broker';
-  const isDjangoAdmin = account?.is_django_admin === true;
-  const canViewProperties = isDjangoAdmin || (isAuthorizedBroker && permissions.some((permission) => [
+  const canViewProperties = isAuthorizedBroker && permissions.some((permission) => [
     'properties.view_all',
     'properties.moderate',
     'properties.edit_all',
     'properties.manage_assigned',
-  ].includes(permission)));
-  const canViewRequests = isDjangoAdmin || (isAuthorizedBroker && permissions.some((permission) => permission.startsWith('viewings.')));
-  const canManageSettings = isDjangoAdmin || (isAuthorizedBroker && permissions.includes('settings.manage'));
+  ].includes(permission));
+  const canViewRequests = isAuthorizedBroker && permissions.some((permission) => permission.startsWith('viewings.'));
+  const canManageSettings = isAuthorizedBroker && permissions.includes('settings.manage');
   const canManageBrokers = account?.role === 'administrator' && permissions.includes('users.manage');
 
   return (
