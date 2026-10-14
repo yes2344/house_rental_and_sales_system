@@ -1,26 +1,18 @@
 from rest_framework.permissions import BasePermission
 
 from accounts.models import Profile
+from properties.models import Location
 
 
 ADMIN_MANAGEMENT_PERMISSIONS = frozenset({
-    Profile.Permission.USERS_MANAGE,
+    Profile.Permission.LOCATIONS_MANAGE_CITIES,
     Profile.Permission.STAFF_MANAGE,
-    Profile.Permission.BROKERS_ASSIGN,
-    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
-    Profile.Permission.REPORTS_REVIEW,
-    Profile.Permission.STATISTICS_VIEW,
-    Profile.Permission.AUDIT_VIEW,
 })
-BROKER_WORK_PERMISSIONS = frozenset(
-    permission
-    for permission, _ in Profile.Permission.choices
-    if permission not in ADMIN_MANAGEMENT_PERMISSIONS
-    or permission in {
-        Profile.Permission.BROKERS_ASSIGN,
-        Profile.Permission.REPORTS_REVIEW,
-    }
-)
+BROKER_WORK_PERMISSIONS = frozenset({
+    Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+    Profile.Permission.VIEWING_MANAGE_ASSIGNED,
+    Profile.Permission.LOCATIONS_MANAGE_SUBCITIES,
+})
 
 
 def broker_work_permissions():
@@ -84,6 +76,15 @@ def can_manage_broker_accounts(user):
 class IsBrokerAccountManager(BasePermission):
     def has_permission(self, request, view):
         return can_manage_broker_accounts(request.user)
+
+
+class IsLocationManager(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return (
+            has_management_permission(user, Profile.Permission.LOCATIONS_MANAGE_CITIES)
+            or has_management_permission(user, Profile.Permission.LOCATIONS_MANAGE_SUBCITIES)
+        )
 
 
 class HasManagementPermission(BasePermission):
@@ -152,7 +153,25 @@ class IsPropertyManagerOrAdministrator(IsListingManager):
             and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
             and property_obj.assigned_brokers.filter(pk=user.pk).exists()
         )
-        if assigned_broker:
+        profile = Profile.objects.filter(
+            user=user,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+        ).select_related('assigned_city').first()
+        property_city_id = None
+        location = property_obj.administrative_location
+        while location is not None:
+            if location.location_type == Location.Type.CITY:
+                property_city_id = location.pk
+                break
+            location = location.parent
+        city_broker = bool(
+            profile
+            and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
+            and profile.assigned_city_id
+            and property_city_id == profile.assigned_city_id
+        )
+        if assigned_broker or city_broker:
             return True
 
         request_method = getattr(request, 'method', 'GET')
@@ -171,7 +190,7 @@ class IsPropertyManagerOrAdministrator(IsListingManager):
                 or has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL)
                 or assigned_broker
             )
-        return has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL) or assigned_broker
+        return has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL) or assigned_broker or city_broker
 
 
 class IsAuthenticatedPropertyManagerOrAdministrator(IsPropertyManagerOrAdministrator):
@@ -187,6 +206,7 @@ class IsAuthenticatedPropertyManagerOrAdministrator(IsPropertyManagerOrAdministr
             can_create_as_broker = (
                 has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
                 and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
+                and bool(getattr(getattr(user, 'profile', None), 'assigned_city_id', None))
             )
             return can_create_globally or can_create_as_broker
         return True

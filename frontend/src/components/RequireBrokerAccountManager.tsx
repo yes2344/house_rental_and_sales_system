@@ -11,7 +11,7 @@ export function RequireBrokerAccountManager({ text }: RequireBrokerAccountManage
   const { account } = useAuth();
   const canManage = Boolean(
     account?.role === 'administrator'
-    && account.management_permissions.includes('users.manage'),
+    && account.management_permissions.includes('staff.manage'),
   );
 
   if (canManage) return <Outlet />;

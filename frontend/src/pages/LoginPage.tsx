@@ -41,8 +41,11 @@ export function LoginPage({ text }: LoginPageProps) {
     setSubmitting(true);
     setError('');
     try {
-      await signIn(username.trim(), password);
-      navigate(returnPath(state), { replace: true });
+      const signedInAccount = await signIn(username.trim(), password);
+      navigate(
+        signedInAccount.broker_onboarding_required ? '/broker-onboarding' : returnPath(state),
+        { replace: true },
+      );
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError));
     } finally {

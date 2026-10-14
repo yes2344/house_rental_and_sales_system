@@ -10,11 +10,13 @@ from rest_framework.response import Response
 from accounts.permissions import (
     HasManagementPermission,
     IsAuthenticatedPropertyManagerOrAdministrator,
+    IsLocationManager,
     IsListingManager,
 )
 from accounts.models import Profile
 from admin.audit import record_admin_action
 from properties.access import editable_properties, managed_properties, public_properties
+from properties.access import broker_city_location_ids
 from properties.filters import PublicPropertyFilter
 from properties.location_search import matching_location_ids
 from properties.models import Amenity, Location, Property, PropertyImage
@@ -96,13 +98,15 @@ class PublicLocationListView(generics.ListAPIView):
 
 
 class ManagedLocationListCreateView(generics.ListCreateAPIView):
-    permission_classes = [HasManagementPermission]
-    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    permission_classes = [IsLocationManager]
     serializer_class = LocationSerializer
     pagination_class = None
 
     def get_queryset(self):
         queryset = Location.objects.all()
+        profile = Profile.objects.filter(user=self.request.user).select_related('assigned_city').first()
+        if not self.request.user.is_superuser and profile and profile.role == Profile.Role.BROKER:
+            queryset = queryset.filter(pk__in=broker_city_location_ids(self.request.user))
         if self.request.query_params.get('all') == '1':
             return queryset.select_related(
                 'parent',
@@ -121,16 +125,33 @@ class ManagedLocationListCreateView(generics.ListCreateAPIView):
             action='location_created',
             object_type='location',
             object_id=location.pk,
-            changes={'name': location.name, 'location_type': location.location_type, 'parent_id': location.parent_id},
+            changes={
+                'name': location.name,
+                'name_am': location.name_am,
+                'location_type': location.location_type,
+                'parent_id': location.parent_id,
+                'is_active': location.is_active,
+                'display_order': location.display_order,
+            },
         )
 
 
 class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [HasManagementPermission]
-    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    permission_classes = [IsLocationManager]
     serializer_class = LocationSerializer
-    queryset = Location.objects.all()
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        queryset = Location.objects.all()
+        profile = Profile.objects.filter(user=self.request.user).select_related('assigned_city').first()
+        if not self.request.user.is_superuser and profile and profile.role == Profile.Role.BROKER:
+            queryset = queryset.filter(pk__in=broker_city_location_ids(self.request.user))
+            queryset = queryset.filter(location_type=Location.Type.SUBCITY)
+        elif self.request.user.is_superuser or (
+            profile and profile.role == Profile.Role.ADMINISTRATOR
+        ):
+            queryset = queryset.filter(location_type=Location.Type.CITY)
+        return queryset
 
     def perform_update(self, serializer):
         instance = serializer.instance
@@ -168,6 +189,33 @@ class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
                 object_id=location.pk,
                 changes=changes,
             )
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        if instance.children.exists():
+            raise ValidationError({
+                'detail': 'Remove or reassign child locations before deleting this location.',
+            })
+        if Property.objects.filter(administrative_location_id=instance.pk).exists():
+            raise ValidationError({
+                'detail': 'This location is used by property listings. Deactivate it instead of deleting it.',
+            })
+        if Profile.objects.filter(assigned_city=instance).exists():
+            raise ValidationError({
+                'detail': 'This city is assigned to brokers. Reassign those brokers before deleting it.',
+            })
+        record_admin_action(
+            self.request.user,
+            action='location_deleted',
+            object_type='location',
+            object_id=instance.pk,
+            changes={
+                'name': instance.name,
+                'location_type': instance.location_type,
+                'parent_id': instance.parent_id,
+            },
+        )
+        instance.delete()
 
 
 class PublicPropertyListView(generics.ListAPIView):

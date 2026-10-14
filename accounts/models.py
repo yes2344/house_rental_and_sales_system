@@ -29,6 +29,8 @@ class Profile(models.Model):
         AUDIT_VIEW = 'audit.view', 'View audit records'
         BROKERS_ASSIGN = 'brokers.assign', 'Assign brokers to listings'
         SETTINGS_MANAGE = 'settings.manage', 'Manage platform settings'
+        LOCATIONS_MANAGE_CITIES = 'locations.manage_cities', 'Manage marketplace cities'
+        LOCATIONS_MANAGE_SUBCITIES = 'locations.manage_subcities', 'Manage sub-cities in assigned city'
         STAFF_MANAGE = 'staff.manage', 'Manage delegated accounts'
 
     user = models.OneToOneField(
@@ -38,7 +40,17 @@ class Profile(models.Model):
     )
     role = models.CharField(max_length=24, choices=Role.choices, default=Role.CUSTOMER)
     phone = models.CharField(max_length=50, blank=True)
+    assigned_city = models.ForeignKey(
+        'properties.Location',
+        on_delete=models.PROTECT,
+        related_name='assigned_broker_profiles',
+        null=True,
+        blank=True,
+        limit_choices_to={'location_type': 'city'},
+    )
     broker_approved = models.BooleanField(default=False)
+    broker_onboarding_required = models.BooleanField(default=False)
+    broker_password_changed = models.BooleanField(default=True)
     management_permissions = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

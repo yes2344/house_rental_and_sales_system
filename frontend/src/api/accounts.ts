@@ -17,6 +17,11 @@ export interface Account {
   phone: string;
   management_permissions: string[];
   is_platform_owner: boolean;
+  broker_onboarding_required: boolean;
+  broker_password_changed: boolean;
+  assigned_city_id: number | null;
+  assigned_city_name: string | null;
+  assigned_city_name_am: string | null;
 }
 
 export interface RegistrationPayload {
@@ -30,6 +35,18 @@ export interface AccountUpdatePayload {
   email: string;
   first_name: string;
   last_name: string;
+  phone: string;
+}
+
+export interface BrokerInitialPasswordPayload {
+  username?: string;
+  new_password: string;
+}
+
+export interface BrokerProfilePayload {
+  first_name: string;
+  last_name: string;
+  email: string;
   phone: string;
 }
 
@@ -98,6 +115,18 @@ export async function endSession(): Promise<void> {
 
 export async function updateAccount(payload: AccountUpdatePayload): Promise<Account> {
   const response = await apiClient.patch<Account>('/auth/me/', payload);
+  return response.data;
+}
+
+export async function changeBrokerInitialPassword(
+  payload: BrokerInitialPasswordPayload,
+): Promise<Account> {
+  const response = await apiClient.post<Account>('/auth/broker-onboarding/password/', payload);
+  return response.data;
+}
+
+export async function completeBrokerInitialProfile(payload: BrokerProfilePayload): Promise<Account> {
+  const response = await apiClient.post<Account>('/auth/broker-onboarding/profile/', payload);
   return response.data;
 }
 

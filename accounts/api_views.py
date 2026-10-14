@@ -13,6 +13,8 @@ from accounts.models import Profile, TabSessionToken, UserPreferences
 from accounts.serializers import (
     AccountActivitySerializer,
     AccountSerializer,
+    BrokerFirstLoginPasswordSerializer,
+    BrokerFirstLoginProfileSerializer,
     CsrfTokenSerializer,
     DelegatedInvitationAcceptSerializer,
     EmptySerializer,
@@ -121,6 +123,40 @@ class AccountMeView(generics.RetrieveUpdateAPIView):
     @extend_schema(summary='Update account contact details; roles are read-only')
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
+
+
+class BrokerFirstLoginPasswordView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = BrokerFirstLoginPasswordSerializer
+
+    @transaction.atomic
+    @extend_schema(
+        summary='Set a provisioned broker’s permanent password and optional username',
+        request=BrokerFirstLoginPasswordSerializer,
+        responses={200: AccountSerializer},
+    )
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(AccountSerializer(user).data)
+
+
+class BrokerFirstLoginProfileView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = BrokerFirstLoginProfileSerializer
+
+    @transaction.atomic
+    @extend_schema(
+        summary='Complete a provisioned broker’s contact profile and activate broker permissions',
+        request=BrokerFirstLoginProfileSerializer,
+        responses={200: AccountSerializer},
+    )
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(AccountSerializer(user).data)
 
 
 class AccountPreferencesView(APIView):

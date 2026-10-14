@@ -12,13 +12,30 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.models import Profile
 from owner_announcements.models import InAppNotification
-from properties.models import Property, PropertyBrokerAssignment
+from properties.models import Location, Property, PropertyBrokerAssignment
 from viewings.models import ViewingRequest, ViewingRequestEvent
 from viewings.notifications import notify_viewing_request_event
 
 
 class PublicViewingRequestApiTests(APITestCase):
     def setUp(self):
+        country = Location.objects.create(
+            name='Viewing Test Country',
+            slug='viewing-test-country',
+            location_type=Location.Type.COUNTRY,
+        )
+        self.city = Location.objects.create(
+            name='Viewing Test City',
+            slug='viewing-test-city',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
+        self.subcity = Location.objects.create(
+            name='Viewing Test Subcity',
+            slug='viewing-test-subcity',
+            location_type=Location.Type.SUBCITY,
+            parent=self.city,
+        )
         self.customer = get_user_model().objects.create_user(
             username='viewing-request-customer',
             email='customer@example.com',
@@ -29,6 +46,7 @@ class PublicViewingRequestApiTests(APITestCase):
             title='Viewing request house',
             slug='viewing-request-house-api',
             location='Submitted location',
+            administrative_location=self.subcity,
             price=500000,
             description='A test listing.',
             status=Property.Status.AVAILABLE,
@@ -179,6 +197,7 @@ class PublicViewingRequestApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
         )
         self.client.force_authenticate(user=broker)
 
@@ -255,6 +274,7 @@ class PublicViewingRequestApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
 
@@ -503,6 +523,7 @@ class PublicViewingRequestApiTests(APITestCase):
             user=manager,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
         PropertyBrokerAssignment.objects.create(property=request.property, broker=manager)
@@ -566,6 +587,7 @@ class PublicViewingRequestApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
@@ -618,6 +640,7 @@ class PublicViewingRequestApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
@@ -674,6 +697,35 @@ class PublicViewingRequestApiTests(APITestCase):
 
 class ManagedViewingRequestApiTests(APITestCase):
     def setUp(self):
+        country = Location.objects.create(
+            name='Managed Viewing Country',
+            slug='managed-viewing-country',
+            location_type=Location.Type.COUNTRY,
+        )
+        self.city = Location.objects.create(
+            name='Managed Viewing City',
+            slug='managed-viewing-city',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
+        subcity = Location.objects.create(
+            name='Managed Viewing Subcity',
+            slug='managed-viewing-subcity',
+            location_type=Location.Type.SUBCITY,
+            parent=self.city,
+        )
+        other_city = Location.objects.create(
+            name='Managed Viewing Other City',
+            slug='managed-viewing-other-city',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
+        other_subcity = Location.objects.create(
+            name='Managed Viewing Other Subcity',
+            slug='managed-viewing-other-subcity',
+            location_type=Location.Type.SUBCITY,
+            parent=other_city,
+        )
         user_model = get_user_model()
         self.owner = user_model.objects.create_user(username='viewing-owner')
         Profile.objects.create(user=self.owner, role=Profile.Role.OWNER)
@@ -684,6 +736,7 @@ class ManagedViewingRequestApiTests(APITestCase):
             user=self.broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
@@ -694,11 +747,13 @@ class ManagedViewingRequestApiTests(APITestCase):
             user=self.unapproved_broker,
             role=Profile.Role.BROKER,
             broker_approved=False,
+            assigned_city=self.city,
         )
         self.property = Property.objects.create(
             title='Managed viewing property',
             slug='managed-viewing-property',
             location='Submitted location',
+            administrative_location=subcity,
             price=400000,
             description='A managed listing.',
             owner=self.owner,
@@ -707,6 +762,7 @@ class ManagedViewingRequestApiTests(APITestCase):
             title='Other viewing property',
             slug='other-viewing-property',
             location='Submitted location',
+            administrative_location=other_subcity,
             price=300000,
             description='Another managed listing.',
             owner=other_owner,
@@ -766,12 +822,13 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.viewing.refresh_from_db()
         self.assertEqual(self.viewing.status, ViewingRequest.Status.PENDING)
 
-    def test_approved_broker_role_grants_citywide_viewing_request_access(self):
+    def test_approved_broker_can_manage_requests_for_assigned_property(self):
         broker = get_user_model().objects.create_user(username='property-only-broker')
         Profile.objects.create(
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
@@ -785,15 +842,17 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(listed.status_code, 200)
 
-    def test_approved_broker_can_view_requests_outside_a_specific_assignment(self):
+    def test_approved_broker_cannot_view_requests_outside_a_specific_assignment(self):
         broker = get_user_model().objects.create_user(username='viewing-only-broker')
         Profile.objects.create(
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+        PropertyBrokerAssignment.objects.create(property=self.other_property, broker=broker)
         self.client.force_authenticate(user=broker)
 
         response = self.client.get(
@@ -805,7 +864,9 @@ class ManagedViewingRequestApiTests(APITestCase):
         visible = self.client.get(
             reverse('api:managed-viewing-detail', kwargs={'pk': self.other_viewing.pk})
         )
-        self.assertEqual(visible.status_code, 200)
+        self.assertEqual(visible.status_code, 404)
+        listed = self.client.get(reverse('api:managed-viewing-list'))
+        self.assertEqual(listed.data['count'], 1)
 
     def test_delegated_administrator_cannot_view_or_update_requests(self):
         delegated_admin = get_user_model().objects.create_user(

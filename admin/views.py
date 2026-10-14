@@ -2,9 +2,10 @@ from django.contrib import messages
 from django.contrib.auth import logout
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.models import DelegatedAccountInvitation, Profile
+from accounts.models import Profile, TabSessionToken
 from accounts.permissions import can_manage_broker_accounts
 from admin.staff_forms import DelegatedAccountCreateForm, DelegatedAccountUpdateForm
 from admin.audit import record_admin_action
@@ -131,35 +132,85 @@ def delegated_accounts(request):
         user__is_superuser=False,
     )
     profiles = profiles.select_related('user').order_by('user__username')
-    invitation_token = None
     selected_profile = None
+
+    if request.method == 'POST' and request.POST.get('delete_account_id'):
+        selected_profile = get_object_or_404(profiles, user_id=request.POST['delete_account_id'])
+        user = selected_profile.user
+        record_admin_action(
+            request.user,
+            action='broker_account_deleted',
+            object_type='user',
+            object_id=user.pk,
+            changes={'username': user.username},
+        )
+        user.delete()
+        messages.success(request, 'Broker account deleted.')
+        return redirect('admin_delegated_accounts')
 
     if request.method == 'POST' and request.POST.get('account_id'):
         selected_profile = get_object_or_404(profiles, user_id=request.POST['account_id'])
         form = DelegatedAccountUpdateForm(request.POST, profile=selected_profile, actor=request.user)
         if form.is_valid():
             user = selected_profile.user
+            was_active = user.is_active
             before = {
-                'role': selected_profile.role,
-                'permissions': list(selected_profile.management_permissions),
+                'username': user.username,
+                'assigned_city_id': selected_profile.assigned_city_id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'phone': selected_profile.phone,
                 'is_active': user.is_active,
+                'broker_onboarding_required': selected_profile.broker_onboarding_required,
+                'broker_password_changed': selected_profile.broker_password_changed,
             }
-            selected_profile.role = form.cleaned_data['role']
-            selected_profile.management_permissions = form.cleaned_data['management_permissions']
-            selected_profile.broker_approved = selected_profile.role == Profile.Role.BROKER
-            user.is_staff = selected_profile.role == Profile.Role.ADMINISTRATOR
+            user.username = form.cleaned_data['username']
+            selected_profile.assigned_city = form.cleaned_data['assigned_city']
+            user.email = form.cleaned_data['email']
+            user.first_name = form.cleaned_data['first_name']
+            user.last_name = form.cleaned_data['last_name']
+            user.is_staff = False
             user.is_active = form.cleaned_data['is_active']
+            reset_password = form.cleaned_data['initial_password']
+            if reset_password:
+                user.set_password(reset_password)
+                selected_profile.broker_approved = False
+                selected_profile.broker_onboarding_required = True
+                selected_profile.broker_password_changed = False
+            selected_profile.phone = form.cleaned_data['phone']
             selected_profile.save(update_fields=[
-                'role',
-                'management_permissions',
+                'phone',
+                'assigned_city',
                 'broker_approved',
+                'broker_onboarding_required',
+                'broker_password_changed',
                 'updated_at',
             ])
-            user.save(update_fields=['is_staff', 'is_active'])
+            user.save(update_fields=[
+                'username',
+                'email',
+                'first_name',
+                'last_name',
+                'is_staff',
+                'is_active',
+                *(['password'] if reset_password else []),
+            ])
+            if (was_active and not user.is_active) or reset_password:
+                TabSessionToken.objects.filter(
+                    user=user,
+                    revoked_at__isnull=True,
+                ).update(revoked_at=timezone.now())
             after = {
-                'role': selected_profile.role,
-                'permissions': list(selected_profile.management_permissions),
+                'username': user.username,
+                'assigned_city_id': selected_profile.assigned_city_id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'phone': selected_profile.phone,
                 'is_active': user.is_active,
+                'broker_onboarding_required': selected_profile.broker_onboarding_required,
+                'broker_password_changed': selected_profile.broker_password_changed,
             }
             changes = {
                 key: {'from': before[key], 'to': value}
@@ -169,7 +220,7 @@ def delegated_accounts(request):
             if changes:
                 record_admin_action(
                     request.user,
-                    action='delegated_account_updated',
+                    action='broker_account_updated',
                     object_type='user',
                     object_id=user.pk,
                     changes=changes,
@@ -185,31 +236,34 @@ def delegated_accounts(request):
             role = form.cleaned_data['role']
             user = User(
                 username=form.cleaned_data['username'],
-                email=form.cleaned_data['email'],
-                is_active=False,
-                is_staff=False,
+        is_active=True,
+        is_staff=False,
             )
-            user.set_unusable_password()
+            user.set_password(form.cleaned_data['password'])
             user.save()
             profile = Profile.objects.create(
-                user=user,
-                role=role,
-                broker_approved=role == Profile.Role.BROKER,
-                management_permissions=form.cleaned_data['management_permissions'],
+        user=user,
+        role=role,
+        assigned_city=form.cleaned_data['assigned_city'],
+        broker_approved=False,
+        broker_onboarding_required=True,
+        broker_password_changed=False,
+        management_permissions=form.cleaned_data['management_permissions'],
             )
-            invitation, invitation_token = DelegatedAccountInvitation.issue(user, request.user)
             record_admin_action(
                 request.user,
-                action='delegated_account_created',
+        action='broker_account_created',
                 object_type='user',
                 object_id=user.pk,
                 changes={
                     'role': profile.role,
+                    'assigned_city_id': profile.assigned_city_id,
                     'management_permissions': profile.management_permissions,
                     'is_active': user.is_active,
-                },
+            'broker_onboarding_required': profile.broker_onboarding_required,
+        },
             )
-            messages.success(request, f'Invitation created for {user.get_username()}.')
+            messages.success(request, f'Broker account created for {user.get_username()}.')
             form = DelegatedAccountCreateForm(actor=request.user)
     elif request.GET.get('account_id'):
         selected_profile = get_object_or_404(profiles, user_id=request.GET['account_id'])
@@ -222,7 +276,6 @@ def delegated_accounts(request):
         'create_form': form if selected_profile is None else DelegatedAccountCreateForm(actor=request.user),
         'edit_form': form if selected_profile is not None else None,
         'selected_profile': selected_profile,
-        'invitation_token': invitation_token,
         'is_platform_owner': False,
     })
     response['Cache-Control'] = 'no-store'

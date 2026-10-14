@@ -23,6 +23,8 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const { contact } = useBrokerageContact();
   const publicSocialLinks = contact.social_links.filter((link) => link.is_enabled && link.url);
   const hasBrokerageContact = Boolean(contact.phone || contact.email || publicSocialLinks.length);
+  const canAccessDashboard = Boolean(account && ['broker', 'administrator'].includes(account.role ?? ''));
+  const isAdministrator = account?.role === 'administrator';
   const canManageListings = Boolean(
     account?.role === 'broker'
     && account.management_permissions.some((permission) => [
@@ -52,7 +54,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
       <a className="skip-link" href="#main-content">{text('skipToContent')}</a>
       <header className="site-header">
         <div className="container header-inner">
-          <Link className="brand" to="/" aria-label={text('brandLabel')} onClick={closeMenu}>
+          <Link className="brand" to={isAdministrator ? '/dashboard' : '/'} aria-label={text('brandLabel')} onClick={closeMenu}>
             <span className="brand-mark" aria-hidden="true">
               <svg viewBox="0 0 36 36" fill="none">
                 <path d="M5 17.1 18 6l13 11.1v12.1H5V17.1Z" fill="currentColor" />
@@ -82,10 +84,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             id="primary-navigation"
             aria-label={text('primaryNavigation')}
           >
-            <NavLink to="/" end onClick={closeMenu}>{text('home')}</NavLink>
-            <NavLink to="/properties" onClick={closeMenu}>{text('explore')}</NavLink>
-            <NavLink to="/settings" onClick={closeMenu}>{text('settingsTitle')}</NavLink>
-            <a href="/#how-it-works" onClick={closeMenu}>{text('howItWorks')}</a>
+            {!isAdministrator && <NavLink to="/" end onClick={closeMenu}>{text('home')}</NavLink>}
             {hasBrokerageContact && (
               <section className="mobile-menu-contact" aria-label={text('brokerContactTitle')}>
                 <h2>{text('brokerContactTitle')}</h2>
@@ -124,10 +123,11 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
               <span className="header-account-check">{text('loadingAccount')}</span>
             ) : account ? (
               <>
-                <Link className="header-sign-in" to="/dashboard" onClick={closeMenu}>{text('dashboardTitle')}</Link>
-                <Link className="header-sign-in" to="/account" onClick={closeMenu}>{text('myAccount')}</Link>
-                {account.role !== 'administrator' && (
-                  <Link className="header-sign-in" to="/favorites" onClick={closeMenu}>{text('savedHomesShort')}</Link>
+                {canAccessDashboard && (
+                  <Link className="header-sign-in" to="/dashboard" onClick={closeMenu}>{text('dashboardTitle')}</Link>
+                )}
+                {!isAdministrator && (
+                  <Link className="header-sign-in" to="/account" onClick={closeMenu}>{text('myAccount')}</Link>
                 )}
                 {account.role !== 'broker' && account.role !== 'administrator' && (
                   <Link className="header-sign-in" to="/viewing-requests" onClick={closeMenu}>

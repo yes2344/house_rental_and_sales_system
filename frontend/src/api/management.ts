@@ -29,17 +29,16 @@ export interface ManagedBrokerAccount {
   id: number;
   username: string;
   email: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  assigned_city_id: number | null;
   role: 'broker';
   is_active: boolean;
   broker_approved: boolean;
+  broker_onboarding_required: boolean;
   management_permissions: string[];
   date_joined: string;
-}
-
-export interface BrokerInvitationResult {
-  account: ManagedBrokerAccount;
-  invitation_token: string;
-  invitation_expires_at: string;
 }
 
 export type ManagedLocationType = LocationType;
@@ -47,10 +46,6 @@ export type ManagedLocationType = LocationType;
 export interface ManagedLocationPayload {
   name: string;
   name_am: string;
-  aliases_en: string[];
-  aliases_am: string[];
-  location_type: ManagedLocationType;
-  parent: number | null;
   is_active: boolean;
   display_order: number;
 }
@@ -76,6 +71,10 @@ export async function updateManagedLocation(
   return response.data;
 }
 
+export async function deleteManagedLocation(id: number): Promise<void> {
+  await apiClient.delete(`/management/locations/${id}/`);
+}
+
 export async function getManagedBrokerAccounts(signal?: AbortSignal): Promise<ManagedBrokerAccount[]> {
   const accounts: ManagedBrokerAccount[] = [];
   let nextPage: string | null = '/admin/delegated-accounts/';
@@ -91,22 +90,24 @@ export async function getManagedBrokerAccounts(signal?: AbortSignal): Promise<Ma
   return accounts;
 }
 
-export async function createManagedBrokerInvitation(
-  payload: { username: string; email: string },
-): Promise<BrokerInvitationResult> {
-  const response = await apiClient.post<BrokerInvitationResult>('/admin/delegated-accounts/', {
-    ...payload,
-    role: 'broker',
-  });
+export async function createManagedBrokerAccount(
+  payload: { username: string; password: string; assigned_city_id: number },
+): Promise<ManagedBrokerAccount> {
+  const response = await apiClient.post<ManagedBrokerAccount>('/admin/delegated-accounts/', payload);
   return response.data;
 }
 
 export async function updateManagedBrokerAccount(
   id: number,
-  payload: { is_active: boolean },
+  payload: Partial<Pick<ManagedBrokerAccount, 'username' | 'email' | 'first_name' | 'last_name' | 'phone' | 'is_active' | 'assigned_city_id'>>
+    & { initial_password?: string },
 ): Promise<ManagedBrokerAccount> {
   const response = await apiClient.patch<ManagedBrokerAccount>(`/admin/delegated-accounts/${id}/`, payload);
   return response.data;
+}
+
+export async function deleteManagedBrokerAccount(id: number): Promise<void> {
+  await apiClient.delete(`/admin/delegated-accounts/${id}/`);
 }
 
 export async function actOnManagedViewingRequest(

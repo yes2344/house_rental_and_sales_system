@@ -797,6 +797,8 @@ img { display: block; max-width: 100%; }
 .location-editor .manager-form-grid { gap: 8px 12px; }
 .location-editor .filter-label { margin: 0; }
 .location-editor .filter-label small { color: #842d24; font-size: 9px; font-weight: 400; }
+.location-level-fixed { display: flex; flex-direction: column; gap: 4px; min-height: 36px; justify-content: center; padding: 7px 10px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); font-size: 11px; }
+.location-level-fixed small { color: var(--muted); font-size: 9px; }
 .location-active-toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 10px; }
 .location-active-toggle input { accent-color: var(--green-800); }
 .location-form-message { grid-column: 1 / -1; margin: 0; padding: 9px 11px; font-size: 10px; }

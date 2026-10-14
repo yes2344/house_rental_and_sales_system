@@ -6,9 +6,11 @@ import { HomepageContentProvider } from './HomepageContentContext';
 import { PageLayout } from './components/PageLayout';
 import { RequireAuth } from './components/RequireAuth';
 import { RequireBrokerAccountManager } from './components/RequireBrokerAccountManager';
+import { RequireMarketplaceAccess } from './components/RequireMarketplaceAccess';
+import { RequireLocationManager } from './components/RequireLocationManager';
 import { RequireNonBroker } from './components/RequireNonBroker';
 import { RequireListingManager } from './components/RequireListingManager';
-import { RequireSettingsManager } from './components/RequireSettingsManager';
+import { RequireDashboardAccess } from './components/RequireDashboardAccess';
 import { OwnerDashboardLayout } from './components/OwnerDashboardLayout';
 import { usePreferences } from './PreferencesContext';
 import { messages, type MessageKey } from './i18n';
@@ -75,6 +77,9 @@ const LocationManagementPage = lazy(() =>
 const BrokerAccountManagementPage = lazy(() =>
   import('./pages/BrokerAccountManagementPage').then(({ BrokerAccountManagementPage }) => ({ default: BrokerAccountManagementPage })),
 );
+const BrokerOnboardingPage = lazy(() =>
+  import('./pages/BrokerOnboardingPage').then(({ BrokerOnboardingPage }) => ({ default: BrokerOnboardingPage })),
+);
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then(({ SettingsPage }) => ({ default: SettingsPage })),
 );
@@ -116,26 +121,33 @@ export default function App() {
                 </Suspense>
               )}
             >
-              <Route index element={<HomePage locale={locale} text={text} />} />
-              <Route path="properties" element={<PropertiesPage locale={locale} text={text} />} />
-              <Route path="properties/:slug" element={<PropertyDetailPage locale={locale} text={text} />} />
-              <Route path="viewing-requests/status" element={<ViewingRequestStatusPage text={text} />} />
+              <Route element={<RequireMarketplaceAccess text={text} />}>
+                <Route index element={<HomePage locale={locale} text={text} />} />
+                <Route path="properties" element={<PropertiesPage locale={locale} text={text} />} />
+                <Route path="properties/:slug" element={<PropertyDetailPage locale={locale} text={text} />} />
+                <Route path="viewing-requests/status" element={<ViewingRequestStatusPage text={text} />} />
+              </Route>
               <Route path="login" element={<LoginPage text={text} />} />
               <Route path="admin/login" element={<DjangoAdminLoginPage />} />
               <Route path="accept-invitation" element={<InvitationAcceptPage text={text} />} />
               <Route path="register" element={<RegisterPage text={text} />} />
               <Route path="settings" element={<SettingsPage text={text} />} />
               <Route element={<RequireAuth text={text} />}>
-                <Route path="dashboard" element={<DashboardPage text={text} />} />
-                <Route path="admin" element={<Navigate to="/dashboard" replace />} />
-                <Route element={<RequireNonBroker />}>
-                  <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
-                  <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
+                <Route path="broker-onboarding" element={<BrokerOnboardingPage text={text} />} />
+                <Route element={<RequireDashboardAccess text={text} />}>
+                  <Route path="dashboard" element={<DashboardPage text={text} />} />
                 </Route>
-                <Route path="account" element={<AccountPage locale={locale} text={text} />} />
-                <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
+                <Route path="admin" element={<Navigate to="/dashboard" replace />} />
+                <Route element={<RequireMarketplaceAccess text={text} />}>
+                  <Route element={<RequireNonBroker />}>
+                    <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
+                    <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
+                    <Route path="account" element={<AccountPage locale={locale} text={text} />} />
+                    <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
+                  </Route>
+                </Route>
                 <Route element={<RequireBrokerAccountManager text={text} />}>
-                  <Route path="management/brokers" element={<BrokerAccountManagementPage locale={locale} text={text} />} />
+                  <Route path="management/brokers" element={<BrokerAccountManagementPage text={text} />} />
                 </Route>
                 <Route element={<RequireListingManager text={text} />}>
                   <Route element={<OwnerDashboardLayout text={text} />}>
@@ -144,9 +156,11 @@ export default function App() {
                     <Route path="management/listings/:id/edit" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
                     <Route path="management/viewing-requests" element={<OwnerViewingRequestsPage text={text} />} />
                     <Route path="management/brokerage" element={<BrokerageSettingsPage text={text} />} />
-                    <Route element={<RequireSettingsManager text={text} />}>
-                      <Route path="management/locations" element={<LocationManagementPage locale={locale} text={text} />} />
-                    </Route>
+                  </Route>
+                </Route>
+                <Route element={<RequireLocationManager text={text} />}>
+                  <Route element={<OwnerDashboardLayout text={text} />}>
+                    <Route path="management/locations" element={<LocationManagementPage locale={locale} text={text} />} />
                   </Route>
                 </Route>
               </Route>

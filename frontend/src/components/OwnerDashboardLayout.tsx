@@ -19,16 +19,16 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
     ].includes(permission));
   const canViewRequests = isAuthorizedBroker
     && permissions.some((permission) => permission.startsWith('viewings.'));
-  const canManageSettings = isAuthorizedBroker && permissions.includes('settings.manage');
-  const canManageBrokers = account?.role === 'administrator' && permissions.includes('users.manage');
+  const canManageSubcities = isAuthorizedBroker && permissions.includes('locations.manage_subcities');
+  const canManageBrokers = account?.role === 'administrator' && permissions.includes('staff.manage');
+  const canManageCities = account?.role === 'administrator' && permissions.includes('locations.manage_cities');
 
   return (
     <div className="manager-shell">
       <nav className="manager-navigation" aria-label={text('managerNavigation')}>
         {canViewProperties && <NavLink to="/management/listings" end>{text('managerListings')}</NavLink>}
         {canViewRequests && <NavLink to="/management/viewing-requests">{text('managerViewingRequests')}</NavLink>}
-        {canManageSettings && <NavLink to="/management/brokerage">{text('managerContactSettings')}</NavLink>}
-        {canManageSettings && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
+        {(canManageSubcities || canManageCities) && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
         {canManageBrokers && <NavLink to="/management/brokers">{text('managerBrokerAccounts')}</NavLink>}
       </nav>
       <Outlet />

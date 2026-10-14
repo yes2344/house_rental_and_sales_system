@@ -39,30 +39,21 @@
         </div>
       {% endif %}
 
-      {% if invitation_token %}
-        <section class="panel" role="status">
-          <h2>One-time invitation token</h2>
-          <p>This token is shown only now. Share it securely with the invited person; do not send it in public messages.</p>
-          <pre style="white-space:pre-wrap;overflow-wrap:anywhere;">{{ invitation_token }}</pre>
-          <p>The invitee can open the site’s invitation-acceptance page and enter this token to set their own password.</p>
-        </section>
-      {% endif %}
-
       <div class="layout-2" style="margin-top: 28px;">
         <section class="panel">
-          <h2>{% if is_platform_owner %}Create an administrator or broker invitation{% else %}Invite a broker{% endif %}</h2>
-          <p>New accounts are inactive until the invitee sets a password with the one-time token.</p>
+          <h2>Create a broker account</h2>
+          <p>The broker must change the initial password and complete their profile before broker tools are enabled.</p>
           <form method="post">
             {% csrf_token %}
             {{ create_form.as_p }}
-            <button class="btn btn-primary" type="submit">Create invitation</button>
+            <button class="btn btn-primary" type="submit">Create broker account</button>
           </form>
         </section>
 
         {% if selected_profile and edit_form %}
           <section class="panel">
             <h2>Update {{ selected_profile.user.username }}</h2>
-            <p>Deactivating the account immediately removes access.</p>
+            <p>Update broker details, optionally reset their temporary password, or deactivate access.</p>
             <form method="post">
               {% csrf_token %}
               <input type="hidden" name="account_id" value="{{ selected_profile.user_id }}" />
@@ -78,25 +69,27 @@
         <div class="table-scroll" role="region" aria-labelledby="delegated-account-list-heading" tabindex="0">
           <table class="table">
             <thead>
-              <tr><th>Account</th><th>Role</th><th>Active</th><th>Permissions</th><th>Action</th></tr>
+              <tr><th>Account</th><th>City</th><th>Role</th><th>Active</th><th>Setup</th><th>Action</th></tr>
             </thead>
             <tbody>
               {% for profile in profiles %}
                 <tr>
-                  <td>{{ profile.user.username }}<br /><span>{{ profile.user.email }}</span></td>
+                  <td>{{ profile.user.username }}<br /><span>{{ profile.user.get_full_name }} · {{ profile.user.email }}</span></td>
+                  <td>{{ profile.assigned_city.name|default:"Not assigned" }}</td>
                   <td>{{ profile.get_role_display }}</td>
                   <td>{% if profile.user.is_active %}Active{% else %}Inactive{% endif %}</td>
+                  <td>{% if profile.broker_onboarding_required %}Profile setup required{% else %}Profile complete{% endif %}</td>
                   <td>
-                    {% for permission in profile.management_permissions %}
-                      <span class="tag green">{{ permission }}</span>
-                    {% empty %}
-                      No management permissions
-                    {% endfor %}
+                    <a href="?account_id={{ profile.user_id }}">Edit</a>
+                    <form method="post" style="display:inline" onsubmit="return confirm('Permanently delete this broker account?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="delete_account_id" value="{{ profile.user_id }}" />
+                      <button type="submit">Delete</button>
+                    </form>
                   </td>
-                  <td><a href="?account_id={{ profile.user_id }}">Manage</a></td>
                 </tr>
               {% empty %}
-                <tr><td colspan="5">No delegated accounts have been created.</td></tr>
+                <tr><td colspan="6">No broker accounts have been created.</td></tr>
               {% endfor %}
             </tbody>
           </table>

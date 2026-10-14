@@ -11,6 +11,7 @@ interface LocationCascadeProps {
   text: (key: MessageKey) => string;
   required?: boolean;
   management?: boolean;
+  fixedCityId?: number | null;
 }
 
 const locationTypeMessages: Record<string, MessageKey> = {
@@ -30,6 +31,7 @@ export function LocationCascade({
   text,
   required = false,
   management = false,
+  fixedCityId = null,
 }: LocationCascadeProps) {
   const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -50,8 +52,9 @@ export function LocationCascade({
 
   useEffect(() => {
     const selectedId = Number(value);
-    if (!Number.isInteger(selectedId) || selectedId < 1 || locations.length === 0) {
-      if (!value) setSelectedIds([]);
+    if (locations.length === 0) return;
+    if (!Number.isInteger(selectedId) || selectedId < 1) {
+      setSelectedIds(fixedCityId ? [fixedCityId] : []);
       return;
     }
     const byId = new Map(locations.map((location) => [location.id, location]));
@@ -62,7 +65,7 @@ export function LocationCascade({
       current = current.parent_id === null ? undefined : byId.get(current.parent_id);
     }
     setSelectedIds(path);
-  }, [locations, value]);
+  }, [fixedCityId, locations, value]);
 
   const locationById = new Map(locations.map((location) => [location.id, location]));
   const selectedCityIndex = selectedIds.findIndex((id) => {
@@ -74,6 +77,7 @@ export function LocationCascade({
   const requiresSubcity = cityFirst && selectedCity?.location_type === 'city_administration';
   const cityOptions = locations.filter((location) => (
     (location.location_type === 'city' || location.location_type === 'city_administration')
+    && (fixedCityId === null || location.id === fixedCityId)
     && (location.is_active || location.id === selectedCityId)
   ));
   const levels: { options: MarketplaceLocation[]; selectedId?: number }[] = [];
@@ -146,7 +150,7 @@ export function LocationCascade({
             <select
               className="filter-select"
               value={selectedId ?? ''}
-              disabled={options.every((location) => !location.is_active)}
+              disabled={(fixedCityId !== null && level === 0) || options.every((location) => !location.is_active)}
               required={required && (!cityFirst || level === 0 || (requiresSubcity && level === 1))}
               onChange={(event) => choose(level, event.target.value)}
             >

@@ -1,11 +1,27 @@
-from django.db.models import Q
-
 from accounts.models import Profile
 from accounts.permissions import (
     has_management_permission,
     has_listing_role,
 )
-from properties.models import Property
+from properties.models import Location, Property
+
+
+def broker_city_location_ids(user):
+    profile = getattr(user, 'profile', None)
+    city_id = getattr(profile, 'assigned_city_id', None)
+    if city_id is None:
+        return set()
+
+    location_ids = {city_id}
+    frontier = {city_id}
+    while frontier:
+        children = set(
+            Location.objects.filter(parent_id__in=frontier)
+            .values_list('pk', flat=True)
+        )
+        frontier = children - location_ids
+        location_ids.update(frontier)
+    return location_ids
 
 
 def public_properties():
@@ -20,30 +36,23 @@ def public_properties():
 
 def managed_properties(user):
     broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
-    if has_management_permission(user, Profile.Permission.PROPERTY_VIEW_ALL) or has_management_permission(
-        user,
-        Profile.Permission.PROPERTY_MODERATE,
-    ):
-        return broker_managed
-
-    scope = Q(pk__in=[])
     if (
         has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
     ):
-        scope |= Q(assigned_brokers=user, service_type=Property.ServiceType.BROKER_MANAGED)
-    return broker_managed.filter(scope).distinct() if scope else Property.objects.none()
+        return broker_managed.filter(
+            administrative_location_id__in=broker_city_location_ids(user),
+        ).distinct()
+    return Property.objects.none()
 
 
 def editable_properties(user):
     broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
-    if has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL):
-        return broker_managed
-
-    scope = Q(pk__in=[])
     if (
         has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
     ):
-        scope |= Q(assigned_brokers=user, service_type=Property.ServiceType.BROKER_MANAGED)
-    return broker_managed.filter(scope).distinct() if scope else Property.objects.none()
+        return broker_managed.filter(
+            administrative_location_id__in=broker_city_location_ids(user),
+        ).distinct()
+    return Property.objects.none()

@@ -14,6 +14,7 @@ interface FooterProps {
 
 export function Footer({ contact, contactError, text }: FooterProps) {
   const { account } = useAuth();
+  const isAdministrator = account?.role === 'administrator';
   const configuredSocial = contact.social_links.filter((link) => link.is_enabled && link.url);
   const hasBrokerageContact = Boolean(contact.phone || contact.email || configuredSocial.length);
 
@@ -21,7 +22,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
     <footer className="site-footer">
       <div className="container footer-main">
         <div className="footer-brand">
-          <Link className="brand brand-footer" to="/">
+          <Link className="brand brand-footer" to={isAdministrator ? '/dashboard' : '/'}>
             <span className="brand-mark" aria-hidden="true">
               <svg viewBox="0 0 36 36" fill="none">
                 <path d="M5 17.1 18 6l13 11.1v12.1H5V17.1Z" fill="currentColor" />
@@ -35,12 +36,14 @@ export function Footer({ contact, contactError, text }: FooterProps) {
           </Link>
           <p>{text('footerNote')}</p>
         </div>
-        <div className="footer-links">
-          <Link to="/properties">{text('footerBrowse')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to={account ? '/account' : '/login'}>
-            {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
-          </Link>
-        </div>
+        {!isAdministrator && (
+          <div className="footer-links">
+            <Link to="/properties">{text('footerBrowse')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+            <Link to={account ? '/account' : '/login'}>
+              {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
+            </Link>
+          </div>
+        )}
         {hasBrokerageContact && (
           <section className="footer-contact" aria-label={text('brokerContactTitle')}>
             <h2>{text('brokerContactTitle')}</h2>

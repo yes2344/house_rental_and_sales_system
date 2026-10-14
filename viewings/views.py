@@ -19,6 +19,7 @@ from accounts.permissions import (
     IsViewingRequestManager,
     has_management_permission,
 )
+from properties.access import broker_city_location_ids
 from viewings.models import ViewingRequest
 from viewings.serializers import (
     appointment_is_in_past,
@@ -203,8 +204,12 @@ def manageable_viewing_requests(user):
 
     scope = Q(pk__in=[])
     if has_management_permission(user, Profile.Permission.VIEWING_MANAGE_ASSIGNED):
-        scope |= Q(property__assigned_brokers=user)
-    return ViewingRequest.objects.filter(scope).distinct()
+        scope |= Q(
+            property__assigned_brokers=user,
+            property__administrative_location_id__in=broker_city_location_ids(user),
+        )
+    assigned_request_ids = ViewingRequest.objects.filter(scope).values('pk')
+    return ViewingRequest.objects.filter(pk__in=assigned_request_ids)
 
 
 class CustomerViewingRequestListView(generics.ListAPIView):

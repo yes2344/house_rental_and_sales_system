@@ -55,6 +55,56 @@ class LocationSerializer(serializers.ModelSerializer):
             ancestor = ancestor.parent
         return value
 
+    def to_internal_value(self, data):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        profile = Profile.objects.filter(user=user).select_related('assigned_city').first() if (
+            user and user.is_authenticated
+        ) else None
+        is_admin = bool(user and user.is_superuser) or bool(
+            profile and profile.role == Profile.Role.ADMINISTRATOR
+        )
+        is_broker = not is_admin and bool(profile and profile.role == Profile.Role.BROKER)
+        if not (is_admin or is_broker):
+            return super().to_internal_value(data)
+
+        editable_fields = {'name', 'name_am', 'is_active', 'display_order'}
+        if isinstance(data, dict):
+            unsupported_fields = set(data) - editable_fields
+            if unsupported_fields:
+                raise serializers.ValidationError({
+                    field: ['This field is fixed or is not editable here.']
+                    for field in sorted(unsupported_fields)
+                })
+            data = data.copy()
+            if is_broker:
+                if profile.assigned_city_id is None:
+                    raise serializers.ValidationError({
+                        'parent': 'Ask an administrator to assign a city before managing sub-cities.',
+                    })
+                data['location_type'] = Location.Type.SUBCITY
+                data['parent'] = profile.assigned_city_id
+            elif self.instance is not None:
+                if self.instance.location_type != Location.Type.CITY:
+                    raise serializers.ValidationError({
+                        'location_type': 'Administrators can manage marketplace cities only.',
+                    })
+                data['location_type'] = self.instance.location_type
+                data['parent'] = self.instance.parent_id
+            else:
+                country = Location.objects.filter(
+                    location_type=Location.Type.COUNTRY,
+                    name__iexact='Ethiopia',
+                    is_active=True,
+                ).first()
+                if country is None:
+                    raise serializers.ValidationError({
+                        'parent': 'An active Ethiopia country location is required before adding a city.',
+                    })
+                data['location_type'] = Location.Type.CITY
+                data['parent'] = country.pk
+        return super().to_internal_value(data)
+
     @extend_schema_field(serializers.IntegerField(allow_null=True))
     def get_city_id(self, obj):
         current = obj
@@ -114,6 +164,28 @@ class LocationSerializer(serializers.ModelSerializer):
         if not candidate_slug:
             candidate_slug = slugify(location.name)
         candidate_parent = attrs.get('parent', getattr(location, 'parent', None))
+
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        profile = Profile.objects.filter(user=user).select_related('assigned_city').first() if (
+            user and user.is_authenticated
+        ) else None
+        if profile and profile.role == Profile.Role.BROKER:
+            if location.location_type != Location.Type.SUBCITY:
+                raise serializers.ValidationError({
+                    'location_type': 'Brokers can manage sub-cities within their assigned city only.',
+                })
+            if candidate_parent is None or candidate_parent.pk != profile.assigned_city_id:
+                raise serializers.ValidationError({
+                    'parent': 'Choose your assigned city as the parent of this sub-city.',
+                })
+        elif (user and user.is_superuser) or (
+            profile and profile.role == Profile.Role.ADMINISTRATOR
+        ):
+            if location.location_type != Location.Type.CITY:
+                raise serializers.ValidationError({
+                    'location_type': 'Administrators can manage marketplace cities only.',
+                })
 
         query = Location.objects.filter(slug=candidate_slug)
         if self.instance is not None:
@@ -510,16 +582,16 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
                 self.instance is not None
                 and administrative_location.pk == self.instance.administrative_location_id
             )
+            path = []
+            current = administrative_location
+            while current is not None:
+                path.append(current)
+                current = current.parent
             if not administrative_location.is_active and not location_is_unchanged:
                 raise serializers.ValidationError({
                     'administrative_location': 'Choose an active location for a new or changed listing.',
                 })
             if not location_is_unchanged:
-                path = []
-                current = administrative_location
-                while current is not None:
-                    path.append(current)
-                    current = current.parent
                 if any(not item.is_active for item in path):
                     raise serializers.ValidationError({
                         'administrative_location': 'Every level in the selected location path must be active.',
@@ -537,6 +609,32 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
                 ):
                     raise serializers.ValidationError({
                         'administrative_location': 'Select a configured sub-city / Kifle Ketema for this city administration.',
+                    })
+            request = self.context.get('request')
+            user = getattr(request, 'user', None)
+            broker_profile = Profile.objects.filter(
+                user=user,
+                role=Profile.Role.BROKER,
+                broker_approved=True,
+            ).first() if user and user.is_authenticated else None
+            if broker_profile:
+                location_city_id = next(
+                    (
+                        item.pk for item in path
+                        if item.location_type == Location.Type.CITY
+                    ),
+                    None,
+                )
+                if (
+                    broker_profile.assigned_city_id is None
+                    or location_city_id != broker_profile.assigned_city_id
+                    or (
+                        not location_is_unchanged
+                        and administrative_location.location_type != Location.Type.SUBCITY
+                    )
+                ):
+                    raise serializers.ValidationError({
+                        'administrative_location': 'Choose a sub-city within your assigned city.',
                     })
         return attrs
 

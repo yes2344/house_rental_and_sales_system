@@ -4,7 +4,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
 import {
-  getLocations,
   getLocationsByTypes,
   getProperties,
   type ListingType,
@@ -15,56 +14,28 @@ import {
   type PropertyType,
 } from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
-import { LocationCascade } from '../components/LocationCascade';
-import { LocationSearchInput } from '../components/LocationSearchInput';
 import type { HomePageProps } from './HomePage';
 
 const PAGE_SIZE = 12;
 
 interface FilterValues {
-  search: string;
   listing_type: string;
   property_type: string;
-  location: string;
-  location_id: string;
   city_id: string;
-  min_price: string;
-  max_price: string;
-  min_bedrooms: string;
-  max_bedrooms: string;
-  min_bathrooms: string;
-  max_bathrooms: string;
-  min_size: string;
-  max_size: string;
-  amenities: string;
-  ordering: string;
 }
 
 function readFilters(params: URLSearchParams): FilterValues {
   return {
-    search: params.get('search') ?? '',
     listing_type: params.get('listing_type') ?? '',
     property_type: params.get('property_type') ?? '',
-    location: params.get('location') ?? '',
-    location_id: params.get('location_id') ?? '',
     city_id: params.get('city_id') ?? '',
-    min_price: params.get('min_price') ?? '',
-    max_price: params.get('max_price') ?? '',
-    min_bedrooms: params.get('min_bedrooms') ?? '',
-    max_bedrooms: params.get('max_bedrooms') ?? '',
-    min_bathrooms: params.get('min_bathrooms') ?? '',
-    max_bathrooms: params.get('max_bathrooms') ?? '',
-    min_size: params.get('min_size') ?? '',
-    max_size: params.get('max_size') ?? '',
-    amenities: params.get('amenities') ?? '',
-    ordering: params.get('ordering') ?? '-created_at',
   };
 }
 
 function filtersToParams(values: FilterValues): URLSearchParams {
   const params = new URLSearchParams();
   Object.entries(values).forEach(([key, value]) => {
-    if (value.trim() && !(key === 'ordering' && value === '-created_at')) {
+    if (value.trim()) {
       params.set(key, value.trim());
     }
   });
@@ -72,7 +43,6 @@ function filtersToParams(values: FilterValues): URLSearchParams {
 }
 
 function toApiFilters(params: URLSearchParams): PropertyFilters {
-  const validOrderings = ['-created_at', 'price', '-price', '-area_sqft'];
   const validPropertyTypes = [
     'house', 'villa', 'apartment', 'condominium', 'land',
     'office', 'shop', 'warehouse', 'commercial', 'other',
@@ -80,25 +50,12 @@ function toApiFilters(params: URLSearchParams): PropertyFilters {
   const page = Number(params.get('page') ?? 1);
   const listingType = params.get('listing_type');
   const propertyType = params.get('property_type');
-  const ordering = params.get('ordering');
   return {
     page_size: PAGE_SIZE,
-    search: params.get('search') || undefined,
     listing_type: listingType === 'sale' || listingType === 'rent' ? listingType as ListingType : undefined,
     property_type: validPropertyTypes.includes(propertyType ?? '') ? propertyType as PropertyType : undefined,
-    location: params.get('location') || undefined,
-    location_id: Number(params.get('location_id')) > 0 ? Number(params.get('location_id')) : undefined,
     city_id: Number(params.get('city_id')) > 0 ? Number(params.get('city_id')) : undefined,
-    min_price: params.get('min_price') || undefined,
-    max_price: params.get('max_price') || undefined,
-    min_bedrooms: params.get('min_bedrooms') || undefined,
-    max_bedrooms: params.get('max_bedrooms') || undefined,
-    min_bathrooms: params.get('min_bathrooms') || undefined,
-    max_bathrooms: params.get('max_bathrooms') || undefined,
-    min_size: params.get('min_size') || undefined,
-    max_size: params.get('max_size') || undefined,
-    amenities: params.get('amenities') || undefined,
-    ordering: validOrderings.includes(ordering ?? '') ? ordering ?? undefined : undefined,
+    ordering: '-created_at',
     page: Number.isInteger(page) && page > 1 ? page : undefined,
   };
 }
@@ -112,11 +69,9 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [moreError, setMoreError] = useState('');
-  const [filterError, setFilterError] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [cities, setCities] = useState<MarketplaceLocation[]>([]);
   const [cityOptionsError, setCityOptionsError] = useState('');
-  const [childLocations, setChildLocations] = useState<MarketplaceLocation[]>([]);
   const moreRequestController = useRef<AbortController | null>(null);
   const apiFilters = useMemo(() => toApiFilters(searchParams), [searchParams]);
   const currentPage = apiFilters.page ?? 1;
@@ -134,20 +89,6 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
       });
     return () => controller.abort();
   }, [text]);
-
-  useEffect(() => {
-    if (!selectedCityId) {
-      setChildLocations([]);
-      return undefined;
-    }
-    const controller = new AbortController();
-    void getLocations(selectedCityId, controller.signal)
-      .then(setChildLocations)
-      .catch(() => {
-        if (!controller.signal.aborted) setChildLocations([]);
-      });
-    return () => controller.abort();
-  }, [selectedCityId]);
 
   const loadProperties = useCallback(async (signal?: AbortSignal) => {
     moreRequestController.current?.abort();
@@ -183,22 +124,10 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
 
   const updateValue = (name: keyof FilterValues, value: string) => {
     setFormValues((previous) => ({ ...previous, [name]: value }));
-    setFilterError(false);
   };
 
   const submitFilters = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const ranges: [string, string][] = [
-      [formValues.min_price, formValues.max_price],
-      [formValues.min_bedrooms, formValues.max_bedrooms],
-      [formValues.min_bathrooms, formValues.max_bathrooms],
-      [formValues.min_size, formValues.max_size],
-    ];
-    if (ranges.some(([minimum, maximum]) => minimum && maximum && Number(minimum) > Number(maximum))) {
-      setFilterError(true);
-      return;
-    }
-    setFilterError(false);
     setSearchParams(filtersToParams(formValues));
   };
 
@@ -228,22 +157,11 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
   };
 
   const selectCity = (cityId: number | null) => {
-    const params = new URLSearchParams(searchParams);
-    params.delete('page');
-    params.delete('location');
-    params.delete('location_id');
-    if (cityId === null) params.delete('city_id');
-    else params.set('city_id', String(cityId));
-    setSearchParams(params);
-  };
-
-  const selectChildLocation = (locationId: string) => {
-    const params = new URLSearchParams(searchParams);
-    params.delete('page');
-    params.delete('location');
-    if (locationId) params.set('location_id', locationId);
-    else params.delete('location_id');
-    setSearchParams(params);
+    const nextValues = {
+      ...readFilters(searchParams),
+      city_id: cityId === null ? '' : String(cityId),
+    };
+    setSearchParams(filtersToParams(nextValues));
   };
 
   const firstResult = result?.count ? (currentPage - 1) * PAGE_SIZE + 1 : 0;
@@ -268,23 +186,6 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
             <span className="results-count-icon"><ListFilter size={17} aria-hidden="true" /></span>
             {loading ? text('loadingListings') : `${result?.count ?? 0} ${text('resultCount')}`}
           </div>
-          <label className="sort-control">
-            <span>{text('sortBy')}</span>
-            <select
-              aria-label={text('sortOption')}
-              value={formValues.ordering}
-              onChange={(event) => {
-                const nextValues = { ...formValues, ordering: event.target.value };
-                setFormValues(nextValues);
-                setSearchParams(filtersToParams(nextValues));
-              }}
-            >
-              <option value="-created_at">{text('sortNewest')}</option>
-              <option value="price">{text('sortPriceLow')}</option>
-              <option value="-price">{text('sortPriceHigh')}</option>
-              <option value="-area_sqft">{text('sortLargest')}</option>
-            </select>
-          </label>
         </div>
 
         <nav className="city-filter-bar" aria-label={text('filterByCity')}>
@@ -308,24 +209,6 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
             </button>
           ))}
           {cityOptionsError && <span className="city-filter-error" role="status">{cityOptionsError}</span>}
-          {selectedCityId > 0 && childLocations.length > 0 && (
-            <label className="city-subdivision-filter">
-              <span>{text('filterByArea')}</span>
-              <select
-                value={childLocations.some((item) => item.id === Number(formValues.location_id))
-                  ? formValues.location_id
-                  : ''}
-                onChange={(event) => selectChildLocation(event.target.value)}
-              >
-                <option value="">{text('allAreas')}</option>
-                {childLocations.map((child) => (
-                  <option value={child.id} key={child.id}>
-                    {locale === 'am' && child.name_am ? child.name_am : child.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
         </nav>
 
         <div className="results-layout">
@@ -341,10 +224,6 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
             </button>
             <form className={`filter-form${filtersExpanded ? ' is-expanded' : ''}`} onSubmit={submitFilters}>
               <div className="filter-title-row"><h2>{text('filterProperties')}</h2><SlidersHorizontal size={17} aria-hidden="true" /></div>
-              <label className="filter-label" htmlFor="filter-search">{text('searchKeyword')}</label>
-              <span className="filter-search-wrap"><Search size={16} aria-hidden="true" />
-                <input id="filter-search" value={formValues.search} onChange={(event) => updateValue('search', event.target.value)} placeholder={text('searchKeywordPlaceholder')} />
-              </span>
 
               <fieldset className="filter-fieldset">
                 <legend>{text('listingTypeLabel')}</legend>
@@ -369,88 +248,6 @@ export function PropertiesPage({ locale, text }: HomePageProps) {
                 <option value="commercial">{text('commercial')}</option>
                 <option value="other">Other</option>
               </select>
-
-              <div className="filter-label">
-                <label htmlFor="filter-location">{text('location')}</label>
-                <LocationSearchInput
-                  id="filter-location"
-                  value={formValues.location}
-                  locale={locale}
-                  placeholder={text('locationPlaceholder')}
-                  onChange={(value) => {
-                    updateValue('location', value);
-                    updateValue('location_id', '');
-                    updateValue('city_id', '');
-                  }}
-                  onSelect={(location) => {
-                    updateValue('location', locale === 'am' && location.name_am ? location.name_am : location.name);
-                    updateValue('location_id', String(location.id));
-                    updateValue('city_id', location.city_id ? String(location.city_id) : '');
-                  }}
-                />
-              </div>
-              <LocationCascade
-                value={formValues.location_id}
-                locale={locale}
-                text={text}
-                onChange={(value) => {
-                  updateValue('location_id', value);
-                  updateValue('location', '');
-                  updateValue('city_id', '');
-                }}
-              />
-
-              <div className="filter-price-heading">{text('priceLabel')}</div>
-              <div className="filter-two-columns">
-                <label className="filter-label" htmlFor="filter-min-price">{text('minimumPrice')}
-                  <input id="filter-min-price" className="filter-input" type="number" min="0" step="1000" inputMode="numeric" value={formValues.min_price} onChange={(event) => updateValue('min_price', event.target.value)} />
-                </label>
-                <label className="filter-label" htmlFor="filter-max-price">{text('maximumPrice')}
-                  <input id="filter-max-price" className="filter-input" type="number" min="0" step="1000" inputMode="numeric" value={formValues.max_price} onChange={(event) => updateValue('max_price', event.target.value)} />
-                </label>
-              </div>
-
-              <div className="filter-two-columns">
-                <label className="filter-label" htmlFor="filter-bedrooms">{text('minimumBedrooms')}
-                  <select className="filter-select" id="filter-bedrooms" value={formValues.min_bedrooms} onChange={(event) => updateValue('min_bedrooms', event.target.value)}>
-                    <option value="">{text('anyType')}</option>
-                    {[1, 2, 3, 4, 5].map((count) => <option value={count} key={count}>{count}+</option>)}
-                  </select>
-                </label>
-                <label className="filter-label" htmlFor="filter-max-bedrooms">{text('maximumBedrooms')}
-                  <select className="filter-select" id="filter-max-bedrooms" value={formValues.max_bedrooms} onChange={(event) => updateValue('max_bedrooms', event.target.value)}>
-                    <option value="">{text('anyType')}</option>
-                    {[1, 2, 3, 4, 5].map((count) => <option value={count} key={count}>{count}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div className="filter-two-columns">
-                <label className="filter-label" htmlFor="filter-bathrooms">{text('minimumBathrooms')}
-                  <select className="filter-select" id="filter-bathrooms" value={formValues.min_bathrooms} onChange={(event) => updateValue('min_bathrooms', event.target.value)}>
-                    <option value="">{text('anyType')}</option>
-                    {[1, 2, 3, 4].map((count) => <option value={count} key={count}>{count}+</option>)}
-                  </select>
-                </label>
-                <label className="filter-label" htmlFor="filter-max-bathrooms">{text('maximumBathrooms')}
-                  <select className="filter-select" id="filter-max-bathrooms" value={formValues.max_bathrooms} onChange={(event) => updateValue('max_bathrooms', event.target.value)}>
-                    <option value="">{text('anyType')}</option>
-                    {[1, 2, 3, 4].map((count) => <option value={count} key={count}>{count}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div className="filter-two-columns">
-                <label className="filter-label" htmlFor="filter-size">{text('minimumSize')}
-                  <input id="filter-size" className="filter-input" type="number" min="0" step="50" inputMode="numeric" value={formValues.min_size} onChange={(event) => updateValue('min_size', event.target.value)} />
-                </label>
-                <label className="filter-label" htmlFor="filter-max-size">{text('maximumSize')}
-                  <input id="filter-max-size" className="filter-input" type="number" min="0" step="50" inputMode="numeric" value={formValues.max_size} onChange={(event) => updateValue('max_size', event.target.value)} />
-                </label>
-              </div>
-
-              <label className="filter-label" htmlFor="filter-amenities">{text('amenitiesFilter')}
-                <input id="filter-amenities" className="filter-input" value={formValues.amenities} onChange={(event) => updateValue('amenities', event.target.value)} placeholder={text('amenitiesPlaceholder')} />
-              </label>
-              {filterError && <p className="filter-validation" role="alert">{text('invalidFilters')}</p>}
               <button className="button button-primary filter-submit" type="submit">{text('applyFilters')} <ArrowRight size={15} aria-hidden="true" /></button>
               <button className="filter-clear" type="button" onClick={clearFilters}>{text('clearFilters')}</button>
             </form>

@@ -5,7 +5,6 @@ import {
   Heart,
   MapPinned,
   Search,
-  Settings,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -28,8 +27,9 @@ export function DashboardPage({ text }: DashboardPageProps) {
   const isBroker = account.role === 'broker';
   const canManageListings = isBroker && permissions.some((permission) => permission.startsWith('properties.'));
   const canManageRequests = isBroker && permissions.some((permission) => permission.startsWith('viewings.'));
-  const canManageSettings = isBroker && permissions.includes('settings.manage');
-  const canManageBrokers = account.role === 'administrator' && permissions.includes('users.manage');
+  const canManageSubcities = isBroker && permissions.includes('locations.manage_subcities');
+  const canManageBrokers = account.role === 'administrator' && permissions.includes('staff.manage');
+  const canManageCities = account.role === 'administrator' && permissions.includes('locations.manage_cities');
 
   const entries: {
     href: string;
@@ -39,6 +39,8 @@ export function DashboardPage({ text }: DashboardPageProps) {
     ...(isAdministrator
       ? (canManageBrokers ? [
         { href: '/management/brokers', title: text('managerBrokerAccounts'), icon: <Users aria-hidden="true" /> },
+      ] : []).concat(canManageCities ? [
+        { href: '/management/locations', title: text('locationManagementTitle'), icon: <MapPinned aria-hidden="true" /> },
       ] : [])
       : [
       { href: '/properties', title: text('explore'), icon: <Search aria-hidden="true" /> },
@@ -68,12 +70,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
       icon: <CalendarDays aria-hidden="true" />,
     });
   }
-  if (canManageSettings) {
-    entries.push({
-      href: '/management/brokerage',
-      title: text('managerContactSettings'),
-      icon: <Settings aria-hidden="true" />,
-    });
+  if (canManageSubcities) {
     entries.push({
       href: '/management/locations',
       title: text('locationManagementTitle'),

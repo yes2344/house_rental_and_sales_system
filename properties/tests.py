@@ -202,6 +202,7 @@ class PublicPropertyApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             phone='+251911222333',
         )
         self.property.submitted_by = broker
@@ -652,6 +653,24 @@ class ManagedPropertyApiTests(APITestCase):
             location_type=Location.Type.CITY,
             parent=self.country,
         )
+        self.subcity = Location.objects.create(
+            name='Test Subcity Managed',
+            slug='test-subcity-managed',
+            location_type=Location.Type.SUBCITY,
+            parent=self.city,
+        )
+        self.other_city = Location.objects.create(
+            name='Other Test City Managed',
+            slug='other-test-city-managed',
+            location_type=Location.Type.CITY,
+            parent=self.country,
+        )
+        self.other_subcity = Location.objects.create(
+            name='Other Test Subcity Managed',
+            slug='other-test-subcity-managed',
+            location_type=Location.Type.SUBCITY,
+            parent=self.other_city,
+        )
         user_model = get_user_model()
         self.owner = user_model.objects.create_user(username='crud-owner')
         Profile.objects.create(user=self.owner, role=Profile.Role.OWNER)
@@ -664,6 +683,7 @@ class ManagedPropertyApiTests(APITestCase):
             user=self.manager,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
@@ -673,6 +693,7 @@ class ManagedPropertyApiTests(APITestCase):
             title='Owner property',
             slug='owner-property-api',
             location='Submitted location',
+            administrative_location=self.subcity,
             price=400000,
             description='Owner listing.',
             owner=self.owner,
@@ -684,7 +705,7 @@ class ManagedPropertyApiTests(APITestCase):
         payload = {
             'title': 'New owner listing',
             'location': 'Submitted location',
-            'administrative_location': self.city.pk,
+            'administrative_location': self.subcity.pk,
             'category': 'house',
             'listing_type': 'sale',
             'price': '350000.00',
@@ -696,6 +717,53 @@ class ManagedPropertyApiTests(APITestCase):
         }
         payload.update(overrides)
         return payload
+
+    def test_broker_can_create_in_assigned_subcity_and_gets_only_its_viewing_assignment(self):
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        created_property = Property.objects.get(pk=response.data['id'])
+        self.assertEqual(created_property.administrative_location, self.subcity)
+        self.assertTrue(
+            PropertyBrokerAssignment.objects.filter(
+                property=created_property,
+                broker=self.manager,
+            ).exists()
+        )
+
+    def test_broker_cannot_create_or_access_property_outside_assigned_city(self):
+        outside_property = Property.objects.create(
+            title='Outside city property',
+            slug='outside-city-managed-property',
+            location='Outside city',
+            administrative_location=self.other_subcity,
+            price=250000,
+            description='A listing in another city.',
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        self.client.force_authenticate(user=self.manager)
+
+        rejected_create = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(
+                title='Cross-city listing',
+                administrative_location=self.other_subcity.pk,
+            ),
+            format='json',
+        )
+        hidden_detail = self.client.get(
+            reverse('api:managed-property-detail', kwargs={'pk': outside_property.pk})
+        )
+
+        self.assertEqual(rejected_create.status_code, 400)
+        self.assertIn('administrative_location', rejected_create.data['error']['details'])
+        self.assertEqual(hidden_detail.status_code, 404)
 
     def test_property_owner_cannot_manage_listings_from_ownership_alone(self):
         self.client.force_authenticate(user=self.owner)
@@ -770,7 +838,7 @@ class ManagedPropertyApiTests(APITestCase):
                 'title': 'Updated managed listing',
                 'description': 'Updated description.',
                 'price': '425000.00',
-                'administrative_location': self.city.pk,
+                'administrative_location': self.subcity.pk,
                 'amenities': [amenity.pk],
             },
             format='json',
@@ -781,7 +849,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(self.property.title, 'Updated managed listing')
         self.assertEqual(self.property.description, 'Updated description.')
         self.assertEqual(self.property.price, Decimal('425000.00'))
-        self.assertEqual(self.property.administrative_location_id, self.city.pk)
+        self.assertEqual(self.property.administrative_location_id, self.subcity.pk)
         self.assertEqual(list(self.property.amenities.values_list('pk', flat=True)), [amenity.pk])
         self.assertEqual(self.property.created_at, original_created_at)
         self.assertGreater(self.property.updated_at, original_created_at)
@@ -898,6 +966,7 @@ class ManagedPropertyApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
         )
         self.client.force_authenticate(user=broker)
         published = self.client.post(
@@ -907,9 +976,9 @@ class ManagedPropertyApiTests(APITestCase):
         )
         self.assertEqual(forbidden.status_code, 403)
         self.assertEqual(administrator_published.status_code, 403)
-        self.assertEqual(published.status_code, 200)
+        self.assertEqual(published.status_code, 403)
         self.property.refresh_from_db()
-        self.assertEqual(self.property.publication_status, Property.PublicationStatus.PUBLISHED)
+        self.assertEqual(self.property.publication_status, Property.PublicationStatus.DRAFT)
 
         self.property.status = Property.Status.SOLD
         self.property.save(update_fields=['status'])
@@ -918,7 +987,7 @@ class ManagedPropertyApiTests(APITestCase):
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
         )
-        self.assertEqual(unavailable.status_code, 400)
+        self.assertEqual(unavailable.status_code, 403)
 
     def test_invalid_price_is_rejected_before_database_write(self):
         self.client.force_authenticate(user=self.manager)
@@ -977,6 +1046,7 @@ class ManagedPropertyApiTests(APITestCase):
             title='Legacy weekly rental',
             slug='legacy-weekly-rental',
             location='Submitted location',
+            administrative_location=self.subcity,
             listing_type=Property.ListingType.RENT,
             rental_frequency=Property.RentalFrequency.WEEKLY,
             price=1000,
@@ -1007,7 +1077,7 @@ class ManagedPropertyApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 201)
         created = Property.objects.get(pk=response.data['id'])
-        self.assertEqual(created.administrative_location_id, self.city.pk)
+        self.assertEqual(created.administrative_location_id, self.subcity.pk)
         self.assertIsNone(created.latitude)
         self.assertIsNone(created.longitude)
         self.assertEqual(created.publication_status, Property.PublicationStatus.PUBLISHED)
@@ -1040,13 +1110,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertIn('administrative_location', response.data['error']['details'])
         self.assertFalse(Property.objects.filter(title='New owner listing').exists())
 
-    def test_city_is_enough_even_when_subcities_are_configured(self):
-        subcity = Location.objects.create(
-            name='Test Subcity Managed',
-            slug='test-subcity-managed',
-            location_type=Location.Type.SUBCITY,
-            parent=self.city,
-        )
+    def test_broker_must_select_a_subcity_not_the_assigned_city(self):
         self.client.force_authenticate(user=self.manager)
 
         city_only = self.client.post(
@@ -1058,15 +1122,16 @@ class ManagedPropertyApiTests(APITestCase):
             reverse('api:managed-property-list'),
             self.property_payload(
                 title='Subcity-managed listing',
-                administrative_location=subcity.pk,
+                administrative_location=self.subcity.pk,
             ),
             format='json',
         )
 
-        self.assertEqual(city_only.status_code, 201)
+        self.assertEqual(city_only.status_code, 400)
+        self.assertIn('administrative_location', city_only.data['error']['details'])
         self.assertEqual(selected_subcity.status_code, 201)
 
-    def test_city_administration_requires_a_subcity_for_new_listings(self):
+    def test_broker_cannot_create_a_listing_outside_its_assigned_city_hierarchy(self):
         administration = Location.objects.create(
             name='Test City Administration With Subcities',
             slug='test-city-administration-with-subcities',
@@ -1097,7 +1162,7 @@ class ManagedPropertyApiTests(APITestCase):
 
         self.assertEqual(city_only.status_code, 400)
         self.assertIn('administrative_location', city_only.data['error']['details'])
-        self.assertEqual(selected_subcity.status_code, 201)
+        self.assertEqual(selected_subcity.status_code, 400)
     def test_administrator_without_publication_permission_cannot_create_listing(self):
         restricted_admin = get_user_model().objects.create_user(
             username='listing-editor-without-moderation',
@@ -1128,6 +1193,7 @@ class ManagedPropertyApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=self.city,
             phone='+251911222333',
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
@@ -1209,8 +1275,14 @@ class ManagedLocationApiTests(APITestCase):
         )
         Profile.objects.create(
             user=self.location_admin,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            role=Profile.Role.ADMINISTRATOR,
+        )
+        self.location_admin.is_staff = True
+        self.location_admin.save(update_fields=['is_staff'])
+        self.country = Location.objects.create(
+            name='Ethiopia',
+            slug='ethiopia-managed-locations',
+            location_type=Location.Type.COUNTRY,
         )
 
     def test_customer_cannot_read_or_create_managed_locations(self):
@@ -1228,11 +1300,6 @@ class ManagedLocationApiTests(APITestCase):
         self.assertFalse(Location.objects.filter(name='Unauthorized Location').exists())
 
     def test_location_manager_list_returns_all_locations_as_an_array(self):
-        Location.objects.create(
-            name='Configured Country',
-            slug='configured-country',
-            location_type=Location.Type.COUNTRY,
-        )
         self.client.force_authenticate(user=self.location_admin)
 
         response = self.client.get(reverse('api:managed-location-list'), {'all': '1'})
@@ -1240,7 +1307,7 @@ class ManagedLocationApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsInstance(response.data, list)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]['name'], 'Configured Country')
+        self.assertEqual(response.data[0]['name'], 'Ethiopia')
 
     def test_location_manager_can_create_and_update_locations_with_audit_records(self):
         self.client.force_authenticate(user=self.location_admin)
@@ -1249,9 +1316,6 @@ class ManagedLocationApiTests(APITestCase):
             {
                 'name': 'Verified Location',
                 'name_am': 'የተረጋገጠ አካባቢ',
-                'aliases_en': ['Verified Alias'],
-                'aliases_am': ['የተረጋገጠ ስም'],
-                'location_type': 'country',
                 'is_active': True,
                 'display_order': 1,
             },
@@ -1260,7 +1324,8 @@ class ManagedLocationApiTests(APITestCase):
 
         self.assertEqual(create_response.status_code, 201, create_response.data)
         location_id = create_response.data['id']
-        self.assertEqual(create_response.data['aliases_en'], ['verified alias'])
+        self.assertEqual(create_response.data['location_type'], Location.Type.CITY)
+        self.assertEqual(create_response.data['parent_id'], self.country.pk)
         update_response = self.client.patch(
             reverse('api:managed-location-detail', kwargs={'pk': location_id}),
             {'display_order': 2},
@@ -1274,11 +1339,36 @@ class ManagedLocationApiTests(APITestCase):
             2,
         )
 
-    def test_location_endpoint_does_not_allow_physical_deletion(self):
+    def test_administrator_can_create_cities_but_not_subcities(self):
+        self.client.force_authenticate(user=self.location_admin)
+
+        created_city = self.client.post(
+            reverse('api:managed-location-list'),
+            {
+                'name': 'Verified Marketplace City',
+            },
+            format='json',
+        )
+        rejected_subcity = self.client.post(
+            reverse('api:managed-location-list'),
+            {
+                'name': 'Administrator-created Subcity',
+                'location_type': 'subcity',
+            },
+            format='json',
+        )
+
+        self.assertEqual(created_city.status_code, 201, created_city.data)
+        self.assertEqual(rejected_subcity.status_code, 400)
+        self.assertIn('location_type', rejected_subcity.data['error']['details'])
+        self.assertFalse(Location.objects.filter(name='Administrator-created Subcity').exists())
+
+    def test_unused_city_can_be_deleted_and_audited(self):
         location = Location.objects.create(
             name='Retained Location',
             slug='retained-location',
-            location_type=Location.Type.COUNTRY,
+            location_type=Location.Type.CITY,
+            parent=self.country,
         )
         self.client.force_authenticate(user=self.location_admin)
 
@@ -1286,8 +1376,37 @@ class ManagedLocationApiTests(APITestCase):
             reverse('api:managed-location-detail', kwargs={'pk': location.pk})
         )
 
-        self.assertEqual(response.status_code, 405)
-        self.assertTrue(Location.objects.filter(pk=location.pk).exists())
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Location.objects.filter(pk=location.pk).exists())
+        self.assertTrue(
+            AdminAuditEvent.objects.filter(
+                action='location_deleted',
+                object_id=str(location.pk),
+            ).exists()
+        )
+
+    def test_city_with_a_broker_assignment_cannot_be_deleted(self):
+        city = Location.objects.create(
+            name='Broker Bound City',
+            slug='broker-bound-city',
+            location_type=Location.Type.CITY,
+            parent=self.country,
+        )
+        broker = get_user_model().objects.create_user(username='city-bound-broker')
+        Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            assigned_city=city,
+        )
+        self.client.force_authenticate(user=self.location_admin)
+
+        response = self.client.delete(
+            reverse('api:managed-location-detail', kwargs={'pk': city.pk})
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('assigned to brokers', str(response.data))
+        self.assertTrue(Location.objects.filter(pk=city.pk).exists())
 
     def test_active_parent_cannot_be_deactivated_while_descendants_are_active(self):
         country = Location.objects.create(
@@ -1295,51 +1414,48 @@ class ManagedLocationApiTests(APITestCase):
             slug='parent-location',
             location_type=Location.Type.COUNTRY,
         )
-        region = Location.objects.create(
-            name='Child Region',
-            slug='child-region',
-            location_type=Location.Type.REGION,
+        city = Location.objects.create(
+            name='Child City',
+            slug='child-city',
+            location_type=Location.Type.CITY,
             parent=country,
         )
-        city = Location.objects.create(
-            name='Grandchild City',
-            slug='grandchild-city',
-            location_type=Location.Type.CITY,
-            parent=region,
+        subcity = Location.objects.create(
+            name='Grandchild Subcity',
+            slug='grandchild-subcity',
+            location_type=Location.Type.SUBCITY,
+            parent=city,
         )
-        region.is_active = False
-        region.save(update_fields=['is_active'])
         serializer = LocationSerializer(
-            instance=country,
+            instance=city,
             data={'is_active': False},
             partial=True,
         )
 
         self.assertFalse(serializer.is_valid())
         self.assertIn('is_active', serializer.errors)
-        self.assertTrue(city.is_active)
+        self.assertTrue(subcity.is_active)
 
     def test_location_manager_can_create_deactivate_and_reorder_a_subcity(self):
-        country = Location.objects.create(
-            name='Test Country Location Lifecycle',
-            slug='test-country-location-lifecycle',
-            location_type=Location.Type.COUNTRY,
+        broker_city = Location.objects.create(
+            name='Broker Assigned City',
+            slug='broker-assigned-city',
+            location_type=Location.Type.CITY,
+            parent=self.country,
         )
-        administration = Location.objects.create(
-            name='Test City Administration Location Lifecycle',
-            slug='test-city-administration-location-lifecycle',
-            location_type=Location.Type.CITY_ADMINISTRATION,
-            parent=country,
+        broker_user = get_user_model().objects.create_user(username='subcity-manager')
+        Profile.objects.create(
+            user=broker_user,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            assigned_city=broker_city,
         )
-        self.client.force_authenticate(user=self.location_admin)
+        self.client.force_authenticate(user=broker_user)
 
         created = self.client.post(
             reverse('api:managed-location-list'),
             {
                 'name': 'Test Subcity Lifecycle',
-                'slug': 'test-subcity-lifecycle',
-                'location_type': 'subcity',
-                'parent': administration.pk,
                 'is_active': True,
                 'display_order': 1,
             },
@@ -1354,7 +1470,7 @@ class ManagedLocationApiTests(APITestCase):
         )
         public_children = self.client.get(
             reverse('api:location-list'),
-            {'parent_id': administration.pk},
+            {'parent_id': broker_city.pk},
         )
         reactivated = self.client.patch(
             reverse('api:managed-location-detail', kwargs={'pk': created.data['id']}),
@@ -1363,7 +1479,7 @@ class ManagedLocationApiTests(APITestCase):
         )
         active_children = self.client.get(
             reverse('api:location-list'),
-            {'parent_id': administration.pk},
+            {'parent_id': broker_city.pk},
         )
 
         self.assertEqual(updated.status_code, 200)
@@ -1373,6 +1489,45 @@ class ManagedLocationApiTests(APITestCase):
         self.assertEqual(reactivated.status_code, 200)
         self.assertTrue(reactivated.data['is_active'])
         self.assertEqual([item['id'] for item in active_children.data], [created.data['id']])
+
+    def test_broker_location_management_is_limited_to_assigned_city(self):
+        assigned_city = Location.objects.create(
+            name='Scoped Broker City',
+            slug='scoped-broker-city',
+            location_type=Location.Type.CITY,
+            parent=self.country,
+        )
+        foreign_city = Location.objects.create(
+            name='Foreign Broker City',
+            slug='foreign-broker-city',
+            location_type=Location.Type.CITY,
+            parent=self.country,
+        )
+        broker_user = get_user_model().objects.create_user(username='scoped-subcity-manager')
+        Profile.objects.create(
+            user=broker_user,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            assigned_city=assigned_city,
+        )
+        self.client.force_authenticate(user=broker_user)
+
+        locations = self.client.get(reverse('api:managed-location-list'), {'all': '1'})
+        rejected_create = self.client.post(
+            reverse('api:managed-location-list'),
+            {
+                'name': 'Foreign Subcity',
+                'location_type': 'subcity',
+                'parent': foreign_city.pk,
+            },
+            format='json',
+        )
+
+        self.assertEqual(locations.status_code, 200)
+        self.assertEqual([item['id'] for item in locations.data], [assigned_city.pk])
+        self.assertEqual(rejected_create.status_code, 400)
+        self.assertIn('parent', rejected_create.data['error']['details'])
+        self.assertFalse(Location.objects.filter(name='Foreign Subcity').exists())
 
     def test_deactivating_a_referenced_location_preserves_existing_public_properties(self):
         country = Location.objects.create(
@@ -1446,6 +1601,23 @@ class PropertyImageApiTests(APITestCase):
         settings_override.enable()
         self.addCleanup(settings_override.disable)
 
+        country = Location.objects.create(
+            name='Image Test Country',
+            slug='image-test-country',
+            location_type=Location.Type.COUNTRY,
+        )
+        city = Location.objects.create(
+            name='Image Test City',
+            slug='image-test-city',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
+        subcity = Location.objects.create(
+            name='Image Test Subcity',
+            slug='image-test-subcity',
+            location_type=Location.Type.SUBCITY,
+            parent=city,
+        )
         owner = get_user_model().objects.create_user(username='image-owner')
         Profile.objects.create(user=owner, role=Profile.Role.OWNER)
         broker = get_user_model().objects.create_user(username='image-manager')
@@ -1453,6 +1625,7 @@ class PropertyImageApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
+            assigned_city=city,
             management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
         )
         self.other_owner = get_user_model().objects.create_user(username='image-other-owner')
@@ -1461,6 +1634,7 @@ class PropertyImageApiTests(APITestCase):
             title='Image test property',
             slug='image-test-property-api',
             location='Submitted location',
+            administrative_location=subcity,
             price=400000,
             description='Image test listing.',
             owner=owner,
@@ -1596,7 +1770,7 @@ class PropertyImageApiTests(APITestCase):
         self.assertFalse(PropertyImage.objects.get(pk=first.data['id']).is_primary)
         self.assertTrue(PropertyImage.objects.get(pk=second.data['id']).is_primary)
 
-    def test_approved_broker_can_manage_images_on_any_broker_managed_property(self):
+    def test_approved_broker_cannot_manage_images_outside_assigned_city(self):
         other_property = Property.objects.create(
             title='Other image property',
             location='Submitted location',
@@ -1611,7 +1785,7 @@ class PropertyImageApiTests(APITestCase):
             format='multipart',
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 404)
 
     def test_image_can_be_deleted_with_its_stored_file(self):
         upload = self.client.post(

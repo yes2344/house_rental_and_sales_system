@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, generics, status
@@ -9,7 +10,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from accounts.models import DelegatedAccountInvitation, Profile
+from accounts.models import Profile, TabSessionToken
 from accounts.permissions import (
     HasManagementPermission,
     IsBrokerAccountManager,
@@ -231,7 +232,7 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
             is_staff=False,
             is_superuser=False,
             profile__role=Profile.Role.BROKER,
-        ).select_related('profile').order_by('username')
+        ).select_related('profile', 'profile__assigned_city').order_by('username')
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -244,23 +245,18 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
         profile = user.profile
         record_admin_action(
             request.user,
-            action='delegated_account_created',
+            action='broker_account_created',
             object_type='user',
             object_id=user.pk,
             changes={
                 'role': profile.role,
+                'assigned_city_id': profile.assigned_city_id,
                 'management_permissions': profile.management_permissions,
                 'is_active': user.is_active,
+                'broker_onboarding_required': profile.broker_onboarding_required,
             },
         )
-        return Response(
-            {
-                'account': self.get_serializer(user).data,
-                'invitation_token': serializer.invitation_token,
-                'invitation_expires_at': serializer.invitation.expires_at,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        return Response(self.get_serializer(user).data, status=status.HTTP_201_CREATED)
 
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
@@ -270,47 +266,93 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
         return response
 
 
-class AdminDelegatedAccountDetailView(generics.RetrieveUpdateAPIView):
+class AdminDelegatedAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsBrokerAccountManager]
     serializer_class = DelegatedAccountSerializer
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
         return User.objects.filter(
             is_staff=False,
             is_superuser=False,
             profile__role=Profile.Role.BROKER,
-        ).select_related('profile')
+        ).select_related('profile', 'profile__assigned_city')
 
     @transaction.atomic
     def perform_update(self, serializer):
         user = serializer.instance
         before_profile = user.profile
         before = {
+            'username': user.username,
+            'contact_details': (
+                user.email,
+                user.first_name,
+                user.last_name,
+                before_profile.phone,
+            ),
             'role': before_profile.role,
+            'assigned_city_id': before_profile.assigned_city_id,
             'management_permissions': list(before_profile.management_permissions),
             'is_active': user.is_active,
+            'broker_onboarding_required': before_profile.broker_onboarding_required,
+            'broker_password_changed': before_profile.broker_password_changed,
         }
         updated = serializer.save()
         after_profile = updated.profile
         after = {
+            'username': updated.username,
+            'contact_details': (
+                updated.email,
+                updated.first_name,
+                updated.last_name,
+                after_profile.phone,
+            ),
             'role': after_profile.role,
+            'assigned_city_id': after_profile.assigned_city_id,
             'management_permissions': list(after_profile.management_permissions),
             'is_active': updated.is_active,
+            'broker_onboarding_required': after_profile.broker_onboarding_required,
+            'broker_password_changed': after_profile.broker_password_changed,
         }
-        changes = {
-            key: {'from': before[key], 'to': value}
-            for key, value in after.items()
-            if before[key] != value
-        }
+        changes = {}
+        if before['username'] != after['username']:
+            changes['username'] = {'from': before['username'], 'to': after['username']}
+        if before['contact_details'] != after['contact_details']:
+            changes['contact_details_changed'] = True
+        for key in (
+            'role',
+            'assigned_city_id',
+            'management_permissions',
+            'is_active',
+            'broker_onboarding_required',
+            'broker_password_changed',
+        ):
+            if before[key] != after[key]:
+                changes[key] = {'from': before[key], 'to': after[key]}
         if changes:
             record_admin_action(
                 self.request.user,
-                action='delegated_account_updated',
+                action='broker_account_updated',
                 object_type='user',
                 object_id=updated.pk,
                 changes=changes,
             )
+        if (before['is_active'] and not updated.is_active) or self.request.data.get('initial_password'):
+            TabSessionToken.objects.filter(
+                user=updated,
+                revoked_at__isnull=True,
+            ).update(revoked_at=timezone.now())
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        record_admin_action(
+            self.request.user,
+            action='broker_account_deleted',
+            object_type='user',
+            object_id=instance.pk,
+            changes={'username': instance.username},
+        )
+        instance.delete()
 
 
 class AdminPropertyListView(generics.ListAPIView):

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { MapPinned, Plus, Save, X } from 'lucide-react';
+import { MapPinned, Plus, Save, Trash2, X } from 'lucide-react';
 
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
+import { useAuth } from '../AuthContext';
 import {
   createManagedLocation,
+  deleteManagedLocation,
   getManagedLocations,
   updateManagedLocation,
   type ManagedLocationPayload,
@@ -20,10 +22,7 @@ interface LocationManagementPageProps {
 interface LocationFormValues {
   name: string;
   name_am: string;
-  aliases_en: string;
-  aliases_am: string;
   location_type: ManagedLocationType;
-  parent: string;
   is_active: boolean;
   display_order: string;
 }
@@ -31,32 +30,16 @@ interface LocationFormValues {
 const emptyForm: LocationFormValues = {
   name: '',
   name_am: '',
-  aliases_en: '',
-  aliases_am: '',
   location_type: 'city',
-  parent: '',
   is_active: true,
   display_order: '0',
-};
-
-const parentTypesByLocationType: Record<ManagedLocationType, ManagedLocationType[]> = {
-  country: [],
-  region: ['country'],
-  city_administration: ['country'],
-  city: ['country', 'region', 'city_administration'],
-  subcity: ['city', 'city_administration'],
-  woreda: ['city', 'city_administration', 'subcity'],
-  neighborhood: ['city', 'city_administration', 'subcity', 'woreda'],
 };
 
 function fromLocation(location: MarketplaceLocation): LocationFormValues {
   return {
     name: location.name,
     name_am: location.name_am,
-    aliases_en: location.aliases_en.join(', '),
-    aliases_am: location.aliases_am.join(', '),
     location_type: location.location_type,
-    parent: location.parent_id === null ? '' : String(location.parent_id),
     is_active: location.is_active,
     display_order: String(location.display_order),
   };
@@ -66,18 +49,20 @@ function toPayload(values: LocationFormValues): ManagedLocationPayload {
   return {
     name: values.name.trim(),
     name_am: values.name_am.trim(),
-    aliases_en: values.aliases_en.split(',').map((alias) => alias.trim()).filter(Boolean),
-    aliases_am: values.aliases_am.split(',').map((alias) => alias.trim()).filter(Boolean),
-    location_type: values.location_type,
-    parent: values.parent ? Number(values.parent) : null,
     is_active: values.is_active,
     display_order: Number(values.display_order) || 0,
   };
 }
 
 export function LocationManagementPage({ locale, text }: LocationManagementPageProps) {
+  const { account } = useAuth();
+  const isBroker = account?.role === 'broker';
+  const managedType: ManagedLocationType = isBroker ? 'subcity' : 'city';
   const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
-  const [values, setValues] = useState(emptyForm);
+  const [values, setValues] = useState<LocationFormValues>(() => ({
+    ...emptyForm,
+    location_type: isBroker ? 'subcity' : 'city',
+  }));
   const [editingId, setEditingId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -85,6 +70,7 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState('');
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const editorRef = useRef<HTMLElement>(null);
 
   const loadLocations = useCallback(async (signal?: AbortSignal) => {
@@ -110,20 +96,15 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     [locations],
   );
   const editingLocation = editingId === null ? null : locationById.get(editingId) ?? null;
-  const ethiopia = locations.find(
+  const hasActiveEthiopia = locations.some(
     (location) =>
       location.location_type === 'country'
       && location.name.trim().toLocaleLowerCase() === 'ethiopia'
       && location.is_active,
   );
-  const parentTypes = parentTypesByLocationType[values.location_type];
-  const parentOptions = locations.filter(
-    (location) => location.is_active && parentTypes.includes(location.location_type),
-  );
-  const selectedParent = values.parent
-    || (editingId === null && values.location_type === 'city' && ethiopia
-      ? String(ethiopia.id)
-      : '');
+  const canCreateLocation = isBroker
+    ? Boolean(account?.assigned_city_id)
+    : hasActiveEthiopia;
   const filteredLocations = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase();
     return locations.filter((location) => {
@@ -148,7 +129,10 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
 
   const resetForm = () => {
     setEditingId(null);
-    setValues(emptyForm);
+    setValues({
+      ...emptyForm,
+      location_type: managedType,
+    });
     setFieldErrors({});
     setError('');
     setSuccess('');
@@ -163,22 +147,16 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
 
   const saveLocation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (editingId === null && !canCreateLocation) return;
     setSaving(true);
     setError('');
     setSuccess('');
     setFieldErrors({});
     try {
       if (editingId === null) {
-        await createManagedLocation(toPayload({ ...values, parent: selectedParent }));
+        await createManagedLocation(toPayload(values));
       } else {
-        await updateManagedLocation(editingId, {
-          name: values.name.trim(),
-          name_am: values.name_am.trim(),
-          aliases_en: values.aliases_en.split(',').map((alias) => alias.trim()).filter(Boolean),
-          aliases_am: values.aliases_am.split(',').map((alias) => alias.trim()).filter(Boolean),
-          is_active: values.is_active,
-          display_order: Number(values.display_order) || 0,
-        });
+        await updateManagedLocation(editingId, toPayload(values));
       }
       setLocations(await getManagedLocations());
       resetForm();
@@ -188,6 +166,23 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
       setFieldErrors(getApiFieldErrors(saveError));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removeLocation = async (location: MarketplaceLocation) => {
+    if (!window.confirm(text('confirmLocationDelete'))) return;
+    setDeletingId(location.id);
+    setError('');
+    setSuccess('');
+    try {
+      await deleteManagedLocation(location.id);
+      setLocations((current) => current.filter((item) => item.id !== location.id));
+      if (editingId === location.id) resetForm();
+      setSuccess(text('locationDeleted'));
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -236,53 +231,22 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
               <input className="filter-input" maxLength={120} value={values.name_am} onChange={(event) => updateValue('name_am', event.target.value)} />
               {fieldErrors.name_am && <small role="alert">{fieldErrors.name_am}</small>}
             </label>
-            {editingId === null && (
-              <>
-                <label className="filter-label">{text('locationType')}
-                  <select
-                    className="filter-select"
-                    value={values.location_type}
-                    onChange={(event) => {
-                      updateValue('location_type', event.target.value as ManagedLocationType);
-                      updateValue('parent', '');
-                    }}
-                  >
-                    {(['country', 'region', 'city_administration', 'city', 'subcity', 'woreda', 'neighborhood'] as const).map((type) => (
-                      <option value={type} key={type}>{localizedLocationType(type)}</option>
-                    ))}
-                  </select>
-                </label>
-                {parentTypes.length > 0 && (
-                  <label className="filter-label">{text('locationParent')}
-                    <select
-                      className="filter-select"
-                      value={selectedParent}
-                      required
-                      onChange={(event) => updateValue('parent', event.target.value)}
-                    >
-                      <option value="">{text('selectOption')}</option>
-                      {parentOptions.map((location) => (
-                        <option value={location.id} key={location.id}>
-                          {`${localizedLocationType(location.location_type)}: ${location.name}`}
-                        </option>
-                      ))}
-                    </select>
-                    {values.location_type === 'subcity' && (
-                      <small>{text('locationSubcityParentHint')}</small>
-                    )}
-                    {fieldErrors.parent && <small role="alert">{fieldErrors.parent}</small>}
-                  </label>
+            <div className="filter-label">
+              {text('locationLevelFixed')}
+              <div className="location-level-fixed" aria-live="polite">
+                <strong>{localizedLocationType(managedType)}</strong>
+                {isBroker && (
+                  <small>
+                    {locale === 'am'
+                      ? account?.assigned_city_name_am ?? account?.assigned_city_name ?? text('assignedCity')
+                      : account?.assigned_city_name ?? text('assignedCity')}
+                  </small>
                 )}
-              </>
+              </div>
+            </div>
+            {!isBroker && editingId === null && !hasActiveEthiopia && (
+              <p className="manager-error location-form-message" role="alert">{text('locationCountryMissing')}</p>
             )}
-            <label className="filter-label">{text('locationAliasesEn')}
-              <input className="filter-input" value={values.aliases_en} onChange={(event) => updateValue('aliases_en', event.target.value)} placeholder={text('locationAliasesEnPlaceholder')} />
-              {fieldErrors.aliases_en && <small role="alert">{fieldErrors.aliases_en}</small>}
-            </label>
-            <label className="filter-label">{text('locationAliasesAm')}
-              <input className="filter-input" value={values.aliases_am} onChange={(event) => updateValue('aliases_am', event.target.value)} placeholder={text('locationAliasesAmPlaceholder')} />
-              {fieldErrors.aliases_am && <small role="alert">{fieldErrors.aliases_am}</small>}
-            </label>
             <label className="filter-label">{text('displayOrder')}
               <input
                 className="filter-input"
@@ -301,7 +265,11 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
             {error && <p className="manager-error location-form-message" role="alert">{error}</p>}
             {success && <p className="manager-success location-form-message" role="status">{success}</p>}
             <div className="location-form-actions">
-              <button className="button button-primary" type="submit" disabled={saving}>
+              <button
+                className="button button-primary"
+                type="submit"
+                disabled={saving || (editingId === null && !canCreateLocation)}
+              >
                 {editingId === null ? <Plus size={15} aria-hidden="true" /> : <Save size={15} aria-hidden="true" />}
                 {saving ? text('savingLocation') : text('saveLocation')}
               </button>
@@ -342,9 +310,23 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
                       <td><span className={`status-pill ${location.is_active ? 'is-active' : 'is-inactive'}`}>
                         {text(location.is_active ? 'available' : 'statusInactive')}
                       </span></td>
-                      <td><button className="button button-secondary location-edit-button" type="button" onClick={() => startEditing(location)}>
-                        {text('editLocation')}
-                      </button></td>
+                      <td>
+                        {location.location_type === managedType && (
+                          <div className="location-row-actions">
+                            <button className="button button-secondary location-edit-button" type="button" onClick={() => startEditing(location)}>
+                              {text('editLocation')}
+                            </button>
+                            <button
+                              className="button button-outline"
+                              type="button"
+                              disabled={deletingId === location.id}
+                              onClick={() => void removeLocation(location)}
+                            >
+                              <Trash2 size={14} aria-hidden="true" />{text('deleteLocation')}
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
