@@ -131,7 +131,9 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
     setSaved(false);
     try {
       await save({
-        ...values,
+        business_name: values.business_name,
+        phone: values.phone,
+        email: values.email,
         social_links: socialLinks
           .filter((link) => link.url.trim())
           .map((link) => ({ ...link, url: link.url.trim() })),

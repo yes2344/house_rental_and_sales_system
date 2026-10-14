@@ -11,6 +11,7 @@ import { RequireLocationManager } from './components/RequireLocationManager';
 import { RequireNonBroker } from './components/RequireNonBroker';
 import { RequireListingManager } from './components/RequireListingManager';
 import { RequireDashboardAccess } from './components/RequireDashboardAccess';
+import { RequireBrandingManager } from './components/RequireBrandingManager';
 import { OwnerDashboardLayout } from './components/OwnerDashboardLayout';
 import { usePreferences } from './PreferencesContext';
 import { messages, type MessageKey } from './i18n';
@@ -70,6 +71,9 @@ const OwnerViewingRequestsPage = lazy(() =>
 );
 const BrokerageSettingsPage = lazy(() =>
   import('./pages/BrokerageSettingsPage').then(({ BrokerageSettingsPage }) => ({ default: BrokerageSettingsPage })),
+);
+const SiteBrandingPage = lazy(() =>
+  import('./pages/SiteBrandingPage').then(({ SiteBrandingPage }) => ({ default: SiteBrandingPage })),
 );
 const LocationManagementPage = lazy(() =>
   import('./pages/LocationManagementPage').then(({ LocationManagementPage }) => ({ default: LocationManagementPage })),
@@ -142,9 +146,9 @@ export default function App() {
                   <Route element={<RequireNonBroker />}>
                     <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
                     <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
-                    <Route path="account" element={<AccountPage locale={locale} text={text} />} />
                     <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
                   </Route>
+                  <Route path="account" element={<AccountPage locale={locale} text={text} />} />
                 </Route>
                 <Route element={<RequireBrokerAccountManager text={text} />}>
                   <Route path="management/brokers" element={<BrokerAccountManagementPage text={text} />} />
@@ -156,6 +160,11 @@ export default function App() {
                     <Route path="management/listings/:id/edit" element={<OwnerPropertyFormPage locale={locale} text={text} />} />
                     <Route path="management/viewing-requests" element={<OwnerViewingRequestsPage text={text} />} />
                     <Route path="management/brokerage" element={<BrokerageSettingsPage text={text} />} />
+                  </Route>
+                </Route>
+                <Route element={<RequireBrandingManager text={text} />}>
+                  <Route element={<OwnerDashboardLayout text={text} />}>
+                    <Route path="management/branding" element={<SiteBrandingPage text={text} />} />
                   </Route>
                 </Route>
                 <Route element={<RequireLocationManager text={text} />}>

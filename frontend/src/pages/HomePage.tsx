@@ -282,7 +282,7 @@ export function HomePage({ locale, text }: HomePageProps) {
 
       <section className="closing-section">
         <div className="container closing-inner">
-          <div><span className="closing-kicker">HABESHA HOMES · ADDIS ABABA</span><h2>{text('closingTitle')}</h2><p>{text('closingBody')}</p></div>
+          <div><span className="closing-kicker">{contact.site_name || 'habeshahome'}</span><h2>{text('closingTitle')}</h2><p>{text('closingBody')}</p></div>
           <Link className="button button-light" to="/properties">{text('explore')} <ArrowRight size={16} aria-hidden="true" /></Link>
         </div>
       </section>

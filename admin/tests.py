@@ -1,4 +1,5 @@
 import re
+from io import BytesIO
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
@@ -6,6 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
+from PIL import Image
 
 from accounts.models import Profile
 from accounts.permissions import BROKER_WORK_PERMISSIONS
@@ -204,6 +206,58 @@ class AdminApiTests(APITestCase):
         self.assertFalse(BrokerageSettings.objects.exists())
         audits = AdminAuditEvent.objects.filter(action='brokerage_settings_updated')
         self.assertEqual(audits.count(), 0)
+
+    def test_administrator_can_update_public_site_branding_but_customer_cannot(self):
+        endpoint = reverse('api:brokerage-contact')
+        self.client.force_authenticate(user=self.customer)
+        denied = self.client.patch(endpoint, {'site_name': 'Unauthorized'}, format='json')
+        self.assertEqual(denied.status_code, 403)
+        self.assertFalse(BrokerageSettings.objects.exists())
+
+        delegated_admin = User.objects.create_user(
+            username='delegated-branding-admin',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated_admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.STAFF_MANAGE],
+        )
+        self.client.force_authenticate(user=delegated_admin)
+        delegated_update = self.client.patch(endpoint, {'site_name': 'Delegated Admin Site'}, format='json')
+        self.assertEqual(delegated_update.status_code, 200)
+        self.assertEqual(delegated_update.data['site_name'], 'Delegated Admin Site')
+
+        image_buffer = BytesIO()
+        Image.new('RGB', (1, 1), color='white').save(image_buffer, format='PNG')
+        image_buffer.seek(0)
+        with TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                self.client.force_authenticate(user=self.admin_user)
+                updated = self.client.patch(
+                    endpoint,
+                    {
+                        'site_name': 'Habesha Home',
+                        'site_logo': SimpleUploadedFile(
+                            'site-logo.png',
+                            image_buffer.getvalue(),
+                            content_type='image/png',
+                        ),
+                    },
+                    format='multipart',
+                )
+                self.assertEqual(updated.status_code, 200)
+                self.assertEqual(updated.data['site_name'], 'Habesha Home')
+                self.assertTrue(updated.data['site_logo'])
+
+                self.client.force_authenticate(user=None)
+                public = self.client.get(endpoint)
+                self.assertEqual(public.status_code, 200)
+                self.assertEqual(public.data['site_name'], 'Habesha Home')
+                self.assertTrue(public.data['site_logo'].startswith('http'))
+                self.assertTrue(BrokerageSettings.objects.get(pk=1).site_logo.storage.exists(
+                    BrokerageSettings.objects.get(pk=1).site_logo.name,
+                ))
 
     def test_superuser_cannot_create_marketplace_listings_in_legacy_portal(self):
         browser_client = Client()

@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   Building2,
   CalendarDays,
+  Paintbrush,
   Heart,
   MapPinned,
   Search,
@@ -30,6 +31,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
   const canManageSubcities = isBroker && permissions.includes('locations.manage_subcities');
   const canManageBrokers = account.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account.role === 'administrator' && permissions.includes('locations.manage_cities');
+  const canManageBranding = account.role === 'administrator' && permissions.includes('branding.manage');
 
   const entries: {
     href: string;
@@ -41,6 +43,8 @@ export function DashboardPage({ text }: DashboardPageProps) {
         { href: '/management/brokers', title: text('managerBrokerAccounts'), icon: <Users aria-hidden="true" /> },
       ] : []).concat(canManageCities ? [
         { href: '/management/locations', title: text('locationManagementTitle'), icon: <MapPinned aria-hidden="true" /> },
+      ] : []).concat(canManageBranding ? [
+        { href: '/management/branding', title: text('siteBrandingTitle'), icon: <Paintbrush aria-hidden="true" /> },
       ] : [])
       : [
       { href: '/properties', title: text('explore'), icon: <Search aria-hidden="true" /> },

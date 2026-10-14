@@ -26,10 +26,14 @@ class SocialMediaLinkSerializer(serializers.ModelSerializer):
 
 class BrokerageSettingsSerializer(serializers.ModelSerializer):
     social_links = SocialMediaLinkSerializer(many=True, required=False)
+    clear_site_logo = serializers.BooleanField(write_only=True, required=False)
 
     class Meta:
         model = BrokerageSettings
         fields = [
+            'site_name',
+            'site_logo',
+            'clear_site_logo',
             'business_name',
             'phone',
             'whatsapp_url',
@@ -42,8 +46,30 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
             'linkedin_url',
             'social_links',
         ]
+        extra_kwargs = {'site_logo': {'required': False}}
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields['site_logo'].required = False
+        fields['site_logo'].allow_empty_file = False
+        return fields
+
+    def validate_site_logo(self, value):
+        if value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError('The site logo must be 5 MB or smaller.')
+        image = getattr(value, 'image', None)
+        image_format = getattr(image, 'format', None)
+        if image_format not in {'JPEG', 'PNG', 'WEBP'}:
+            raise serializers.ValidationError('Upload a JPEG, PNG, or WebP image.')
+        extension = 'jpg' if image_format == 'JPEG' else image_format.lower()
+        value.name = f'site-logo.{extension}'
+        return value
 
     def validate(self, attrs):
+        if attrs.get('clear_site_logo') and attrs.get('site_logo'):
+            raise serializers.ValidationError(
+                {'site_logo': 'Upload a logo or remove the current logo, not both.'}
+            )
         for field in (
             'whatsapp_url',
             'telegram_url',
@@ -67,6 +93,10 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         social_links = validated_data.pop('social_links', None)
+        clear_site_logo = validated_data.pop('clear_site_logo', False)
+        old_logo_name = instance.site_logo.name
+        if clear_site_logo:
+            instance.site_logo = ''
         if social_links is not None:
             links_by_platform = {link['platform']: link['url'] for link in social_links}
             for platform in SocialMediaLink.Platform.values:
@@ -78,14 +108,24 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
                 SocialMediaLink(brokerage=instance, **link)
                 for link in social_links
             ])
+        if old_logo_name and old_logo_name != instance.site_logo.name:
+            storage = instance.site_logo.storage
+            transaction.on_commit(lambda: storage.delete(old_logo_name))
         return instance
 
 
 class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
     social_links = serializers.SerializerMethodField()
+    site_logo = serializers.SerializerMethodField()
 
     class Meta(BrokerageSettingsSerializer.Meta):
-        fields = ['business_name', 'phone', 'email', 'social_links']
+        fields = ['site_name', 'site_logo', 'business_name', 'phone', 'email', 'social_links']
+
+    def get_site_logo(self, obj):
+        if not obj.site_logo:
+            return ''
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.site_logo.url) if request else obj.site_logo.url
 
     def get_social_links(self, obj):
         if not obj.pk:

@@ -5,6 +5,7 @@ from properties.models import Location
 
 
 ADMIN_MANAGEMENT_PERMISSIONS = frozenset({
+    Profile.Permission.BRANDING_MANAGE,
     Profile.Permission.LOCATIONS_MANAGE_CITIES,
     Profile.Permission.STAFF_MANAGE,
 })
@@ -25,11 +26,12 @@ def broker_work_permissions():
 
 def effective_management_permissions(user):
     if user.is_superuser:
-        return [
+        permissions = [
             permission
             for permission, _ in Profile.Permission.choices
             if user.is_active and permission in ADMIN_MANAGEMENT_PERMISSIONS
         ]
+        return permissions
     profile = getattr(user, 'profile', None)
     if profile is None:
         return []

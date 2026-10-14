@@ -43,12 +43,11 @@ User = get_user_model()
 
 class BrokerageSettingsView(APIView):
     permission_classes = [AllowAny]
-    required_management_permission = Profile.Permission.SETTINGS_MANAGE
 
     def get_permissions(self):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
             return [AllowAny()]
-        return [HasManagementPermission()]
+        return [BrokerageSettingsPermission()]
 
     def get_object(self):
         try:
@@ -56,18 +55,18 @@ class BrokerageSettingsView(APIView):
         except BrokerageSettings.DoesNotExist:
             return BrokerageSettings(pk=1)
 
-    @extend_schema(summary='Retrieve public brokerage contact and social links')
+    @extend_schema(summary='Retrieve public site branding, brokerage contact, and social links')
     def get(self, request):
         serializer_class = (
             BrokerageSettingsSerializer
             if has_management_permission(request.user, Profile.Permission.SETTINGS_MANAGE)
             else PublicBrokerageSettingsSerializer
         )
-        return Response(serializer_class(self.get_object()).data)
+        return Response(serializer_class(self.get_object(), context={'request': request}).data)
 
     @transaction.atomic
     @extend_schema(
-        summary='Update brokerage contact and social links',
+        summary='Update site branding or authorized brokerage contact and social links',
         request=BrokerageSettingsSerializer,
         responses={200: BrokerageSettingsSerializer},
     )
@@ -77,6 +76,7 @@ class BrokerageSettingsView(APIView):
             settings_obj,
             data=request.data,
             partial=True,
+            context={'request': request},
         )
         serializer.is_valid(raise_exception=True)
         updated = serializer.save()
@@ -87,7 +87,26 @@ class BrokerageSettingsView(APIView):
             object_id=1,
             changes={'fields': list(serializer.validated_data)},
         )
-        return Response(BrokerageSettingsSerializer(updated).data)
+        return Response(BrokerageSettingsSerializer(updated, context={'request': request}).data)
+
+
+class BrokerageSettingsPermission(HasManagementPermission):
+    def has_permission(self, request, view):
+        if request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return True
+        branding_fields = {'site_name', 'site_logo', 'clear_site_logo'}
+        submitted_fields = set(request.data.keys())
+        required_permissions = []
+        if branding_fields.intersection(submitted_fields):
+            required_permissions.append(Profile.Permission.BRANDING_MANAGE)
+        if submitted_fields.difference(branding_fields):
+            required_permissions.append(Profile.Permission.SETTINGS_MANAGE)
+        if not required_permissions:
+            required_permissions.append(Profile.Permission.SETTINGS_MANAGE)
+        return all(
+            has_management_permission(request.user, permission)
+            for permission in required_permissions
+        )
 
 
 class PublicHomepageNoteListView(generics.ListAPIView):

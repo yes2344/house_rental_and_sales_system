@@ -11,6 +11,7 @@ import {
 import {
   emptyBrokerageContact,
   getBrokerageContact,
+  updateSiteBranding,
   updateBrokerageContact,
   type BrokerageContact,
 } from './api/brokerage';
@@ -21,6 +22,11 @@ interface BrokerageContactContextValue {
   loading: boolean;
   error: string;
   save: (updates: Partial<BrokerageContact>) => Promise<void>;
+  saveBranding: (updates: {
+    site_name: string;
+    site_logo?: File;
+    clear_site_logo?: boolean;
+  }) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -61,6 +67,10 @@ export function BrokerageContactProvider({ children }: { children: ReactNode }) 
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    document.title = contact.site_name || 'habeshahome';
+  }, [contact.site_name]);
+
   const save = useCallback(async (updates: Partial<BrokerageContact>) => {
     setError('');
     try {
@@ -73,9 +83,24 @@ export function BrokerageContactProvider({ children }: { children: ReactNode }) 
     }
   }, []);
 
+  const saveBranding = useCallback(async (updates: {
+    site_name: string;
+    site_logo?: File;
+    clear_site_logo?: boolean;
+  }) => {
+    setError('');
+    try {
+      setContact(await updateSiteBranding(updates));
+    } catch (requestError: unknown) {
+      const message = getErrorMessage(requestError);
+      setError(message);
+      throw requestError;
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ contact, loading, error, save, refresh }),
-    [contact, loading, error, save, refresh],
+    () => ({ contact, loading, error, save, saveBranding, refresh }),
+    [contact, loading, error, save, saveBranding, refresh],
   );
   return <BrokerageContactContext.Provider value={value}>{children}</BrokerageContactContext.Provider>;
 }

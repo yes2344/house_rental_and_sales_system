@@ -22,6 +22,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   const canManageSubcities = isAuthorizedBroker && permissions.includes('locations.manage_subcities');
   const canManageBrokers = account?.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account?.role === 'administrator' && permissions.includes('locations.manage_cities');
+  const canManageBranding = account?.role === 'administrator' && permissions.includes('branding.manage');
 
   return (
     <div className="manager-shell">
@@ -30,6 +31,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
         {canViewRequests && <NavLink to="/management/viewing-requests">{text('managerViewingRequests')}</NavLink>}
         {(canManageSubcities || canManageCities) && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
         {canManageBrokers && <NavLink to="/management/brokers">{text('managerBrokerAccounts')}</NavLink>}
+        {canManageBranding && <NavLink to="/management/branding">{text('siteBrandingTitle')}</NavLink>}
       </nav>
       <Outlet />
     </div>

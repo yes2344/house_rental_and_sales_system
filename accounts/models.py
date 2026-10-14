@@ -29,6 +29,7 @@ class Profile(models.Model):
         AUDIT_VIEW = 'audit.view', 'View audit records'
         BROKERS_ASSIGN = 'brokers.assign', 'Assign brokers to listings'
         SETTINGS_MANAGE = 'settings.manage', 'Manage platform settings'
+        BRANDING_MANAGE = 'branding.manage', 'Manage site branding'
         LOCATIONS_MANAGE_CITIES = 'locations.manage_cities', 'Manage marketplace cities'
         LOCATIONS_MANAGE_SUBCITIES = 'locations.manage_subcities', 'Manage sub-cities in assigned city'
         STAFF_MANAGE = 'staff.manage', 'Manage delegated accounts'

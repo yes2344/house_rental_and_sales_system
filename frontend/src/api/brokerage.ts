@@ -17,6 +17,8 @@ export interface BrokerageSocialLink {
 }
 
 export interface BrokerageContact {
+  site_name: string;
+  site_logo: string | null;
   business_name: string;
   phone: string;
   email: string;
@@ -24,6 +26,8 @@ export interface BrokerageContact {
 }
 
 export const emptyBrokerageContact: BrokerageContact = {
+  site_name: 'habeshahome',
+  site_logo: '',
   business_name: '',
   phone: '',
   email: '',
@@ -36,8 +40,21 @@ export async function getBrokerageContact(signal?: AbortSignal): Promise<Brokera
 }
 
 export async function updateBrokerageContact(
-  updates: Partial<BrokerageContact>,
+  updates: Partial<Pick<BrokerageContact, 'business_name' | 'phone' | 'email' | 'social_links'>>,
 ): Promise<BrokerageContact> {
   const response = await apiClient.patch<BrokerageContact>('/brokerage/contact/', updates);
+  return response.data;
+}
+
+export async function updateSiteBranding(updates: {
+  site_name: string;
+  site_logo?: File;
+  clear_site_logo?: boolean;
+}): Promise<BrokerageContact> {
+  const form = new FormData();
+  form.append('site_name', updates.site_name);
+  if (updates.site_logo) form.append('site_logo', updates.site_logo);
+  if (updates.clear_site_logo) form.append('clear_site_logo', 'true');
+  const response = await apiClient.patch<BrokerageContact>('/brokerage/contact/', form);
   return response.data;
 }

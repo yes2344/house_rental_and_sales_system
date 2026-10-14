@@ -54,18 +54,24 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
       <a className="skip-link" href="#main-content">{text('skipToContent')}</a>
       <header className="site-header">
         <div className="container header-inner">
-          <Link className="brand" to={isAdministrator ? '/dashboard' : '/'} aria-label={text('brandLabel')} onClick={closeMenu}>
-            <span className="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 36 36" fill="none">
-                <path d="M5 17.1 18 6l13 11.1v12.1H5V17.1Z" fill="currentColor" />
-                <path d="m3 17.4 15-13 15 13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M15 20h6v9h-6z" fill="#F8F8F4" />
-              </svg>
-            </span>
-            <span className="brand-copy">
-              <strong>habesha<span>homes</span></strong>
-              <small>ADDIS ABABA</small>
-            </span>
+          <Link
+            className="brand"
+            to={isAdministrator ? '/dashboard' : '/'}
+            aria-label={contact.site_name || 'habeshahome'}
+            onClick={closeMenu}
+          >
+            {contact.site_logo ? (
+              <img className="brand-logo" src={contact.site_logo} alt="" />
+            ) : (
+              <span className="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 36 36" fill="none">
+                  <path d="M5 17.1 18 6l13 11.1v12.1H5V17.1Z" fill="currentColor" />
+                  <path d="m3 17.4 15-13 15 13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M15 20h6v9h-6z" fill="#F8F8F4" />
+                </svg>
+              </span>
+            )}
+            <span className="brand-copy"><strong>{contact.site_name || 'habeshahome'}</strong></span>
           </Link>
 
           <button

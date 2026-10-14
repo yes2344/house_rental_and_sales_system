@@ -198,6 +198,7 @@ class AccountApiTests(APITestCase):
         self.assertFalse(has_management_permission(administrator, Profile.Permission.PROPERTY_VIEW_ALL))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.VIEWING_VIEW_ALL))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.SETTINGS_MANAGE))
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.BRANDING_MANAGE))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.AUDIT_VIEW))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.REPORTS_REVIEW))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.BROKERS_ASSIGN))
