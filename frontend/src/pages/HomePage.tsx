@@ -31,6 +31,7 @@ export function HomePage({ locale, text }: HomePageProps) {
   const { contact } = useBrokerageContact();
   const [listingType, setListingType] = useState('');
   const [propertyType, setPropertyType] = useState('');
+  const [ordering, setOrdering] = useState('-created_at');
   const [locationId, setLocationId] = useState<number | null>(null);
   const [cityId, setCityId] = useState<number | null>(null);
   const [cities, setCities] = useState<MarketplaceLocation[]>([]);
@@ -50,12 +51,15 @@ export function HomePage({ locale, text }: HomePageProps) {
     ];
     const listingTypeParam = searchParams.get('listing_type');
     const propertyTypeParam = searchParams.get('property_type');
+    const orderingParam = searchParams.get('ordering');
     const locationIdParam = Number(searchParams.get('location_id'));
     const cityIdParam = Number(searchParams.get('city_id'));
     const locationParam = searchParams.get('location')?.trim();
     return {
       page_size: 12,
-      ordering: '-created_at',
+      ordering: orderingParam && ['-created_at', 'price', '-price', '-area_sqft'].includes(orderingParam)
+        ? orderingParam
+        : '-created_at',
       listing_type: listingTypeParam === 'sale' || listingTypeParam === 'rent'
         ? listingTypeParam as ListingType
         : undefined,
@@ -111,6 +115,7 @@ export function HomePage({ locale, text }: HomePageProps) {
   useEffect(() => {
     setListingType(searchParams.get('listing_type') ?? '');
     setPropertyType(searchParams.get('property_type') ?? '');
+    setOrdering(searchParams.get('ordering') ?? '-created_at');
     const selectedLocation = Number(searchParams.get('location_id')) || null;
     setLocationId(selectedLocation);
     setCityId(Number(searchParams.get('city_id')) || null);
@@ -137,6 +142,7 @@ export function HomePage({ locale, text }: HomePageProps) {
     const next = new URLSearchParams();
     if (listingType) next.set('listing_type', listingType);
     if (propertyType) next.set('property_type', propertyType);
+    if (ordering !== '-created_at') next.set('ordering', ordering);
     if (locationId) next.set('location_id', String(locationId));
     if (cityId) next.set('city_id', String(cityId));
     setSearchParams(next);
@@ -342,6 +348,15 @@ export function HomePage({ locale, text }: HomePageProps) {
                   <option value="warehouse">Warehouse</option>
                   <option value="commercial">{text('commercial')}</option>
                   <option value="other">Other</option>
+                </select>
+              </label>
+              <label className="search-field search-field-ordering">
+                <span>{text('sortBy')}</span>
+                <select value={ordering} onChange={(event) => setOrdering(event.target.value)}>
+                  <option value="-created_at">{text('sortNewest')}</option>
+                  <option value="price">{text('sortPriceLow')}</option>
+                  <option value="-price">{text('sortPriceHigh')}</option>
+                  <option value="-area_sqft">{text('sortLargest')}</option>
                 </select>
               </label>
               <button className="button button-primary search-submit" type="submit">
