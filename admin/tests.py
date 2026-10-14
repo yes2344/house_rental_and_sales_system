@@ -259,62 +259,6 @@ class AdminApiTests(APITestCase):
         self.assertEqual(response.url, '/admin-portal/delegated-accounts/')
         self.assertFalse(Property.objects.filter(title='Legacy admin listing with photos').exists())
 
-    def test_superuser_cannot_create_marketplace_listing_with_coordinates_in_legacy_portal(self):
-        browser_client = Client()
-        browser_client.force_login(self.admin_user)
-        form_page = browser_client.get(reverse('admin_property_form'))
-        self.assertEqual(form_page.status_code, 302)
-        self.assertEqual(form_page.url, '/admin-portal/delegated-accounts/')
-
-        response = browser_client.post(
-            reverse('admin_property_form'),
-            {
-                'title': 'Admin map listing',
-                'location': 'Verified area',
-                'latitude': '9.035812',
-                'longitude': '38.752432',
-                'exact_location_is_public': 'on',
-                'property_type': 'house',
-                'listing_type': 'sale',
-                'price': '250000',
-                'bedrooms': 2,
-                'bathrooms': 1,
-                'area_sqft': 900,
-                'description': 'A listing with an explicitly selected location.',
-                'status': Property.Status.AVAILABLE,
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, '/admin-portal/delegated-accounts/')
-        self.assertFalse(Property.objects.filter(title='Admin map listing').exists())
-
-    def test_superuser_cannot_submit_partial_coordinates_in_legacy_portal(self):
-        browser_client = Client()
-        browser_client.force_login(self.admin_user)
-
-        response = browser_client.post(
-            reverse('admin_property_form'),
-            {
-                'title': 'Admin partial map listing',
-                'location': 'Verified area',
-                'latitude': '9.035812',
-                'longitude': '',
-                'property_type': 'house',
-                'listing_type': 'sale',
-                'price': '250000',
-                'bedrooms': 2,
-                'bathrooms': 1,
-                'area_sqft': 900,
-                'description': 'A listing with incomplete coordinates.',
-                'status': Property.Status.AVAILABLE,
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, '/admin-portal/delegated-accounts/')
-        self.assertFalse(Property.objects.filter(title='Admin partial map listing').exists())
-
     def test_homepage_notes_are_public_only_when_published_and_ordered(self):
         first = HomepageNote.objects.create(
             title='Second',

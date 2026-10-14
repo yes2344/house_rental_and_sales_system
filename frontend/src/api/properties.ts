@@ -41,8 +41,6 @@ export interface PropertySummary {
   location: string;
   administrative_location: number | null;
   location_path: PropertyLocationPathItem[];
-  latitude: number | string | null;
-  longitude: number | string | null;
   category: string;
   listing_type: ListingType;
   rental_frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | '';

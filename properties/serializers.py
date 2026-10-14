@@ -27,7 +27,7 @@ class LocationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'name_am', 'aliases_en', 'aliases_am', 'slug', 'location_type', 'parent_id',
             'city_id', 'parent',
-            'is_active', 'display_order', 'latitude', 'longitude',
+            'is_active', 'display_order',
         ]
         read_only_fields = ['id', 'parent_id']
         validators = []
@@ -44,6 +44,15 @@ class LocationSerializer(serializers.ModelSerializer):
         allow_empty=True,
         max_length=20,
     )
+
+    def to_internal_value(self, data):
+        unsupported = {'latitude', 'longitude'}.intersection(data.keys())
+        if unsupported:
+            raise serializers.ValidationError({
+                field: 'GPS/map coordinates are no longer supported.'
+                for field in unsupported
+            })
+        return super().to_internal_value(data)
 
     def validate_parent(self, value):
         if value is not None and not value.is_active:
@@ -280,8 +289,6 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     primary_image = serializers.SerializerMethodField()
     images = PropertyImageSerializer(many=True, read_only=True)
-    latitude = serializers.SerializerMethodField()
-    longitude = serializers.SerializerMethodField()
     location_name = serializers.SerializerMethodField()
     location_path = serializers.SerializerMethodField()
     service_type = serializers.CharField(read_only=True)
@@ -299,8 +306,6 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
             'administrative_location',
             'location_name',
             'location_path',
-            'latitude',
-            'longitude',
             'category',
             'listing_type',
             'price',
@@ -330,14 +335,6 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
         if obj.status == Property.Status.LEGACY_ACTIVE:
             return Property.Status.AVAILABLE
         return obj.status
-
-    @extend_schema_field(serializers.DecimalField(max_digits=9, decimal_places=6, allow_null=True))
-    def get_latitude(self, obj):
-        return obj.latitude if obj.has_public_coordinates else None
-
-    @extend_schema_field(serializers.DecimalField(max_digits=9, decimal_places=6, allow_null=True))
-    def get_longitude(self, obj):
-        return obj.longitude if obj.has_public_coordinates else None
 
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_location_name(self, obj):
@@ -441,22 +438,6 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
     )
-    latitude = serializers.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        min_value=Decimal('-90'),
-        max_value=Decimal('90'),
-        required=False,
-        allow_null=True,
-    )
-    longitude = serializers.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        min_value=Decimal('-180'),
-        max_value=Decimal('180'),
-        required=False,
-        allow_null=True,
-    )
     amenities = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Amenity.objects.all(),
@@ -479,9 +460,6 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'location',
             'administrative_location',
             'location_path',
-            'latitude',
-            'longitude',
-            'exact_location_is_public',
             'category',
             'listing_type',
             'price',
@@ -525,6 +503,15 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
     def get_location_path(self, obj):
         return _location_path(obj.administrative_location) if obj.administrative_location_id else []
 
+    def to_internal_value(self, data):
+        unsupported = {'latitude', 'longitude', 'exact_location_is_public'}.intersection(data.keys())
+        if unsupported:
+            raise serializers.ValidationError({
+                field: 'GPS/map location is no longer supported.'
+                for field in unsupported
+            })
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         listing_type = attrs.get(
             'listing_type',
@@ -561,12 +548,6 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         if listing_type == Property.ListingType.SALE and rental_frequency:
             raise serializers.ValidationError(
                 {'rental_frequency': 'Rental frequency can only be set for rental listings.'}
-            )
-        latitude = attrs.get('latitude', self.instance.latitude if self.instance else None)
-        longitude = attrs.get('longitude', self.instance.longitude if self.instance else None)
-        if (latitude is None) != (longitude is None):
-            raise serializers.ValidationError(
-                {'latitude': 'Provide both latitude and longitude, or leave both empty.'}
             )
         location_submitted = 'administrative_location' in attrs
         administrative_location = attrs.get(

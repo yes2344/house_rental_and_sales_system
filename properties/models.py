@@ -385,15 +385,6 @@ class Property(models.Model):
             return f'{price} / {period}'
         return price
 
-    @property
-    def has_public_coordinates(self):
-        return (
-            self.exact_location_is_public
-            and self.latitude is not None
-            and self.longitude is not None
-        )
-
-
 class PropertyImage(models.Model):
     property = models.ForeignKey(Property, related_name='images', on_delete=models.CASCADE)
     image = models.ImageField(

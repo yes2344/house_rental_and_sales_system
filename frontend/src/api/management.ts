@@ -129,9 +129,6 @@ export interface ManagedProperty {
   location: string;
   administrative_location: number | null;
   location_path: PropertyLocationPathItem[];
-  latitude: number | string | null;
-  longitude: number | string | null;
-  exact_location_is_public: boolean;
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
   price: string;
@@ -162,9 +159,6 @@ export interface ManagedPropertyPayload {
   title: string;
   location: string;
   administrative_location: number | null;
-  latitude: string | null;
-  longitude: string | null;
-  exact_location_is_public: boolean;
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
   price: string;

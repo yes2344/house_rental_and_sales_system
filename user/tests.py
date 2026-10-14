@@ -149,41 +149,26 @@ class ViewingRequestApprovalTests(TestCase):
         self.assertNotContains(listings_response, 'Unpublished private draft')
         self.assertEqual(detail_response.status_code, 404)
 
-    def test_legacy_public_pages_only_link_or_embed_opted_in_coordinates(self):
+    def test_legacy_public_pages_never_show_map_coordinates(self):
         self.property.latitude = Decimal('9.035812')
         self.property.longitude = Decimal('38.752432')
-        self.property.save(update_fields=['latitude', 'longitude'])
-
-        private_home = self.client.get(reverse('user_home'))
-        private_listings = self.client.get(reverse('user_listings'))
-        private_detail = self.client.get(
-            reverse('user_property_detail', args=[self.property.slug])
-        )
-        self.assertContains(private_home, 'property-location-icon')
-        self.assertContains(private_listings, 'property-location-icon')
-        self.assertNotContains(private_home, 'openstreetmap.org/?mlat=')
-        self.assertNotContains(private_listings, 'openstreetmap.org/?mlat=')
-        self.assertNotContains(private_detail, 'export/embed.html')
-        self.assertContains(private_detail, 'A precise map location has not been provided.')
-
         self.property.exact_location_is_public = True
-        self.property.save(update_fields=['exact_location_is_public'])
-        public_home = self.client.get(reverse('user_home'))
-        public_listings = self.client.get(reverse('user_listings'))
-        public_detail = self.client.get(
+        self.property.save(update_fields=['latitude', 'longitude', 'exact_location_is_public'])
+
+        home = self.client.get(reverse('user_home'))
+        listings = self.client.get(reverse('user_listings'))
+        detail = self.client.get(
             reverse('user_property_detail', args=[self.property.slug])
         )
 
-        self.assertContains(public_home, 'mlat=9.035812')
-        self.assertContains(public_listings, 'mlon=38.752432')
-        self.assertContains(public_detail, 'export/embed.html')
-        self.assertContains(public_detail, '9.035812%2C38.752432')
-        self.assertContains(public_home, 'Listed')
-        self.assertContains(public_listings, 'Listed')
-        self.assertContains(public_detail, 'Listed')
-        self.assertContains(public_home, 'Available')
-        self.assertContains(public_listings, 'Available')
-        self.assertContains(public_detail, 'Available')
+        for response in (home, listings, detail):
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'openstreetmap.org')
+            self.assertNotContains(response, 'export/embed.html')
+        self.assertContains(home, 'property-location-icon')
+        self.assertContains(listings, 'property-location-icon')
+        self.assertContains(detail, 'Listed')
+        self.assertContains(detail, 'Available')
 
     def test_legacy_public_footer_uses_configured_brokerage_contacts(self):
         BrokerageSettings.objects.create(

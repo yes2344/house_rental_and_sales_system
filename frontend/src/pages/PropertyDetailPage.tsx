@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { ArrowLeft, Bath, BedDouble, CalendarDays, Check, Mail, MapPin, Phone, Ruler, Send, Share2 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
@@ -10,10 +10,6 @@ import { FavoriteButton } from '../components/FavoriteButton';
 import { formatPropertyPrice, formatRegistrationDate } from '../components/propertyDisplay';
 import { formatPropertyLocation } from '../components/locationDisplay';
 import { PropertyGallery } from '../components/PropertyGallery';
-import { hasPublicCoordinates, openStreetMapDirectionsUrl } from '../components/propertyLocation';
-const LocationMap = lazy(() =>
-  import('../components/LocationMap').then((module) => ({ default: module.LocationMap })),
-);
 import { useBrokerageContact } from '../BrokerageContactContext';
 import type { MessageKey } from '../i18n';
 import type { HomePageProps } from './HomePage';
@@ -87,10 +83,6 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
   const formattedRegistrationDate = formatRegistrationDate(property.created_at, locale);
   const whatsappLink = contact.social_links.find((link) => link.platform === 'whatsapp')?.url;
   const telegramLink = contact.social_links.find((link) => link.platform === 'telegram')?.url;
-  const hasCoordinates = hasPublicCoordinates(property.latitude, property.longitude);
-  const coordinates = hasCoordinates
-    ? { latitude: Number(property.latitude), longitude: Number(property.longitude) }
-    : null;
   const formattedLocation = formatPropertyLocation(property, locale);
 
   return (
@@ -147,28 +139,6 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
           <section className="detail-section property-location-section">
             <h2>{text('propertyLocation')}</h2>
             <p className="detail-location-address"><MapPin size={15} aria-hidden="true" />{formattedLocation}</p>
-            {coordinates ? (
-              <>
-                <Suspense fallback={<div className="property-map map-loading" role="status">{text('loadingMap')}</div>}>
-                  <LocationMap
-                    coordinates={coordinates}
-                    markerLabel={property.location}
-                    satelliteLabel={text('mapSatellite')}
-                    streetMapLabel={text('mapStreet')}
-                  />
-                </Suspense>
-                <a
-                  className="button button-outline location-directions-link"
-                  href={openStreetMapDirectionsUrl(coordinates.latitude, coordinates.longitude)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <MapPin size={15} aria-hidden="true" />{text('getDirections')}
-                </a>
-              </>
-            ) : (
-              <p className="location-not-provided">{text('preciseLocationUnavailable')}</p>
-            )}
           </section>
           {formattedRegistrationDate && (
             <p className="detail-updated"><CalendarDays size={14} aria-hidden="true" />{text('registeredDate')} {formattedRegistrationDate}</p>

@@ -343,14 +343,12 @@ class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     @transaction.atomic
     def perform_update(self, serializer):
         instance = serializer.instance
-        before_coordinates = (instance.latitude, instance.longitude)
         before = {
             field: getattr(instance, field)
             for field in (
                 'status',
                 'listing_type',
                 'publication_status',
-                'exact_location_is_public',
                 'contact_publicly_visible',
                 'advertising_authorized',
                 'area_value',
@@ -370,8 +368,6 @@ class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
                 changes[field] = {'from': str(old_value), 'to': str(new_value)}
             else:
                 changes[field] = {'from': str(old_value), 'to': str(new_value)}
-        if before_coordinates != (updated.latitude, updated.longitude):
-            changes['coordinates_updated'] = True
         if changes:
             record_admin_action(
                 self.request.user,

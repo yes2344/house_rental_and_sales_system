@@ -1056,40 +1056,6 @@ button {
   font-size: 1.5rem;
 }
 
-.location-map {
-  min-height: 220px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(15,77,60,0.12), rgba(54,179,122,0.22)), url('https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=900&q=80') center/cover no-repeat;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  position: relative;
-  overflow: hidden;
-}
-
-.map-pin {
-  font-size: 3rem;
-  background: rgba(255,255,255,0.7);
-  width: 90px;
-  height: 90px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  backdrop-filter: blur(6px);
-}
-
-.location-map p {
-  position: absolute;
-  left: 22px;
-  right: 22px;
-  bottom: 18px;
-  margin: 0;
-  color: var(--white);
-  background: rgba(10, 46, 36, 0.45);
-  padding: 12px 14px;
-  border-radius: 12px;
-}
-
 .contact-card,
 .mini-summary {
   padding: 24px 20px;

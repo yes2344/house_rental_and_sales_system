@@ -18,9 +18,14 @@ class ReadOnlyAdmin(admin.ModelAdmin):
 
 @admin.register(Property)
 class PropertyAdmin(ReadOnlyAdmin):
+    exclude = ('latitude', 'longitude', 'exact_location_is_public')
     list_display = ('id', 'title', 'listing_type', 'status', 'publication_status', 'created_at')
     list_filter = ('listing_type', 'status', 'publication_status', 'property_type')
     search_fields = ('title', 'location', 'owner__username')
+
+    def get_readonly_fields(self, request, obj=None):
+        excluded = set(self.get_exclude(request, obj) or ())
+        return [field.name for field in self.model._meta.fields if field.name not in excluded]
 
 
 @admin.register(PropertyBrokerAssignment)

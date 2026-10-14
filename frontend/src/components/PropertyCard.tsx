@@ -1,4 +1,4 @@
-import { Bath, BedDouble, CalendarDays, Mail, MapPin, Phone, Ruler } from 'lucide-react';
+import { CalendarDays, Mail, MapPin, Phone, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { PropertySummary } from '../api/properties';
@@ -6,7 +6,6 @@ import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
 import { formatPropertyPrice, formatRegistrationDate } from './propertyDisplay';
 import { formatPropertyLocation } from './locationDisplay';
-import { hasPublicCoordinates, openStreetMapUrl } from './propertyLocation';
 import { PropertySlideshow } from './PropertySlideshow';
 
 interface PropertyCardProps {
@@ -16,13 +15,6 @@ interface PropertyCardProps {
 }
 
 export function PropertyCard({ property, locale, text }: PropertyCardProps) {
-  const category = {
-    house: text('house'),
-    villa: text('house'),
-    apartment: text('apartment'),
-    land: text('land'),
-    commercial: text('commercial'),
-  }[property.category] ?? property.category;
   const price = formatPropertyPrice(
     property.price,
     property.listing_type,
@@ -37,9 +29,6 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
     inactive: 'statusInactive',
   };
   const statusKey = statusMessage[property.status] ?? 'available';
-  const mapUrl = hasPublicCoordinates(property.latitude, property.longitude)
-    ? openStreetMapUrl(Number(property.latitude), Number(property.longitude))
-    : null;
 
   return (
     <article className="listing-card">
@@ -65,32 +54,25 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
         <div className="listing-location">
           <MapPin size={14} aria-hidden="true" />
           <span>{formatPropertyLocation(property, locale)}</span>
-          {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer">{text('viewOnMap')}</a>}
         </div>
         <h3><Link to={`/properties/${property.slug}`}>{property.title}</Link></h3>
-        <div className="listing-specs" aria-label={`${category} specifications`}>
-          {property.bedrooms > 0 && <span><BedDouble size={15} aria-hidden="true" />{property.bedrooms} {text('bedrooms')}</span>}
-          {property.bathrooms > 0 && <span><Bath size={15} aria-hidden="true" />{property.bathrooms} {text('bathrooms')}</span>}
+        <div className="listing-specs listing-contact">
+          {property.public_contact_phone && (
+            <a href={`tel:${property.public_contact_phone}`} aria-label={`${text('contactByPhone')}: ${property.public_contact_phone}`}>
+              <Phone size={13} aria-hidden="true" /><span>{property.public_contact_phone}</span>
+            </a>
+          )}
+          {property.public_contact_email && (
+            <a href={`mailto:${property.public_contact_email}`} aria-label={`${text('contactByEmail')}: ${property.public_contact_email}`}>
+              <Mail size={13} aria-hidden="true" /><span>{property.public_contact_email}</span>
+            </a>
+          )}
           {property.area_sqft > 0 && <span><Ruler size={15} aria-hidden="true" />{property.area_sqft.toLocaleString(locale === 'am' ? 'am-ET' : 'en-ET')} {text('area')}</span>}
         </div>
         {registrationDate && (
           <p className="listing-registration-date">
             <CalendarDays size={13} aria-hidden="true" />{text('registeredDate')} {registrationDate}
           </p>
-        )}
-        {(property.public_contact_phone || property.public_contact_email) && (
-          <div className="listing-contact" aria-label={text('contactHeading')}>
-            {property.public_contact_phone && (
-              <a href={`tel:${property.public_contact_phone}`} aria-label={`${text('contactByPhone')}: ${property.public_contact_phone}`}>
-                <Phone size={13} aria-hidden="true" /><span>{property.public_contact_phone}</span>
-              </a>
-            )}
-            {property.public_contact_email && (
-              <a href={`mailto:${property.public_contact_email}`} aria-label={`${text('contactByEmail')}: ${property.public_contact_email}`}>
-                <Mail size={13} aria-hidden="true" /><span>{property.public_contact_email}</span>
-              </a>
-            )}
-          </div>
         )}
         <div className="listing-card-bottom">
           <strong className="listing-price">{price}</strong>

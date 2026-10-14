@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Create Listing | Admin</title>
     <link rel="stylesheet" href="{% static 'portal.css' %}" />
-    <link rel="stylesheet" href="{% static 'leaflet.css' %}" />
   </head>
   <body>
     <header>
@@ -46,22 +45,6 @@
             <label>Property title{{ form.title }}</label>
             <label>Price{{ form.price }}</label>
             <label>Location{{ form.location }}</label>
-            <div class="admin-location-picker">
-              <h2>Precise property location (optional)</h2>
-              <p>Click the map or drag the marker to the actual property location. The initial map center is only a map view and will not be saved unless you select a point.</p>
-              <div class="location-picker-actions">
-                <button class="btn btn-secondary" type="button" id="use-current-location">Use my current location</button>
-                <button class="btn btn-secondary" type="button" id="clear-property-location">Clear location</button>
-              </div>
-              <p id="location-picker-message" role="status" aria-live="polite"></p>
-              <div id="admin-property-map" class="admin-property-map" role="region" aria-label="Select the property location on the map"></div>
-              <div class="two-col admin-coordinate-fields">
-                <label>Latitude{{ form.latitude }}</label>
-                <label>Longitude{{ form.longitude }}</label>
-              </div>
-              <label>{{ form.exact_location_is_public }} Show exact coordinates publicly</label>
-              <p>When unchecked, saved coordinates remain private.</p>
-            </div>
             <label>Property type{{ form.property_type }}</label>
             <label>Listing type{{ form.listing_type }}</label>
             <label>Bedrooms{{ form.bedrooms }}</label>
@@ -86,92 +69,12 @@
       <div class="container">Addis Ababa Homes · Listing editor</div>
     </footer>
 
-    <script src="{% static 'leaflet.js' %}"></script>
     <script>
       const fileInput = document.querySelector('input[type="file"]');
       const previewBox = document.getElementById('upload-preview');
-      const latitudeInput = document.getElementById('id_latitude');
-      const longitudeInput = document.getElementById('id_longitude');
-      const locationMessage = document.getElementById('location-picker-message');
-      const mapElement = document.getElementById('admin-property-map');
       const files = [];
       let previewIndex = 0;
       let previewZoom = 1;
-      let mapMarker = null;
-
-      if (mapElement && window.L) {
-        const map = window.L.map(mapElement).setView([9.035812, 38.752432], 12);
-        const satellite = window.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-          maxNativeZoom: 19,
-          maxZoom: 20,
-          attribution: 'Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-        });
-        const streetMap = window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        });
-        satellite.addTo(map);
-        window.L.control.layers({
-          'Satellite': satellite,
-          'Street map': streetMap,
-        }).addTo(map);
-
-        const setCoordinates = (latitude, longitude) => {
-          latitudeInput.value = latitude.toFixed(6);
-          longitudeInput.value = longitude.toFixed(6);
-          if (mapMarker) mapMarker.setLatLng([latitude, longitude]);
-          else {
-            mapMarker = window.L.marker([latitude, longitude], { draggable: true }).addTo(map);
-            mapMarker.on('dragend', () => {
-              const point = mapMarker.getLatLng();
-              setCoordinates(point.lat, point.lng);
-            });
-          }
-          locationMessage.textContent = `Selected property coordinates: ${latitudeInput.value}, ${longitudeInput.value}`;
-        };
-
-        const setFromInputs = () => {
-          const latitude = Number(latitudeInput.value);
-          const longitude = Number(longitudeInput.value);
-          if (!latitudeInput.value || !longitudeInput.value
-            || !Number.isFinite(latitude) || !Number.isFinite(longitude)
-            || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return;
-          setCoordinates(latitude, longitude);
-          map.setView([latitude, longitude], Math.max(map.getZoom(), 16));
-        };
-
-        map.on('click', (event) => setCoordinates(event.latlng.lat, event.latlng.lng));
-        latitudeInput.addEventListener('change', setFromInputs);
-        longitudeInput.addEventListener('change', setFromInputs);
-        document.getElementById('clear-property-location').addEventListener('click', () => {
-          latitudeInput.value = '';
-          longitudeInput.value = '';
-          if (mapMarker) map.removeLayer(mapMarker);
-          mapMarker = null;
-          locationMessage.textContent = 'No precise location selected.';
-        });
-        document.getElementById('use-current-location').addEventListener('click', () => {
-          if (!navigator.geolocation) {
-            locationMessage.textContent = 'Location is unavailable in this browser. You can still choose the property on the map.';
-            return;
-          }
-          locationMessage.textContent = 'Requesting your location. Move the marker to the actual property if needed.';
-          navigator.geolocation.getCurrentPosition(
-            ({ coords }) => {
-              setCoordinates(coords.latitude, coords.longitude);
-              map.setView([coords.latitude, coords.longitude], 16);
-            },
-            () => {
-              locationMessage.textContent = 'Could not access your location. You can still choose the property on the map.';
-            },
-            { enableHighAccuracy: true, timeout: 10000 },
-          );
-        });
-
-        if (latitudeInput.value && longitudeInput.value) setFromInputs();
-        window.setTimeout(() => map.invalidateSize(), 0);
-      }
-
       if (fileInput && previewBox) {
         const renderPreview = () => {
           previewBox.replaceChildren();

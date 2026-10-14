@@ -31,9 +31,6 @@ class PropertyForm(forms.ModelForm):
         fields = [
             'title',
             'location',
-            'latitude',
-            'longitude',
-            'exact_location_is_public',
             'property_type',
             'listing_type',
             'price',
@@ -54,15 +51,6 @@ class PropertyForm(forms.ModelForm):
                 'A property can have up to 10 photos in total. Remove existing photos before adding more.'
             )
         return files
-
-    def clean(self):
-        cleaned_data = super().clean()
-        latitude = cleaned_data.get('latitude')
-        longitude = cleaned_data.get('longitude')
-        if (latitude is None) != (longitude is None):
-            self.add_error('latitude', 'Enter both latitude and longitude, or leave both blank.')
-        return cleaned_data
-
 
 class ViewingRequestForm(forms.ModelForm):
     class Meta:
