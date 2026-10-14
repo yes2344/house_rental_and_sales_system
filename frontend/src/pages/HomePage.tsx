@@ -231,7 +231,10 @@ export function HomePage({ locale, text }: HomePageProps) {
             </a>
           </div>
           <div className="hero-visual">
-            <img src="/addis-ababa-hills.svg" alt={text('heroArt')} />
+            <img
+              src={contact.homepage_hero_image || '/addis-ababa-hills.svg'}
+              alt={text('heroArt')}
+            />
             <div className="hero-note">
               <span className="hero-note-icon"><MapPin size={16} aria-hidden="true" /></span>
               <span><strong>{text('illustrationCity')}</strong><small>Ethiopia · ኢትዮጵያ</small></span>

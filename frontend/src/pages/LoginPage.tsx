@@ -11,19 +11,9 @@ interface LoginPageProps {
 }
 
 interface LoginLocationState {
-  from?: string | { pathname?: string; search?: string; hash?: string };
   registered?: boolean;
   invitationAccepted?: boolean;
   username?: string;
-}
-
-function returnPath(state: LoginLocationState | null): string {
-  const from = state?.from;
-  if (typeof from === 'string' && from.startsWith('/') && !from.startsWith('//')) return from;
-  if (from && typeof from === 'object' && from.pathname?.startsWith('/')) {
-    return `${from.pathname}${from.search ?? ''}${from.hash ?? ''}`;
-  }
-  return '/dashboard';
 }
 
 export function LoginPage({ text }: LoginPageProps) {
@@ -43,7 +33,7 @@ export function LoginPage({ text }: LoginPageProps) {
     try {
       const signedInAccount = await signIn(username.trim(), password);
       navigate(
-        signedInAccount.broker_onboarding_required ? '/broker-onboarding' : returnPath(state),
+        signedInAccount.broker_onboarding_required ? '/broker-onboarding' : '/',
         { replace: true },
       );
     } catch (requestError: unknown) {
@@ -53,7 +43,7 @@ export function LoginPage({ text }: LoginPageProps) {
     }
   };
 
-  if (!authLoading && account) return <Navigate to={returnPath(state)} replace />;
+  if (!authLoading && account) return <Navigate to="/" replace />;
 
   return (
     <main id="main-content" className="auth-page">
@@ -94,7 +84,7 @@ export function LoginPage({ text }: LoginPageProps) {
           </button>
         </form>
         <p className="auth-switch">
-          {text('noAccount')} <Link to="/register" state={{ from: state?.from }}>{text('createAccount')}</Link>
+          {text('noAccount')} <Link to="/register">{text('createAccount')}</Link>
         </p>
       </section>
     </main>

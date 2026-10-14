@@ -231,6 +231,9 @@ class AdminApiTests(APITestCase):
         image_buffer = BytesIO()
         Image.new('RGB', (1, 1), color='white').save(image_buffer, format='PNG')
         image_buffer.seek(0)
+        hero_image_buffer = BytesIO()
+        Image.new('RGB', (2, 1), color='green').save(hero_image_buffer, format='JPEG')
+        hero_image_buffer.seek(0)
         with TemporaryDirectory() as media_root:
             with override_settings(MEDIA_ROOT=media_root):
                 self.client.force_authenticate(user=self.admin_user)
@@ -243,21 +246,42 @@ class AdminApiTests(APITestCase):
                             image_buffer.getvalue(),
                             content_type='image/png',
                         ),
+                        'homepage_hero_image': SimpleUploadedFile(
+                            'homepage-hero.jpg',
+                            hero_image_buffer.getvalue(),
+                            content_type='image/jpeg',
+                        ),
                     },
                     format='multipart',
                 )
                 self.assertEqual(updated.status_code, 200)
                 self.assertEqual(updated.data['site_name'], 'Habesha Home')
                 self.assertTrue(updated.data['site_logo'])
+                self.assertTrue(updated.data['homepage_hero_image'])
 
                 self.client.force_authenticate(user=None)
                 public = self.client.get(endpoint)
                 self.assertEqual(public.status_code, 200)
                 self.assertEqual(public.data['site_name'], 'Habesha Home')
                 self.assertTrue(public.data['site_logo'].startswith('http'))
+                self.assertTrue(public.data['homepage_hero_image'].startswith('http'))
                 self.assertTrue(BrokerageSettings.objects.get(pk=1).site_logo.storage.exists(
                     BrokerageSettings.objects.get(pk=1).site_logo.name,
                 ))
+                hero_image = BrokerageSettings.objects.get(pk=1).homepage_hero_image
+                self.assertTrue(hero_image.storage.exists(hero_image.name))
+
+                self.client.force_authenticate(user=self.admin_user)
+                cleared = self.client.patch(
+                    endpoint,
+                    {'clear_homepage_hero_image': 'true'},
+                    format='multipart',
+                )
+                self.assertEqual(cleared.status_code, 200)
+                self.assertIsNone(cleared.data['homepage_hero_image'])
+                self.client.force_authenticate(user=None)
+                public_after_clear = self.client.get(endpoint)
+                self.assertEqual(public_after_clear.data['homepage_hero_image'], '')
 
     def test_superuser_cannot_create_marketplace_listings_in_legacy_portal(self):
         browser_client = Client()

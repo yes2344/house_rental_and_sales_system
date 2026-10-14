@@ -26,6 +26,8 @@ interface BrokerageContactContextValue {
     site_name: string;
     site_logo?: File;
     clear_site_logo?: boolean;
+    homepage_hero_image?: File;
+    clear_homepage_hero_image?: boolean;
   }) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -87,6 +89,8 @@ export function BrokerageContactProvider({ children }: { children: ReactNode }) 
     site_name: string;
     site_logo?: File;
     clear_site_logo?: boolean;
+    homepage_hero_image?: File;
+    clear_homepage_hero_image?: boolean;
   }) => {
     setError('');
     try {

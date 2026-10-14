@@ -16,6 +16,7 @@ class BrokerageSettings(models.Model):
     business_name = models.CharField(max_length=160, blank=True)
     site_name = models.CharField(max_length=100, default='habeshahome')
     site_logo = models.ImageField(upload_to='site-branding/', blank=True)
+    homepage_hero_image = models.ImageField(upload_to='site-branding/homepage/', blank=True)
     phone = models.CharField(max_length=50, blank=True)
     whatsapp_url = models.URLField(max_length=300, blank=True)
     telegram_url = models.URLField(max_length=300, blank=True)

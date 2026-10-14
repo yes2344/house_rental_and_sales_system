@@ -127,12 +127,10 @@ export default function App() {
                 </Suspense>
               )}
             >
-              <Route element={<RequireMarketplaceAccess text={text} />}>
-                <Route index element={<HomePage locale={locale} text={text} />} />
-                <Route path="properties" element={<PropertiesHomeRedirect />} />
-                <Route path="properties/:slug" element={<PropertyDetailPage locale={locale} text={text} />} />
-                <Route path="viewing-requests/status" element={<ViewingRequestStatusPage text={text} />} />
-              </Route>
+              <Route index element={<HomePage locale={locale} text={text} />} />
+              <Route path="properties" element={<PropertiesHomeRedirect />} />
+              <Route path="properties/:slug" element={<PropertyDetailPage locale={locale} text={text} />} />
+              <Route path="viewing-requests/status" element={<ViewingRequestStatusPage text={text} />} />
               <Route path="login" element={<LoginPage text={text} />} />
               <Route path="admin/login" element={<DjangoAdminLoginPage />} />
               <Route path="accept-invitation" element={<InvitationAcceptPage text={text} />} />

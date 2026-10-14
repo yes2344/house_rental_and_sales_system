@@ -27,6 +27,7 @@ class SocialMediaLinkSerializer(serializers.ModelSerializer):
 class BrokerageSettingsSerializer(serializers.ModelSerializer):
     social_links = SocialMediaLinkSerializer(many=True, required=False)
     clear_site_logo = serializers.BooleanField(write_only=True, required=False)
+    clear_homepage_hero_image = serializers.BooleanField(write_only=True, required=False)
 
     class Meta:
         model = BrokerageSettings
@@ -34,6 +35,8 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
             'site_name',
             'site_logo',
             'clear_site_logo',
+            'homepage_hero_image',
+            'clear_homepage_hero_image',
             'business_name',
             'phone',
             'whatsapp_url',
@@ -50,26 +53,46 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
 
     def get_fields(self):
         fields = super().get_fields()
-        fields['site_logo'].required = False
-        fields['site_logo'].allow_empty_file = False
+        for image_field in ('site_logo', 'homepage_hero_image'):
+            fields[image_field].required = False
+            fields[image_field].allow_empty_file = False
         return fields
 
     def validate_site_logo(self, value):
+        self.validate_branding_image(value, 'The site logo')
+        extension = self.image_extension(value)
+        value.name = f'site-logo.{extension}'
+        return value
+
+    def validate_homepage_hero_image(self, value):
+        self.validate_branding_image(value, 'The homepage hero image')
+        extension = self.image_extension(value)
+        value.name = f'homepage-hero.{extension}'
+        return value
+
+    @staticmethod
+    def validate_branding_image(value, label):
         if value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError('The site logo must be 5 MB or smaller.')
+            raise serializers.ValidationError(f'{label} must be 5 MB or smaller.')
         image = getattr(value, 'image', None)
         image_format = getattr(image, 'format', None)
         if image_format not in {'JPEG', 'PNG', 'WEBP'}:
             raise serializers.ValidationError('Upload a JPEG, PNG, or WebP image.')
-        extension = 'jpg' if image_format == 'JPEG' else image_format.lower()
-        value.name = f'site-logo.{extension}'
-        return value
+
+    @staticmethod
+    def image_extension(value):
+        image_format = value.image.format
+        return 'jpg' if image_format == 'JPEG' else image_format.lower()
 
     def validate(self, attrs):
-        if attrs.get('clear_site_logo') and attrs.get('site_logo'):
-            raise serializers.ValidationError(
-                {'site_logo': 'Upload a logo or remove the current logo, not both.'}
-            )
+        for clear_field, image_field, label in (
+            ('clear_site_logo', 'site_logo', 'logo'),
+            ('clear_homepage_hero_image', 'homepage_hero_image', 'homepage image'),
+        ):
+            if attrs.get(clear_field) and attrs.get(image_field):
+                raise serializers.ValidationError({
+                    image_field: f'Upload a {label} or remove the current one, not both.'
+                })
         for field in (
             'whatsapp_url',
             'telegram_url',
@@ -94,9 +117,13 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         social_links = validated_data.pop('social_links', None)
         clear_site_logo = validated_data.pop('clear_site_logo', False)
+        clear_homepage_hero_image = validated_data.pop('clear_homepage_hero_image', False)
         old_logo_name = instance.site_logo.name
+        old_homepage_hero_image_name = instance.homepage_hero_image.name
         if clear_site_logo:
             instance.site_logo = ''
+        if clear_homepage_hero_image:
+            instance.homepage_hero_image = ''
         if social_links is not None:
             links_by_platform = {link['platform']: link['url'] for link in social_links}
             for platform in SocialMediaLink.Platform.values:
@@ -111,21 +138,46 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
         if old_logo_name and old_logo_name != instance.site_logo.name:
             storage = instance.site_logo.storage
             transaction.on_commit(lambda: storage.delete(old_logo_name))
+        if (
+            old_homepage_hero_image_name
+            and old_homepage_hero_image_name != instance.homepage_hero_image.name
+        ):
+            storage = instance.homepage_hero_image.storage
+            transaction.on_commit(lambda: storage.delete(old_homepage_hero_image_name))
         return instance
 
 
 class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
     social_links = serializers.SerializerMethodField()
     site_logo = serializers.SerializerMethodField()
+    homepage_hero_image = serializers.SerializerMethodField()
 
     class Meta(BrokerageSettingsSerializer.Meta):
-        fields = ['site_name', 'site_logo', 'business_name', 'phone', 'email', 'social_links']
+        fields = [
+            'site_name',
+            'site_logo',
+            'homepage_hero_image',
+            'business_name',
+            'phone',
+            'email',
+            'social_links',
+        ]
 
     def get_site_logo(self, obj):
         if not obj.site_logo:
             return ''
         request = self.context.get('request')
         return request.build_absolute_uri(obj.site_logo.url) if request else obj.site_logo.url
+
+    def get_homepage_hero_image(self, obj):
+        if not obj.homepage_hero_image:
+            return ''
+        request = self.context.get('request')
+        return (
+            request.build_absolute_uri(obj.homepage_hero_image.url)
+            if request
+            else obj.homepage_hero_image.url
+        )
 
     def get_social_links(self, obj):
         if not obj.pk:

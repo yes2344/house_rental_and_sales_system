@@ -19,6 +19,7 @@ export interface BrokerageSocialLink {
 export interface BrokerageContact {
   site_name: string;
   site_logo: string | null;
+  homepage_hero_image: string | null;
   business_name: string;
   phone: string;
   email: string;
@@ -28,6 +29,7 @@ export interface BrokerageContact {
 export const emptyBrokerageContact: BrokerageContact = {
   site_name: 'habeshahome',
   site_logo: '',
+  homepage_hero_image: '',
   business_name: '',
   phone: '',
   email: '',
@@ -50,11 +52,17 @@ export async function updateSiteBranding(updates: {
   site_name: string;
   site_logo?: File;
   clear_site_logo?: boolean;
+  homepage_hero_image?: File;
+  clear_homepage_hero_image?: boolean;
 }): Promise<BrokerageContact> {
   const form = new FormData();
   form.append('site_name', updates.site_name);
   if (updates.site_logo) form.append('site_logo', updates.site_logo);
   if (updates.clear_site_logo) form.append('clear_site_logo', 'true');
+  if (updates.homepage_hero_image) form.append('homepage_hero_image', updates.homepage_hero_image);
+  if (updates.clear_homepage_hero_image) {
+    form.append('clear_homepage_hero_image', 'true');
+  }
   const response = await apiClient.patch<BrokerageContact>('/brokerage/contact/', form);
   return response.data;
 }

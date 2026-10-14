@@ -93,7 +93,13 @@ class BrokerageSettingsPermission(HasManagementPermission):
     def has_permission(self, request, view):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
-        branding_fields = {'site_name', 'site_logo', 'clear_site_logo'}
+        branding_fields = {
+            'site_name',
+            'site_logo',
+            'clear_site_logo',
+            'homepage_hero_image',
+            'clear_homepage_hero_image',
+        }
         submitted_fields = set(request.data.keys())
         required_permissions = []
         if branding_fields.intersection(submitted_fields):

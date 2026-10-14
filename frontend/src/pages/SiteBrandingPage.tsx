@@ -13,6 +13,8 @@ export function SiteBrandingPage({ text }: SiteBrandingPageProps) {
   const [siteName, setSiteName] = useState(contact.site_name);
   const [siteLogoFile, setSiteLogoFile] = useState<File | null>(null);
   const [clearSiteLogo, setClearSiteLogo] = useState(false);
+  const [homepageHeroImageFile, setHomepageHeroImageFile] = useState<File | null>(null);
+  const [clearHomepageHeroImage, setClearHomepageHeroImage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -29,9 +31,13 @@ export function SiteBrandingPage({ text }: SiteBrandingPageProps) {
         site_name: siteName.trim(),
         ...(siteLogoFile ? { site_logo: siteLogoFile } : {}),
         ...(clearSiteLogo ? { clear_site_logo: true } : {}),
+        ...(homepageHeroImageFile ? { homepage_hero_image: homepageHeroImageFile } : {}),
+        ...(clearHomepageHeroImage ? { clear_homepage_hero_image: true } : {}),
       });
       setSiteLogoFile(null);
       setClearSiteLogo(false);
+      setHomepageHeroImageFile(null);
+      setClearHomepageHeroImage(false);
       setSaved(true);
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError));
@@ -97,6 +103,44 @@ export function SiteBrandingPage({ text }: SiteBrandingPageProps) {
                   }}
                 />
                 <span>{text('removeSiteLogo')}</span>
+              </label>
+            )}
+            <label className="manager-field">
+              <span>{text('homepageHeroImageLabel')}</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => {
+                  setHomepageHeroImageFile(event.target.files?.[0] ?? null);
+                  if (event.target.files?.[0]) setClearHomepageHeroImage(false);
+                  setError('');
+                  setSaved(false);
+                }}
+              />
+            </label>
+            {contact.homepage_hero_image && (
+              <div className="manager-field">
+                <span>{text('currentHomepageHeroImage')}</span>
+                <img
+                  className="homepage-hero-preview"
+                  src={contact.homepage_hero_image}
+                  alt={text('heroArt')}
+                />
+              </div>
+            )}
+            {contact.homepage_hero_image && (
+              <label className="amenity-choice">
+                <input
+                  type="checkbox"
+                  checked={clearHomepageHeroImage}
+                  onChange={(event) => {
+                    setClearHomepageHeroImage(event.target.checked);
+                    if (event.target.checked) setHomepageHeroImageFile(null);
+                    setError('');
+                    setSaved(false);
+                  }}
+                />
+                <span>{text('removeHomepageHeroImage')}</span>
               </label>
             )}
           </div>

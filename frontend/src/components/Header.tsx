@@ -56,7 +56,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
         <div className="container header-inner">
           <Link
             className="brand"
-            to={isAdministrator ? '/dashboard' : '/'}
+            to="/"
             aria-label={contact.site_name || 'habeshahome'}
             onClick={closeMenu}
           >
@@ -90,7 +90,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             id="primary-navigation"
             aria-label={text('primaryNavigation')}
           >
-            {!isAdministrator && <NavLink to="/" end onClick={closeMenu}>{text('home')}</NavLink>}
+            <NavLink to="/" end onClick={closeMenu}>{text('home')}</NavLink>
             {hasBrokerageContact && (
               <section className="mobile-menu-contact" aria-label={text('brokerContactTitle')}>
                 <h2>{text('brokerContactTitle')}</h2>
