@@ -200,7 +200,7 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
                 <article className="manager-listing-card" key={property.id}>
                   <div className="manager-listing-image">
                     <PropertySlideshow
-                      images={property.images}
+                      images={property.images ?? []}
                       title={property.title}
                       fallbackLabel={text('emptyImageLabel')}
                       previousLabel={text('previousPage')}

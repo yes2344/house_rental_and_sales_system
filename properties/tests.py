@@ -730,6 +730,15 @@ class ManagedPropertyApiTests(APITestCase):
             ).exists()
         )
 
+    def test_managed_listing_includes_images_for_broker_card_view(self):
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.get(reverse('api:managed-property-list'))
+
+        self.assertEqual(response.status_code, 200)
+        listing = next(item for item in response.data['results'] if item['id'] == self.property.pk)
+        self.assertEqual(listing['images'], [])
+
     def test_broker_cannot_create_or_access_property_outside_assigned_city(self):
         outside_property = Property.objects.create(
             title='Outside city property',

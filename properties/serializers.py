@@ -443,6 +443,7 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
         queryset=Amenity.objects.all(),
         required=False,
     )
+    images = PropertyImageSerializer(many=True, read_only=True)
     currency = serializers.SerializerMethodField()
     publication_status = serializers.ChoiceField(
         choices=Property.PublicationStatus.choices,
@@ -478,6 +479,7 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'submitted_by_id',
             'moderation_note',
             'amenities',
+            'images',
             'contact_name',
             'contact_phone',
             'contact_email',
