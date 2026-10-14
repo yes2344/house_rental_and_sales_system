@@ -40,7 +40,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
         </div>
         {!isAdministrator && (
           <div className="footer-links">
-            <Link to="/properties">{text('footerBrowse')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+            <Link to="/">{text('footerBrowse')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
             <Link to={account ? '/account' : '/login'}>
               {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
             </Link>

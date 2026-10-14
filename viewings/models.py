@@ -36,6 +36,7 @@ class ViewingRequest(models.Model):
     scheduled_time = models.TimeField(null=True, blank=True)
     receipt_token_digest = models.CharField(max_length=64, null=True, blank=True, unique=True)
     guest_responded_at = models.DateTimeField(null=True, blank=True)
+    requester_deleted_at = models.DateTimeField(null=True, blank=True)
     message = models.TextField(blank=True)
     agent_notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=Status.PENDING)

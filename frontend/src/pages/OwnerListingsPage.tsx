@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext';
 import { getErrorMessage } from '../api/client';
 import { formatPropertyPrice, formatRegistrationDate } from '../components/propertyDisplay';
 import { formatPropertyLocation } from '../components/locationDisplay';
+import { PropertySlideshow } from '../components/PropertySlideshow';
 import {
   getManagedProperties,
   updateManagedPropertyPublication,
@@ -193,6 +194,62 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
       ) : result?.results.length ? (
         <>
           {actionError && <p className="manager-inline-error" role="alert">{actionError}</p>}
+          {account?.role === 'broker' ? (
+            <div className="manager-listing-grid">
+              {result.results.map((property) => (
+                <article className="manager-listing-card" key={property.id}>
+                  <div className="manager-listing-image">
+                    <PropertySlideshow
+                      images={property.images}
+                      title={property.title}
+                      fallbackLabel={text('emptyImageLabel')}
+                      previousLabel={text('previousPage')}
+                      nextLabel={text('nextPage')}
+                      photoLabel={text('photoNumber')}
+                    />
+                    <span className={`listing-type${property.listing_type === 'rent' ? ' is-rent' : ''}`}>
+                      {text(property.listing_type === 'rent' ? 'forRent' : 'forSale')}
+                    </span>
+                  </div>
+                  <div className="manager-listing-content">
+                    <div className="manager-listing-badges">
+                      <span className={`manager-badge status-${property.status}`}>
+                        {text(propertyStatusMessage(property.status))}
+                      </span>
+                      <span className={`manager-badge publication-${property.publication_status}`}>
+                        {text(publicationMessage[property.publication_status])}
+                      </span>
+                    </div>
+                    <h2>{property.title}</h2>
+                    <p className="manager-listing-location">{formatPropertyLocation(property, locale)}</p>
+                    <strong className="manager-listing-price">
+                      {formatPropertyPrice(property.price, property.listing_type, property.rental_frequency, locale, text)}
+                    </strong>
+                    <p className="manager-listing-date">
+                      {text('registeredDate')} {formatRegistrationDate(property.created_at, locale)}
+                    </p>
+                    <div className="manager-listing-actions">
+                      <Link className="button button-outline button-small" to={`/management/listings/${property.id}/edit`}>
+                        {text('editListing')}
+                      </Link>
+                      {canModerate && (property.publication_status === 'published' || property.publication_status === 'draft' || property.publication_status === 'rejected') && (
+                        <button
+                          className="button button-primary button-small"
+                          type="button"
+                          disabled={publicationBusyId === property.id || (property.publication_status !== 'published' && property.status !== 'available')}
+                          onClick={() => void togglePublication(property)}
+                        >
+                          {publicationBusyId === property.id
+                            ? text('publishingListing')
+                            : text(property.publication_status === 'published' ? 'unpublishListing' : 'publishListing')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
           <div className="manager-table-wrap">
             <table className="manager-table">
               <thead>
@@ -241,6 +298,7 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
               </tbody>
             </table>
           </div>
+          )}
           <div className="manager-pagination">
             <span>{text('managerResultCount').replace('{count}', String(result.count))}</span>
             <div>

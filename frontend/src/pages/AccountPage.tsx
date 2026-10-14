@@ -245,7 +245,7 @@ export function AccountPage({ locale, text }: AccountPageProps) {
           ) : (
             <div className="activity-empty">
               <p>{text('noViewingActivity')}</p>
-              <Link to="/properties">{text('browseAll')}</Link>
+              <Link to="/">{text('browseAll')}</Link>
             </div>
           )}
         </section>}

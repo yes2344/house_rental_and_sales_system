@@ -143,14 +143,6 @@ export async function searchLocations(
   return response.data;
 }
 
-export async function getLatestProperties(signal?: AbortSignal): Promise<PropertySummary[]> {
-  const response = await apiClient.get<PaginatedResponse<PropertySummary>>('/properties/', {
-    params: { page_size: 3, ordering: '-created_at' },
-    signal,
-  });
-  return response.data.results;
-}
-
 export async function getProperties(
   filters: PropertyFilters,
   signal?: AbortSignal,

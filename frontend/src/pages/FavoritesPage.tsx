@@ -43,7 +43,7 @@ export function FavoritesPage({ locale, text }: FavoritesPageProps) {
             <span className="customer-empty-icon"><Heart size={24} aria-hidden="true" /></span>
             <h2>{text('noSavedHomes')}</h2>
             <p>{text('noSavedHomesBody')}</p>
-            <Link className="button button-primary" to="/properties">{text('browseAll')}</Link>
+            <Link className="button button-primary" to="/">{text('browseAll')}</Link>
           </div>
         )}
       </section>

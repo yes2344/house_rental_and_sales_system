@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo } from 'react';
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 
 import { BrokerageContactProvider } from './BrokerageContactContext';
 import { HomepageContentProvider } from './HomepageContentContext';
@@ -21,9 +21,6 @@ const HomePage = lazy(() =>
 );
 const NotFoundPage = lazy(() =>
   import('./pages/PhaseNoticePage').then(({ NotFoundPage }) => ({ default: NotFoundPage })),
-);
-const PropertiesPage = lazy(() =>
-  import('./pages/PropertiesPage').then(({ PropertiesPage }) => ({ default: PropertiesPage })),
 );
 const PropertyDetailPage = lazy(() =>
   import('./pages/PropertyDetailPage').then(({ PropertyDetailPage }) => ({ default: PropertyDetailPage })),
@@ -88,6 +85,11 @@ const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then(({ SettingsPage }) => ({ default: SettingsPage })),
 );
 
+function PropertiesHomeRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`/${search}`} replace />;
+}
+
 export default function App() {
   const { preferences, preferencesError, savePreferences } = usePreferences();
   const { locale } = preferences;
@@ -127,7 +129,7 @@ export default function App() {
             >
               <Route element={<RequireMarketplaceAccess text={text} />}>
                 <Route index element={<HomePage locale={locale} text={text} />} />
-                <Route path="properties" element={<PropertiesPage locale={locale} text={text} />} />
+                <Route path="properties" element={<PropertiesHomeRedirect />} />
                 <Route path="properties/:slug" element={<PropertyDetailPage locale={locale} text={text} />} />
                 <Route path="viewing-requests/status" element={<ViewingRequestStatusPage text={text} />} />
               </Route>

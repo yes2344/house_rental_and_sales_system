@@ -121,6 +121,10 @@ export async function cancelCustomerViewingRequest(
   return response.data;
 }
 
+export async function deleteCustomerViewingRequest(id: number): Promise<void> {
+  await apiClient.delete(`/viewing-requests/mine/${id}/`);
+}
+
 export async function getViewingRequestStatus(receiptToken: string): Promise<ViewingRequestStatus> {
   const response = await apiClient.get<ViewingRequestStatus>('/viewing-requests/receipt/', {
     headers: { 'X-Viewing-Receipt': receiptToken },

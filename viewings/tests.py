@@ -382,6 +382,55 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertEqual(request.events.count(), 1)
         self.assertEqual(request.events.get().message, 'My plans changed.')
 
+    def test_requester_can_hide_only_cancelled_requests_without_erasing_audit_history(self):
+        request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=self.property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=2),
+            status=ViewingRequest.Status.CANCELLED,
+        )
+        event = ViewingRequestEvent.objects.create(
+            viewing_request=request,
+            actor=self.customer,
+            event_type=ViewingRequestEvent.Type.CANCELLED,
+            to_status=ViewingRequest.Status.CANCELLED,
+        )
+
+        response = self.client.delete(
+            reverse('api:customer-viewing-detail', kwargs={'pk': request.pk}),
+        )
+        request.refresh_from_db()
+        activity = self.client.get(reverse('api:customer-viewing-list'))
+
+        self.assertEqual(response.status_code, 204)
+        self.assertIsNotNone(request.requester_deleted_at)
+        self.assertTrue(ViewingRequest.objects.filter(pk=request.pk).exists())
+        self.assertTrue(ViewingRequestEvent.objects.filter(pk=event.pk).exists())
+        self.assertEqual(activity.data['count'], 0)
+
+    def test_requester_cannot_hide_a_non_cancelled_request(self):
+        request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=self.property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=2),
+            status=ViewingRequest.Status.PENDING,
+        )
+
+        response = self.client.delete(
+            reverse('api:customer-viewing-detail', kwargs={'pk': request.pk}),
+        )
+        request.refresh_from_db()
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIsNone(request.requester_deleted_at)
+        self.assertEqual(request.status, ViewingRequest.Status.PENDING)
+
     def test_customer_request_list_supports_status_filter_ordering_and_pagination(self):
         earlier_property = Property.objects.create(
             title='Earlier viewing property',
@@ -469,12 +518,16 @@ class PublicViewingRequestApiTests(APITestCase):
             {'message': 'Not my request.'},
             format='json',
         )
+        delete = self.client.delete(
+            reverse('api:customer-viewing-detail', kwargs={'pk': request.pk}),
+        )
         request.refresh_from_db()
 
         self.assertEqual(listed.data['count'], 0)
         self.assertEqual(detail.status_code, 404)
         self.assertEqual(respond.status_code, 404)
         self.assertEqual(cancel.status_code, 404)
+        self.assertEqual(delete.status_code, 404)
         self.assertEqual(request.status, ViewingRequest.Status.PENDING)
         self.assertFalse(request.events.exists())
 

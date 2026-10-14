@@ -171,7 +171,7 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
           <p>{propertyUnavailable
             ? validPropertySelection ? text('propertyUnavailable') : text('choosePropertyBody')
             : propertyError}</p>
-          <Link className="button button-primary" to="/properties">
+          <Link className="button button-primary" to="/">
             <ArrowLeft size={16} aria-hidden="true" />{text('backToProperties')}
           </Link>
         </div>

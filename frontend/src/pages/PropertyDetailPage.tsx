@@ -63,7 +63,7 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
           <span>{notFound ? text('propertyNotFound') : text('listingsError')}<small>{notFound ? text('listingUnavailable') : error}</small></span>
           <div className="detail-error-actions">
             {!notFound && <button className="button button-outline" type="button" onClick={() => window.location.reload()}>{text('refresh')}</button>}
-            <Link className="button button-primary" to="/properties"><ArrowLeft size={15} aria-hidden="true" />{text('backToProperties')}</Link>
+            <Link className="button button-primary" to="/"><ArrowLeft size={15} aria-hidden="true" />{text('backToProperties')}</Link>
           </div>
         </div>
       </main>
@@ -88,8 +88,8 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
   return (
     <main id="main-content" className="detail-page">
       <section className="detail-heading container">
-        <div className="breadcrumbs"><Link to="/">{text('home')}</Link><span>/</span><Link to="/properties">{text('explore')}</Link><span>/</span><span>{property.title}</span></div>
-        <Link className="back-link" to="/properties"><ArrowLeft size={15} aria-hidden="true" />{text('backToProperties')}</Link>
+        <div className="breadcrumbs"><Link to="/">{text('home')}</Link><span>/</span><span>{property.title}</span></div>
+        <Link className="back-link" to="/"><ArrowLeft size={15} aria-hidden="true" />{text('backToProperties')}</Link>
         <div className="detail-title-row">
           <div><p className="detail-location"><MapPin size={15} aria-hidden="true" />{formattedLocation}</p><h1>{property.title}</h1></div>
           <div className="detail-actions">

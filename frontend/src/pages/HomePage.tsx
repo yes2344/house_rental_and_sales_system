@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, House, MapPin, Search, ShieldCheck, UsersRound } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { ArrowDown, ArrowUpRight, Check, ChevronDown, House, MapPin, Search } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
-import { getLatestProperties, type PropertyLocationSuggestion, type PropertySummary } from '../api/properties';
+import {
+  getLocations,
+  getLocationsByTypes,
+  getProperties,
+  type ListingType,
+  type MarketplaceLocation,
+  type PaginatedResponse,
+  type PropertyFilters,
+  type PropertySummary,
+  type PropertyType,
+} from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
-import { LocationSearchInput } from '../components/LocationSearchInput';
 import { useHomepageContent } from '../HomepageContentContext';
 import { SocialMark, socialPlatformNames } from '../components/SocialMark';
 import { useBrokerageContact } from '../BrokerageContactContext';
@@ -17,47 +26,190 @@ export interface HomePageProps {
 }
 
 export function HomePage({ locale, text }: HomePageProps) {
-  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { notes } = useHomepageContent();
   const { contact } = useBrokerageContact();
-  const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
+  const [listingType, setListingType] = useState('');
   const [propertyType, setPropertyType] = useState('');
-  const [location, setLocation] = useState('');
   const [locationId, setLocationId] = useState<number | null>(null);
   const [cityId, setCityId] = useState<number | null>(null);
-  const [properties, setProperties] = useState<PropertySummary[]>([]);
+  const [cities, setCities] = useState<MarketplaceLocation[]>([]);
+  const [subcities, setSubcities] = useState<MarketplaceLocation[]>([]);
+  const [locationOptionsError, setLocationOptionsError] = useState('');
+  const [result, setResult] = useState<PaginatedResponse<PropertySummary> | null>(null);
+  const [additionalProperties, setAdditionalProperties] = useState<PropertySummary[]>([]);
   const [listingsLoading, setListingsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [listingsError, setListingsError] = useState('');
+  const [moreError, setMoreError] = useState('');
+  const moreRequestController = useRef<AbortController | null>(null);
+  const apiFilters = useMemo<PropertyFilters>(() => {
+    const validPropertyTypes: PropertyType[] = [
+      'house', 'villa', 'apartment', 'condominium', 'land',
+      'office', 'shop', 'warehouse', 'commercial', 'other',
+    ];
+    const listingTypeParam = searchParams.get('listing_type');
+    const propertyTypeParam = searchParams.get('property_type');
+    const locationIdParam = Number(searchParams.get('location_id'));
+    const cityIdParam = Number(searchParams.get('city_id'));
+    const locationParam = searchParams.get('location')?.trim();
+    return {
+      page_size: 12,
+      ordering: '-created_at',
+      listing_type: listingTypeParam === 'sale' || listingTypeParam === 'rent'
+        ? listingTypeParam as ListingType
+        : undefined,
+      property_type: validPropertyTypes.includes(propertyTypeParam as PropertyType)
+        ? propertyTypeParam as PropertyType
+        : undefined,
+      location_id: Number.isInteger(locationIdParam) && locationIdParam > 0 ? locationIdParam : undefined,
+      city_id: Number.isInteger(cityIdParam) && cityIdParam > 0 ? cityIdParam : undefined,
+      location: !locationIdParam && locationParam ? locationParam : undefined,
+    };
+  }, [searchParams]);
 
   const loadListings = useCallback(async () => {
+    moreRequestController.current?.abort();
+    setAdditionalProperties([]);
+    setMoreError('');
     setListingsLoading(true);
     setListingsError('');
     try {
-      setProperties(await getLatestProperties());
+      setResult(await getProperties(apiFilters));
     } catch (error) {
       setListingsError(getErrorMessage(error));
+      setResult(null);
     } finally {
       setListingsLoading(false);
     }
-  }, []);
+  }, [apiFilters]);
 
   useEffect(() => {
-    void loadListings();
-  }, [loadListings]);
+    const controller = new AbortController();
+    moreRequestController.current?.abort();
+    setAdditionalProperties([]);
+    setMoreError('');
+    setListingsLoading(true);
+    setListingsError('');
+    void getProperties(apiFilters, controller.signal)
+      .then(setResult)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setListingsError(getErrorMessage(error));
+          setResult(null);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setListingsLoading(false);
+      });
+    return () => {
+      controller.abort();
+      moreRequestController.current?.abort();
+    };
+  }, [apiFilters]);
+
+  useEffect(() => {
+    setListingType(searchParams.get('listing_type') ?? '');
+    setPropertyType(searchParams.get('property_type') ?? '');
+    const selectedLocation = Number(searchParams.get('location_id')) || null;
+    setLocationId(selectedLocation);
+    setCityId(Number(searchParams.get('city_id')) || null);
+  }, [searchParams]);
+
+  const updateResults = (updates: {
+    listing_type?: string;
+    property_type?: string;
+    location?: string;
+    location_id?: number | null;
+    city_id?: number | null;
+  }) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('page');
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === undefined || value === '') next.delete(key);
+      else next.set(key, String(value));
+    }
+    setSearchParams(next);
+  };
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const query = new URLSearchParams({ listing_type: listingType });
-    if (locationId) query.set('location_id', String(locationId));
-    else if (location.trim()) query.set('location', location.trim());
-    if (cityId) query.set('city_id', String(cityId));
-    if (propertyType) query.set('property_type', propertyType);
-    navigate(`/properties?${query.toString()}`);
+    const next = new URLSearchParams();
+    if (listingType) next.set('listing_type', listingType);
+    if (propertyType) next.set('property_type', propertyType);
+    if (locationId) next.set('location_id', String(locationId));
+    if (cityId) next.set('city_id', String(cityId));
+    setSearchParams(next);
+    document.getElementById('latest-listings')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const searchCategory = (category: string) => {
-    navigate(`/properties?${new URLSearchParams({ property_type: category }).toString()}`);
+    setPropertyType(category);
+    updateResults({ property_type: category });
+    document.getElementById('latest-listings')?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  const clearFilters = () => {
+    setListingType('');
+    setPropertyType('');
+    setLocationId(null);
+    setCityId(null);
+    setSubcities([]);
+    setSearchParams({});
+  };
+
+  const loadMoreListings = async () => {
+    if (!result?.next || loadingMore) return;
+    const controller = new AbortController();
+    moreRequestController.current?.abort();
+    moreRequestController.current = controller;
+    setLoadingMore(true);
+    setMoreError('');
+    try {
+      const nextResult = await getProperties(
+        { ...apiFilters, page: 2 + Math.floor(additionalProperties.length / 12) },
+        controller.signal,
+      );
+      if (!controller.signal.aborted) {
+        setAdditionalProperties((current) => [...current, ...nextResult.results]);
+      }
+    } catch (error: unknown) {
+      if (!controller.signal.aborted) setMoreError(getErrorMessage(error));
+    } finally {
+      if (!controller.signal.aborted) setLoadingMore(false);
+    }
+  };
+
+  const properties = [...(result?.results ?? []), ...additionalProperties];
+  const hasMoreListings = Boolean(result?.next) && properties.length < (result?.count ?? 0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getLocationsByTypes(['city', 'city_administration'], controller.signal)
+      .then((items) => {
+        setCities(items);
+        setLocationOptionsError('');
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setLocationOptionsError(getErrorMessage(error));
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    setSubcities([]);
+    if (!cityId) return;
+    const controller = new AbortController();
+    void getLocations(cityId, controller.signal, false, 'subcity')
+      .then((items) => {
+        setSubcities(items);
+        setLocationOptionsError('');
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setLocationOptionsError(getErrorMessage(error));
+      });
+    return () => controller.abort();
+  }, [cityId]);
 
   return (
     <main id="main-content">
@@ -80,112 +232,6 @@ export function HomePage({ locale, text }: HomePageProps) {
             </div>
             <div className="hero-image-caption">{text('illustrationCaption')}</div>
           </div>
-          <form className="search-panel" onSubmit={submitSearch}>
-            <div className="search-panel-head">
-              <div>
-                <span className="search-overline"><Search size={14} aria-hidden="true" /> {text('searchLabel')}</span>
-              </div>
-              <div className="listing-type-toggle" role="group" aria-label={text('searchLabel')}>
-                <button
-                  type="button"
-                  className={listingType === 'sale' ? 'is-active' : ''}
-                  aria-pressed={listingType === 'sale'}
-                  onClick={() => setListingType('sale')}
-                >{text('searchBuy')}</button>
-                <button
-                  type="button"
-                  className={listingType === 'rent' ? 'is-active' : ''}
-                  aria-pressed={listingType === 'rent'}
-                  onClick={() => setListingType('rent')}
-                >{text('searchRent')}</button>
-              </div>
-            </div>
-            <div className="search-fields">
-              <div className="search-field">
-                <label htmlFor="home-location">{text('location')}</label>
-                <LocationSearchInput
-                  id="home-location"
-                  value={location}
-                  locale={locale}
-                  placeholder={text('locationPlaceholder')}
-                  onChange={(value) => {
-                    setLocation(value);
-                    setLocationId(null);
-                    setCityId(null);
-                  }}
-                  onSelect={(selected: PropertyLocationSuggestion) => {
-                    setLocation(locale === 'am' && selected.name_am ? selected.name_am : selected.name);
-                    setLocationId(selected.id);
-                    setCityId(selected.city_id);
-                  }}
-                />
-              </div>
-              <label className="search-field search-field-type">
-                <span>{text('propertyType')}</span>
-                <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
-                  <option value="">{text('anyType')}</option>
-                  <option value="house">{text('house')}</option>
-                  <option value="villa">{text('house')}</option>
-                  <option value="apartment">{text('apartment')}</option>
-                  <option value="condominium">Condominium</option>
-                  <option value="land">{text('land')}</option>
-                  <option value="office">Office</option>
-                  <option value="shop">Shop</option>
-                  <option value="warehouse">Warehouse</option>
-                  <option value="commercial">{text('commercial')}</option>
-                  <option value="other">Other</option>
-                </select>
-              </label>
-              <button className="button button-primary search-submit" type="submit">
-                <Search size={17} aria-hidden="true" /><span>{text('searchButton')}</span>
-              </button>
-            </div>
-            <p className="search-note"><Check size={14} aria-hidden="true" />{text('searchNote')}</p>
-          </form>
-        </div>
-      </section>
-
-      <section className="trust-strip" aria-label="Marketplace features">
-        <div className="container trust-inner">
-          <div className="trust-item"><span className="trust-icon"><ShieldCheck size={18} aria-hidden="true" /></span>{text('promiseStatus')}</div>
-          <span className="trust-divider" aria-hidden="true" />
-          <div className="trust-item"><span className="trust-icon"><UsersRound size={18} aria-hidden="true" /></span>{text('promiseContact')}</div>
-          <span className="trust-divider" aria-hidden="true" />
-          <div className="trust-item"><span className="trust-icon"><Check size={18} aria-hidden="true" /></span>{text('promiseViewing')}</div>
-        </div>
-      </section>
-
-      <section className="section listings-section" id="latest-listings">
-        <div className="container">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow eyebrow-muted">{text('latestEyebrow')}</p>
-              <h2>{text('latestTitle')}</h2>
-              <p className="section-description">{text('latestDescription')}</p>
-            </div>
-            <Link className="text-link desktop-only" to="/properties">{text('seeAll')} <ArrowRight size={16} aria-hidden="true" /></Link>
-          </div>
-          {listingsLoading ? (
-            <div className="listing-state" role="status"><span className="loading-spinner" />{text('loadingListings')}</div>
-          ) : listingsError ? (
-            <div className="listing-state listing-error" role="alert">
-              <span>{text('listingsError')} <small>{listingsError}</small></span>
-              <button className="button button-outline" type="button" onClick={() => void loadListings()}>{text('retry')}</button>
-            </div>
-          ) : properties.length ? (
-            <div className="listing-grid">
-              {properties.map((property) => (
-                <PropertyCard key={property.id} property={property} locale={locale} text={text} />
-              ))}
-            </div>
-          ) : (
-            <div className="listing-empty">
-              <span className="empty-icon"><House size={23} aria-hidden="true" /></span>
-              <p>{text('noListings')}</p>
-              <Link className="text-link" to="/properties">{text('browseAll')} <ArrowRight size={16} aria-hidden="true" /></Link>
-            </div>
-          )}
-          <Link className="text-link mobile-only" to="/properties">{text('seeAll')} <ArrowRight size={16} aria-hidden="true" /></Link>
         </div>
       </section>
 
@@ -213,6 +259,147 @@ export function HomePage({ locale, text }: HomePageProps) {
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="home-search-section">
+        <div className="container">
+          <form className="search-panel" onSubmit={submitSearch}>
+            <div className="search-panel-head">
+              <div>
+                <span className="search-overline"><Search size={14} aria-hidden="true" /> {text('searchLabel')}</span>
+              </div>
+              <div className="listing-type-toggle" role="group" aria-label={text('searchLabel')}>
+                <button
+                  type="button"
+                  className={!listingType ? 'is-active' : ''}
+                  aria-pressed={!listingType}
+                  onClick={() => setListingType('')}
+                >{text('anyType')}</button>
+                <button
+                  type="button"
+                  className={listingType === 'sale' ? 'is-active' : ''}
+                  aria-pressed={listingType === 'sale'}
+                  onClick={() => setListingType('sale')}
+                >{text('searchBuy')}</button>
+                <button
+                  type="button"
+                  className={listingType === 'rent' ? 'is-active' : ''}
+                  aria-pressed={listingType === 'rent'}
+                  onClick={() => setListingType('rent')}
+                >{text('searchRent')}</button>
+              </div>
+            </div>
+            <div className={`search-fields${cityId ? ' has-subcity' : ''}`}>
+              <div className="search-field">
+                <label htmlFor="home-city">{text('locationCity')}</label>
+                <select
+                  id="home-city"
+                  value={cityId ?? ''}
+                  onChange={(event) => {
+                    const selectedCityId = Number(event.target.value) || null;
+                    setCityId(selectedCityId);
+                    setLocationId(null);
+                    setSubcities([]);
+                  }}
+                >
+                  <option value="">{text('chooseCity')}</option>
+                  {cities.map((city) => (
+                    <option key={city.id} value={city.id}>
+                      {locale === 'am' && city.name_am ? city.name_am : city.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {cityId && (
+                <label className="search-field search-field-subcity">
+                  <span>{text('locationSubcity')}</span>
+                  <select
+                    value={locationId ?? ''}
+                    onChange={(event) => setLocationId(Number(event.target.value) || null)}
+                    disabled={!subcities.length}
+                  >
+                    <option value="">{text('allAreas')}</option>
+                    {subcities.map((subcity) => (
+                      <option key={subcity.id} value={subcity.id}>
+                        {locale === 'am' && subcity.name_am ? subcity.name_am : subcity.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="search-field search-field-type">
+                <span>{text('propertyType')}</span>
+                <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
+                  <option value="">{text('anyType')}</option>
+                  <option value="house">{text('house')}</option>
+                  <option value="villa">{text('house')}</option>
+                  <option value="apartment">{text('apartment')}</option>
+                  <option value="condominium">Condominium</option>
+                  <option value="land">{text('land')}</option>
+                  <option value="office">Office</option>
+                  <option value="shop">Shop</option>
+                  <option value="warehouse">Warehouse</option>
+                  <option value="commercial">{text('commercial')}</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <button className="button button-primary search-submit" type="submit">
+                <Search size={17} aria-hidden="true" /><span>{text('searchButton')}</span>
+              </button>
+            </div>
+            {locationOptionsError
+              ? <p className="search-note" role="status">{text('locationLoadError')} {locationOptionsError}</p>
+              : <p className="search-note"><Check size={14} aria-hidden="true" />{text('searchNote')}</p>}
+          </form>
+        </div>
+      </section>
+
+      <section className="section listings-section" id="latest-listings">
+        <div className="container">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow eyebrow-muted">{text('latestEyebrow')}</p>
+              <h2>{text('latestTitle')}</h2>
+              <p className="section-description">
+                {listingsLoading ? text('loadingListings') : `${result?.count ?? 0} ${text('resultCount')}`}
+              </p>
+            </div>
+            <button className="filter-clear" type="button" onClick={clearFilters}>{text('clearFilters')}</button>
+          </div>
+          {listingsLoading ? (
+            <div className="listing-state" role="status"><span className="loading-spinner" />{text('loadingListings')}</div>
+          ) : listingsError ? (
+            <div className="listing-state listing-error" role="alert">
+              <span>{text('listingsError')} <small>{listingsError}</small></span>
+              <button className="button button-outline" type="button" onClick={() => void loadListings()}>{text('retry')}</button>
+            </div>
+          ) : properties.length ? (
+            <>
+              <div className="listing-grid">
+                {properties.map((property) => (
+                  <PropertyCard key={property.id} property={property} locale={locale} text={text} />
+                ))}
+              </div>
+              {hasMoreListings && (
+                <div className="show-more-listings">
+                  {moreError && <p className="listing-error" role="alert">{text('listingsError')} {moreError}</p>}
+                  <button className="button button-outline" type="button" onClick={() => void loadMoreListings()} disabled={loadingMore}>
+                    {loadingMore
+                      ? <><span className="loading-spinner" />{text('loadingListings')}</>
+                      : <>{text('showMoreListings')}<ChevronDown size={16} aria-hidden="true" /></>}
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="listing-empty">
+              <span className="empty-icon"><House size={23} aria-hidden="true" /></span>
+              <h2>{text('noSearchResults')}</h2>
+              <p>{text('adjustFilters')}</p>
+              <button className="button button-outline" type="button" onClick={clearFilters}>{text('clearFilters')}</button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -256,36 +443,6 @@ export function HomePage({ locale, text }: HomePageProps) {
         </section>
       )}
 
-      <section className="section process-section" id="how-it-works">
-        <div className="container process-layout">
-          <div className="process-intro">
-            <p className="eyebrow"><span className="eyebrow-dot" />{text('processEyebrow')}</p>
-            <h2>{text('processTitle')}</h2>
-            <p>{text('heroBody')}</p>
-            <Link className="button button-light" to="/properties">{text('explore')} <ArrowRight size={16} aria-hidden="true" /></Link>
-          </div>
-          <div className="process-steps">
-            {[
-              { number: '01', title: 'processOneTitle', body: 'processOneBody', icon: <Search size={19} aria-hidden="true" /> },
-              { number: '02', title: 'processTwoTitle', body: 'processTwoBody', icon: <UsersRound size={19} aria-hidden="true" /> },
-              { number: '03', title: 'processThreeTitle', body: 'processThreeBody', icon: <MapPin size={19} aria-hidden="true" /> },
-            ].map((step) => (
-              <article className="process-step" key={step.number}>
-                <span className="step-number">{step.number}</span>
-                <span className="step-icon">{step.icon}</span>
-                <div><h3>{text(step.title as MessageKey)}</h3><p>{text(step.body as MessageKey)}</p></div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="closing-section">
-        <div className="container closing-inner">
-          <div><span className="closing-kicker">{contact.site_name || 'habeshahome'}</span><h2>{text('closingTitle')}</h2><p>{text('closingBody')}</p></div>
-          <Link className="button button-light" to="/properties">{text('explore')} <ArrowRight size={16} aria-hidden="true" /></Link>
-        </div>
-      </section>
     </main>
   );
 }

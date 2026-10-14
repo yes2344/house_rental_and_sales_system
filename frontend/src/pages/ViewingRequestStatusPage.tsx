@@ -72,7 +72,7 @@ export function ViewingRequestStatusPage({ text }: ViewingRequestStatusPageProps
   return (
     <main id="main-content" className="viewing-request-page">
       <div className="viewing-request-container">
-        <Link className="back-link" to="/properties">
+        <Link className="back-link" to="/">
           <ArrowLeft size={15} aria-hidden="true" />{text('backToProperties')}
         </Link>
         <header className="viewing-request-heading">

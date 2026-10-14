@@ -223,7 +223,10 @@ class AccountActivityView(generics.GenericAPIView):
         profile_role = Profile.objects.filter(user_id=request.user.pk).values_list('role', flat=True).first()
         if profile_role != Profile.Role.BROKER:
             viewing_requests = (
-                ViewingRequest.objects.filter(requester=request.user)
+                ViewingRequest.objects.filter(
+                    requester=request.user,
+                    requester_deleted_at__isnull=True,
+                )
                 .select_related('property')
                 .order_by('-created_at')
             )

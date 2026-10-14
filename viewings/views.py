@@ -222,7 +222,10 @@ class CustomerViewingRequestListView(generics.ListAPIView):
 
     def get_queryset(self):
         return (
-            ViewingRequest.objects.filter(requester=self.request.user)
+            ViewingRequest.objects.filter(
+                requester=self.request.user,
+                requester_deleted_at__isnull=True,
+            )
             .select_related('property')
             .prefetch_related('events__actor')
             .order_by(*self.ordering)
@@ -235,10 +238,36 @@ class CustomerViewingRequestDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return (
-            ViewingRequest.objects.filter(requester=self.request.user)
+            ViewingRequest.objects.filter(
+                requester=self.request.user,
+                requester_deleted_at__isnull=True,
+            )
             .select_related('property')
             .prefetch_related('events__actor')
         )
+
+    @transaction.atomic
+    def delete(self, request, *args, **kwargs):
+        viewing_request = (
+            ViewingRequest.objects.select_for_update()
+            .filter(
+                pk=kwargs['pk'],
+                requester=request.user,
+                requester_deleted_at__isnull=True,
+            )
+            .first()
+        )
+        if viewing_request is None:
+            return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if viewing_request.status != ViewingRequest.Status.CANCELLED:
+            return Response(
+                {'detail': 'Only cancelled viewing requests can be removed.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        viewing_request.requester_deleted_at = timezone.now()
+        viewing_request.save(update_fields=['requester_deleted_at'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CustomerViewingRequestResponseView(generics.GenericAPIView):
@@ -251,7 +280,11 @@ class CustomerViewingRequestResponseView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         viewing_request = (
             ViewingRequest.objects.select_for_update()
-            .filter(pk=kwargs['pk'], requester=request.user)
+            .filter(
+                pk=kwargs['pk'],
+                requester=request.user,
+                requester_deleted_at__isnull=True,
+            )
             .select_related('property')
             .first()
         )
@@ -310,7 +343,11 @@ class CustomerViewingRequestCancelView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         viewing_request = (
             ViewingRequest.objects.select_for_update()
-            .filter(pk=kwargs['pk'], requester=request.user)
+            .filter(
+                pk=kwargs['pk'],
+                requester=request.user,
+                requester_deleted_at__isnull=True,
+            )
             .select_related('property')
             .first()
         )

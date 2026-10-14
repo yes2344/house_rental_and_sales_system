@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, CalendarClock, RotateCw } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarClock, RotateCw, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
 import {
   cancelCustomerViewingRequest,
+  deleteCustomerViewingRequest,
   getCustomerViewingRequests,
   respondToCustomerViewingRequest,
   type CustomerViewingRequest,
@@ -105,6 +106,24 @@ export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingReq
     }
   };
 
+  const deleteCancelledRequest = async (request: CustomerViewingRequest) => {
+    if (!window.confirm(text('confirmDeleteCancelledRequest'))) return;
+    setBusyRequest(request.id);
+    setActionError('');
+    try {
+      await deleteCustomerViewingRequest(request.id);
+      if (requests.length === 1 && page > 1) {
+        setPage((current) => current - 1);
+      } else {
+        await loadRequests();
+      }
+    } catch (actionFailure: unknown) {
+      setActionError(getErrorMessage(actionFailure));
+    } finally {
+      setBusyRequest(null);
+    }
+  };
+
   const changeFilter = (value: string) => {
     setStatusFilter(value);
     setPage(1);
@@ -196,6 +215,11 @@ export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingReq
                         {text('cancelViewingRequest')}
                       </button>
                     )}
+                    {request.status === 'cancelled' && (
+                      <button className="button button-outline button-small" type="button" disabled={busyRequest === request.id} onClick={() => void deleteCancelledRequest(request)}>
+                        <Trash2 size={14} aria-hidden="true" />{text('deleteCancelledRequest')}
+                      </button>
+                    )}
                   </div>
                 </article>
               ))}
@@ -204,7 +228,7 @@ export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingReq
             <div className="activity-empty">
               <CalendarClock size={25} aria-hidden="true" />
               <p>{text('noViewingActivity')}</p>
-              <Link to="/properties">{text('browseAll')}</Link>
+              <Link to="/">{text('browseAll')}</Link>
             </div>
           ) : null}
 
