@@ -17,7 +17,6 @@ from accounts.permissions import (
     has_management_permission,
 )
 from accounts.serializers import (
-    AccountSerializer,
     DelegatedAccountCreateSerializer,
     DelegatedAccountSerializer,
 )

@@ -260,8 +260,10 @@ export function HomePage({ locale, text }: HomePageProps) {
               <button className="category-card" type="button" key={item.type} onClick={() => searchCategory(item.type)}>
                 <span className="category-number">{item.symbol}</span>
                 <span className="category-icon"><House size={22} strokeWidth={1.6} aria-hidden="true" /></span>
-                <span className="category-name">{text(item.key as MessageKey)}</span>
-                <span className="category-action">{text('categorySearch')} <ArrowUpRight size={15} aria-hidden="true" /></span>
+                <span className="category-copy">
+                  <span className="category-name">{text(item.key as MessageKey)}</span>
+                  <span className="category-action">{text('categorySearch')} <ArrowUpRight size={15} aria-hidden="true" /></span>
+                </span>
               </button>
             ))}
           </div>
