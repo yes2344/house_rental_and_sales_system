@@ -1,14 +1,76 @@
 import hashlib
+from io import StringIO
+import os
 from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from admin.models import BrokerageSettings
 from user.models import Property, ViewingRequest
+
+
+class DemoAdminBootstrapCommandTests(TestCase):
+    def test_command_skips_when_no_credentials_are_configured(self):
+        with patch.dict(os.environ, {}, clear=False):
+            for key in (
+                'DJANGO_SUPERUSER_USERNAME',
+                'DJANGO_SUPERUSER_EMAIL',
+                'DJANGO_SUPERUSER_PASSWORD',
+            ):
+                os.environ.pop(key, None)
+            call_command('ensure_demo_admin', stdout=StringIO())
+
+        self.assertFalse(get_user_model().objects.exists())
+
+    def test_command_requires_all_credentials(self):
+        with patch.dict(
+            os.environ,
+            {
+                'DJANGO_SUPERUSER_USERNAME': 'demo-admin',
+                'DJANGO_SUPERUSER_EMAIL': '',
+                'DJANGO_SUPERUSER_PASSWORD': 'Strong-Demo-Password-39!',
+            },
+        ):
+            with self.assertRaises(CommandError):
+                call_command('ensure_demo_admin')
+
+    def test_command_creates_superuser_once_without_resetting_password(self):
+        credentials = {
+            'DJANGO_SUPERUSER_USERNAME': 'demo-admin',
+            'DJANGO_SUPERUSER_EMAIL': 'demo-admin@example.com',
+            'DJANGO_SUPERUSER_PASSWORD': 'Strong-Demo-Password-39!',
+        }
+        with patch.dict(os.environ, credentials):
+            call_command('ensure_demo_admin', stdout=StringIO())
+            user = get_user_model().objects.get(username='demo-admin')
+            original_password_hash = user.password
+
+            os.environ['DJANGO_SUPERUSER_PASSWORD'] = 'A-New-Password-948!'
+            call_command('ensure_demo_admin', stdout=StringIO())
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_superuser)
+        self.assertEqual(user.email, 'demo-admin@example.com')
+        self.assertEqual(user.password, original_password_hash)
+
+    def test_command_refuses_to_promote_an_existing_non_superuser(self):
+        get_user_model().objects.create_user(username='demo-admin', password='safe-test-password')
+        credentials = {
+            'DJANGO_SUPERUSER_USERNAME': 'demo-admin',
+            'DJANGO_SUPERUSER_EMAIL': 'demo-admin@example.com',
+            'DJANGO_SUPERUSER_PASSWORD': 'Strong-Demo-Password-39!',
+        }
+        with patch.dict(os.environ, credentials):
+            with self.assertRaises(CommandError):
+                call_command('ensure_demo_admin')
 
 
 class ViewingRequestApprovalTests(TestCase):

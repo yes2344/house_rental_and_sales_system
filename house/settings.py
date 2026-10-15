@@ -68,8 +68,12 @@ INSTALLED_APPS = [
     'owner_announcements.apps.OwnerAnnouncementsConfig',
 ]
 
+if env('CLOUDINARY_URL', default=''):
+    INSTALLED_APPS.extend(['cloudinary_storage', 'cloudinary'])
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'accounts.middleware.LocalInvitationCsrfViewMiddleware',
@@ -148,6 +152,18 @@ CSRF_COOKIE_SECURE = not DEBUG
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'default': {
+        'BACKEND': (
+            'cloudinary_storage.storage.MediaCloudinaryStorage'
+            if env('CLOUDINARY_URL', default='')
+            else 'django.core.files.storage.FileSystemStorage'
+        ),
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -175,20 +191,28 @@ REST_FRAMEWORK = {
 }
 API_TAB_SESSION_LIFETIME = timedelta(days=14)
 
-if DEBUG:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'habesha-homes-development',
-        },
-    }
-else:
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-            'LOCATION': 'django_cache',
-        },
-    }
+cache_backend = env(
+    'DJANGO_CACHE_BACKEND',
+    default=(
+        'django.core.cache.backends.locmem.LocMemCache'
+        if DEBUG
+        else 'django.core.cache.backends.db.DatabaseCache'
+    ),
+)
+if cache_backend not in {
+    'django.core.cache.backends.db.DatabaseCache',
+    'django.core.cache.backends.locmem.LocMemCache',
+}:
+    raise ImproperlyConfigured('DJANGO_CACHE_BACKEND must be DatabaseCache or LocMemCache.')
+CACHES = {
+    'default': {
+        'BACKEND': cache_backend,
+        'LOCATION': env(
+            'DJANGO_CACHE_LOCATION',
+            default='habesha-homes-development' if DEBUG else 'django_cache',
+        ),
+    },
+}
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Addis Ababa Property Marketplace API',
