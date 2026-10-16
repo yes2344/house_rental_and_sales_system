@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db import models
 
 
@@ -93,6 +94,11 @@ class SocialMediaLink(models.Model):
 class HomepageNote(models.Model):
     title = models.CharField(max_length=160, blank=True)
     text = models.TextField(max_length=2000)
+    image = models.ImageField(
+        upload_to='homepage-announcements/',
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'webp'])],
+    )
     is_published = models.BooleanField(default=False)
     display_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

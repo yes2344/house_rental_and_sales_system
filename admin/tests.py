@@ -1,5 +1,6 @@
 import re
 from io import BytesIO
+from io import BytesIO
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
@@ -7,6 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
+from PIL import Image
 from PIL import Image
 
 from accounts.models import Profile
@@ -366,6 +368,38 @@ class AdminApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([note['id'] for note in response.data['results']], [last.pk, first.pk])
         self.assertNotIn('unpublished announcement', str(response.data))
+
+    def test_published_homepage_note_can_include_an_image(self):
+        image_buffer = BytesIO()
+        Image.new('RGB', (3, 2), color='navy').save(image_buffer, format='PNG')
+        image_buffer.seek(0)
+        self.client.force_authenticate(user=self.admin_user)
+
+        with TemporaryDirectory() as media_root:
+            with override_settings(MEDIA_ROOT=media_root):
+                created = self.client.post(
+                    reverse('api:managed-homepage-note-list'),
+                    {
+                        'title': 'Service announcement',
+                        'text': 'Read the update and see the attached image.',
+                        'image': SimpleUploadedFile(
+                            'announcement.png',
+                            image_buffer.getvalue(),
+                            content_type='image/png',
+                        ),
+                        'is_published': 'true',
+                        'display_order': '0',
+                    },
+                    format='multipart',
+                )
+                public = self.client.get(reverse('api:homepage-note-list'))
+
+                self.assertEqual(created.status_code, 201)
+                self.assertIn('homepage-announcements/', created.data['image'])
+                self.assertEqual(public.status_code, 200)
+                self.assertEqual(public.data['results'][0]['title'], 'Service announcement')
+                self.assertEqual(public.data['results'][0]['text'], 'Read the update and see the attached image.')
+                self.assertEqual(public.data['results'][0]['image'], created.data['image'])
 
     def test_brokers_cannot_manage_platform_homepage_notes(self):
         note_url = reverse('api:managed-homepage-note-list')

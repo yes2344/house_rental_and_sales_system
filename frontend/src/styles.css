@@ -273,6 +273,14 @@ img { display: block; max-width: 100%; }
 .listing-empty p { margin: 15px 0 6px; color: var(--ink-soft); font-size: 13px; }
 .mobile-only { display: none; }
 
+.homepage-notes-section { padding: 36px 0; background: var(--cream); }
+.homepage-notes-grid { display: grid; gap: 14px; }
+.homepage-note-card { min-width: 0; padding: 18px; border: 1px solid var(--line); background: var(--paper); }
+.homepage-note-card h2 { margin: 0 0 9px; font-family: Manrope, 'Noto Sans Ethiopic', sans-serif; font-size: clamp(18px, 2.3vw, 24px); line-height: 1.35; }
+.homepage-note-body { min-width: 0; }
+.homepage-note-body p { margin: 0; color: var(--ink-soft); font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.homepage-note-image { width: 100%; max-height: 440px; margin-top: 14px; object-fit: contain; object-position: left center; }
+
 .category-section { padding: 48px 0; background: #f2f3ed; }
 .category-heading { margin-bottom: 22px; }
 .category-heading .section-description { margin-top: 7px; }
@@ -1555,6 +1563,17 @@ img { display: block; max-width: 100%; }
 .public-page-editor-card { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); background: var(--paper); }
 .public-page-editor-card h3 { margin: 0; color: var(--ink); font-family: Manrope, 'Noto Sans Ethiopic', sans-serif; font-size: 15px; }
 .public-page-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.homepage-note-form { display: grid; gap: 14px; }
+.homepage-note-form .manager-field textarea { min-height: 110px; }
+.homepage-note-image-field > small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.homepage-note-manager-image { width: min(100%, 360px); max-height: 220px; object-fit: contain; object-position: left center; }
+.homepage-note-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.homepage-note-controls .manager-field { width: min(180px, 100%); }
+.homepage-note-list { display: grid; gap: 10px; margin-top: 20px; }
+.homepage-note-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid var(--line); background: var(--paper); }
+.homepage-note-row p { margin: 5px 0 8px; color: var(--ink-soft); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.homepage-note-row .manager-row-actions { flex: 0 0 auto; }
+.homepage-note-row .manager-badge { display: inline-flex; }
 .public-page-editor-fields .manager-field:nth-child(n + 3) { grid-column: 1 / -1; }
 .floating-contact-links { position: fixed; z-index: 18; top: 50%; right: 20px; display: grid; gap: 10px; transform: translateY(-50%); }
 .floating-contact-link { width: 48px; height: 48px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 5px 18px rgb(12 38 62 / 25%); color: #fff; transition: transform .18s ease, box-shadow .18s ease; }
@@ -1577,6 +1596,11 @@ img { display: block; max-width: 100%; }
 @media (max-width: 740px) {
   .floating-contact-links { top: 50%; right: 12px; gap: 8px; }
   .floating-contact-link { width: 43px; height: 43px; }
+  .homepage-notes-section { padding: 24px 0; }
+  .homepage-note-card { padding: 14px; }
+  .homepage-note-body p { font-size: 13px; }
+  .homepage-note-row { flex-direction: column; }
+  .homepage-note-row .manager-row-actions { flex-wrap: wrap; }
   .public-page-editor-fields { grid-template-columns: 1fr; }
   .public-page-editor-fields .manager-field { grid-column: 1 / -1; }
   .public-info-page { padding-bottom: 36px; }

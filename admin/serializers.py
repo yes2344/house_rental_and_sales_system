@@ -224,15 +224,22 @@ class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
 
 
 class HomepageNoteSerializer(serializers.ModelSerializer):
+    MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+
     class Meta:
         model = HomepageNote
-        fields = ['id', 'title', 'text', 'is_published', 'display_order', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'text', 'image', 'is_published', 'display_order', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate_text(self, value):
         value = value.strip()
         if not value:
             raise serializers.ValidationError('Enter note text.')
+        return value
+
+    def validate_image(self, value):
+        if value.size > self.MAX_IMAGE_SIZE_BYTES:
+            raise serializers.ValidationError('Image files must be 10 MB or smaller.')
         return value
 
 

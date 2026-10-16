@@ -70,6 +70,7 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
   const [notesError, setNotesError] = useState('');
   const [noteForm, setNoteForm] = useState<HomepageNotePayload>(blankNote);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingNoteImage, setEditingNoteImage] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteSaveError, setNoteSaveError] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
@@ -161,6 +162,7 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
       else await updateHomepageNote(editingNoteId, noteForm);
       setNoteForm(blankNote);
       setEditingNoteId(null);
+      setEditingNoteImage('');
       setNoteSaved(true);
       await Promise.all([loadNotes(), refreshHomepageContent()]);
     } catch (requestError: unknown) {
@@ -178,6 +180,7 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
       is_published: note.is_published,
       display_order: note.display_order,
     });
+    setEditingNoteImage(note.image ?? '');
     setNoteSaveError('');
     setNoteSaved(false);
   };
@@ -200,6 +203,7 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
       if (editingNoteId === note.id) {
         setEditingNoteId(null);
         setNoteForm(blankNote);
+        setEditingNoteImage('');
       }
       await Promise.all([loadNotes(), refreshHomepageContent()]);
     } catch (requestError: unknown) {
@@ -344,6 +348,25 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
                 onChange={(event) => setNoteForm((current) => ({ ...current, text: event.target.value }))}
               />
             </label>
+            <label className="manager-field homepage-note-image-field">
+              <span>{text('homepageNoteImage')}</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => {
+                  const image = event.target.files?.[0];
+                  if (image) {
+                    setEditingNoteImage('');
+                    setNoteForm((current) => ({ ...current, image }));
+                  }
+                }}
+              />
+              <small>{text('homepageNoteImageHint')}</small>
+              {editingNoteImage && (
+                <img className="homepage-note-manager-image" src={editingNoteImage} alt="" />
+              )}
+              {noteForm.image && <small>{noteForm.image.name}</small>}
+            </label>
             <div className="homepage-note-controls">
               <label className="manager-field">
                 <span>{text('socialLinkOrder')}</span>
@@ -371,7 +394,11 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
                 {noteSaving ? text('savingHomepageNote') : text(editingNoteId === null ? 'addHomepageNote' : 'saveHomepageNote')}
               </button>
               {editingNoteId !== null && (
-                <button className="button button-outline" type="button" onClick={() => { setEditingNoteId(null); setNoteForm(blankNote); }}>
+                <button className="button button-outline" type="button" onClick={() => {
+                  setEditingNoteId(null);
+                  setNoteForm(blankNote);
+                  setEditingNoteImage('');
+                }}>
                   {text('cancel')}
                 </button>
               )}

@@ -527,6 +527,32 @@ export function HomePage({ locale, text }: HomePageProps) {
         </div>
       </section>
 
+      {notes.length > 0 && (
+        <section className="section homepage-notes-section">
+          <div className="container">
+            <div className="homepage-notes-grid">
+              {notes.map((note) => (
+                <article className="homepage-note-card" key={note.id}>
+                  {note.title && <h2>{note.title}</h2>}
+                  <div className="homepage-note-body">
+                    <p>{note.text}</p>
+                    {note.image && (
+                      <img
+                        className="homepage-note-image"
+                        src={note.image}
+                        alt={note.title}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="section category-section" aria-labelledby="category-section-title">
         <div className="container">
           <div className="section-heading category-heading">
@@ -596,24 +622,6 @@ export function HomePage({ locale, text }: HomePageProps) {
           )}
         </div>
       </section>
-
-      {notes.length > 0 && (
-        <section className="section homepage-notes-section" aria-labelledby="homepage-notes-title">
-          <div className="container">
-            <div className="section-heading">
-              <div><h2 id="homepage-notes-title">{text('homepageNotesTitle')}</h2></div>
-            </div>
-            <div className="homepage-notes-grid">
-              {notes.map((note) => (
-                <article className="homepage-note-card" key={note.id}>
-                  {note.title && <h3>{note.title}</h3>}
-                  <p>{note.text}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
 
       {contact.social_links.some((link) => link.is_enabled && link.url) && (
         <section className="homepage-social-section" aria-label={text('brokerSocialLinks')}>
