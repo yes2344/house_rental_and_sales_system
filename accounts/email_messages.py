@@ -10,6 +10,8 @@ from django.core.mail import send_mail
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
+from accounts.email_backend import BrevoEmailDeliveryError
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,10 @@ def _deliver(subject, body, recipient):
             fail_silently=False,
         )
     except (OSError, smtplib.SMTPException) as exc:
-        logger.warning('Account email delivery failed (%s).', type(exc).__name__)
+        if isinstance(exc, BrevoEmailDeliveryError):
+            logger.warning('Account email delivery failed: %s', exc)
+        else:
+            logger.warning('Account email delivery failed (%s).', type(exc).__name__)
         raise AccountEmailDeliveryError('Account email delivery failed.') from exc
     if sent_count != 1:
         logger.warning('Account email delivery did not accept a message.')

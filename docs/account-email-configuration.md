@@ -8,24 +8,23 @@ With `DJANGO_DEBUG=True`, Django uses its console email backend by default. Regi
 
 ## Production
 
-Set these environment variables on the backend deployment. Use the SMTP credentials supplied by the mail provider; do not commit them or put them in `.env.example`.
+Render's free web services block outbound traffic on SMTP ports 25, 465, and 587. Use Brevo's HTTPS transactional email API instead of Gmail SMTP. Create a Brevo account, generate an API key, and add a sender address in Brevo's sender settings; the sender must be verified before Brevo will accept messages.
 
 ```dotenv
 PUBLIC_FRONTEND_URL=https://your-frontend.example
-DEFAULT_FROM_EMAIL=Habasha Property Center <no-reply@your-domain.example>
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.your-provider.example
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_USE_SSL=False
-EMAIL_HOST_USER=
-EMAIL_HOST_PASSWORD=
+DEFAULT_FROM_EMAIL=Habasha Property Center <verified-sender@example.com>
+EMAIL_BACKEND=accounts.email_backend.BrevoEmailBackend
+BREVO_API_KEY=
 EMAIL_TIMEOUT_SECONDS=10
 EMAIL_VERIFICATION_TIMEOUT_SECONDS=86400
 PASSWORD_RESET_TIMEOUT_SECONDS=86400
 ```
 
-Use the frontend's HTTPS origin with no path, query, or fragment. Email links are rejected unless the configured public origin is HTTPS outside debug mode. Configure sender-domain DNS and provider authorization separately, then send a real verification and reset message to a controlled mailbox before announcing the service. SMTP provider delivery is not proven by local tests.
+In Render, open the backend service's **Environment** settings and set `BREVO_API_KEY` to the secret API key from Brevo. Set `DEFAULT_FROM_EMAIL` to the sender address verified in Brevo, optionally with a display name. Do not commit the API key or paste it into chat. The Render Blueprint sets `EMAIL_BACKEND` to the Brevo backend and `PUBLIC_FRONTEND_URL` to the deployed frontend origin.
+
+Use the frontend's HTTPS origin with no path, query, or fragment. Email links are rejected unless the configured public origin is HTTPS outside debug mode. The backend sends transactional messages to Brevo over HTTPS (port 443), avoiding Render's SMTP egress restriction. After setting the key and verified sender, redeploy and send real verification and reset messages to controlled mailboxes. Local tests mock the provider API; they do not prove external delivery.
+
+For deployments that are not subject to Render's SMTP egress restriction, Django's standard SMTP backend can still be selected with the appropriate provider-specific settings.
 
 Email verification, resend, and password-reset request endpoints are rate-limited. Reset-request responses intentionally do not disclose whether an account exists. The frontend links are `/verify-email`, `/forgot-password`, and `/reset-password`.
 

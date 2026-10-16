@@ -1,9 +1,13 @@
 from datetime import timedelta
+import json
+from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.core import mail
 from django.core.cache import cache
+from django.core import mail
+from django.core.mail import EmailMessage
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -297,6 +301,99 @@ class AccountApiTests(APITestCase):
         self.assertFalse(user.profile.broker_approved)
         self.assertEqual(response.data['role'], Profile.Role.CUSTOMER)
         self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(
+        EMAIL_BACKEND='accounts.email_backend.BrevoEmailBackend',
+        BREVO_API_KEY='test-brevo-key',
+        DEFAULT_FROM_EMAIL='Habasha Property Center <verified@example.com>',
+        EMAIL_TIMEOUT=7,
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_registration_sends_verification_email_through_brevo_https_api(self):
+        api_response = MagicMock()
+        api_response.status = 201
+        api_response.__enter__.return_value = api_response
+
+        with patch('accounts.email_backend.urlopen', return_value=api_response) as send_request:
+            response = self.client.post(
+                reverse('api:register'),
+                {
+                    'username': 'brevo-customer',
+                    'email': 'brevo-customer@example.com',
+                    'password': 'Evergreen!Place42',
+                },
+                format='json',
+            )
+
+        self.assertEqual(response.status_code, 201)
+        request = send_request.call_args.args[0]
+        payload = json.loads(request.data)
+        self.assertEqual(request.full_url, 'https://api.brevo.com/v3/smtp/email')
+        self.assertEqual(request.get_header('Api-key'), 'test-brevo-key')
+        self.assertEqual(payload['sender'], {
+            'email': 'verified@example.com',
+            'name': 'Habasha Property Center',
+        })
+        self.assertEqual(payload['to'], [{'email': 'brevo-customer@example.com'}])
+        self.assertIn('https://frontend.example/verify-email?', payload['textContent'])
+        self.assertEqual(send_request.call_args.kwargs['timeout'], 7)
+
+    @override_settings(
+        EMAIL_BACKEND='accounts.email_backend.BrevoEmailBackend',
+        BREVO_API_KEY='test-brevo-key',
+        DEFAULT_FROM_EMAIL='verified@example.com',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_registration_rolls_back_when_brevo_rejects_email(self):
+        response_error = HTTPError(
+            'https://api.brevo.com/v3/smtp/email',
+            401,
+            'Unauthorized',
+            {},
+            None,
+        )
+
+        with patch('accounts.email_backend.urlopen', side_effect=response_error):
+            response = self.client.post(
+                reverse('api:register'),
+                {
+                    'username': 'brevo-rejected-customer',
+                    'email': 'brevo-rejected@example.com',
+                    'password': 'Evergreen!Place42',
+                },
+                format='json',
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(
+            get_user_model().objects.filter(username='brevo-rejected-customer').exists()
+        )
+        self.assertFalse(EmailVerificationToken.objects.exists())
+
+    @override_settings(BREVO_API_KEY='test-brevo-key')
+    def test_brevo_email_backend_reports_provider_http_status_without_leaking_key(self):
+        from accounts.email_backend import BrevoEmailBackend, BrevoEmailDeliveryError
+
+        message = EmailMessage(
+            subject='Test',
+            body='Test message.',
+            from_email='verified@example.com',
+            to=['recipient@example.com'],
+        )
+        response_error = HTTPError(
+            'https://api.brevo.com/v3/smtp/email',
+            401,
+            'Unauthorized',
+            {},
+            None,
+        )
+
+        with patch('accounts.email_backend.urlopen', side_effect=response_error):
+            with self.assertRaisesMessage(
+                BrevoEmailDeliveryError,
+                'Brevo email API returned HTTP 401.',
+            ):
+                BrevoEmailBackend().send_messages([message])
 
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
     def test_registration_rejects_external_return_paths(self):
