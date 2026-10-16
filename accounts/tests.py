@@ -405,6 +405,51 @@ class AccountApiTests(APITestCase):
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         PUBLIC_FRONTEND_URL='https://frontend.example',
     )
+    def test_expired_verification_link_can_be_resent_and_replaced(self):
+        self.client.post(
+            reverse('api:register'),
+            {
+                'username': 'resend-verification-customer',
+                'email': 'resend-verification@example.com',
+                'password': 'Evergreen!Place42',
+            },
+            format='json',
+        )
+        user = get_user_model().objects.get(username='resend-verification-customer')
+        old_link = self._last_email_query('/verify-email')
+        EmailVerificationToken.objects.filter(user=user).update(
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+
+        resent = self.client.post(
+            reverse('api:resend-verification-email'),
+            {'email': user.email},
+            format='json',
+        )
+
+        self.assertEqual(resent.status_code, 202)
+        self.assertEqual(len(mail.outbox), 2)
+        new_link = self._last_email_query('/verify-email')
+        rejected_old_link = self.client.post(
+            reverse('api:verify-email'),
+            old_link,
+            format='json',
+        )
+        accepted_new_link = self.client.post(
+            reverse('api:verify-email'),
+            new_link,
+            format='json',
+        )
+
+        self.assertEqual(rejected_old_link.status_code, 400)
+        self.assertEqual(accepted_new_link.status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
     def test_resend_does_not_reactivate_preexisting_inactive_accounts(self):
         customer = get_user_model().objects.create_user(
             username='deactivated-customer',

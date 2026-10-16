@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ArrowRight, MailCheck } from 'lucide-react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
@@ -29,23 +29,22 @@ export function VerifyEmailPage({ text }: VerifyEmailPageProps) {
   const token = searchParams.get('token');
   const next = getSafeNextPath(searchParams.get('next') ?? state?.next);
   const [email, setEmail] = useState(state?.email ?? '');
-  const [status, setStatus] = useState(uid && token ? 'verifying' : 'ready');
+  const [status, setStatus] = useState(uid && token ? 'confirm' : 'ready');
   const [message, setMessage] = useState('');
-  const verificationStarted = useRef(false);
 
-  useEffect(() => {
-    if (!uid || !token || verificationStarted.current) return;
-    verificationStarted.current = true;
-    void verifyEmail({ uid, token })
-      .then(() => {
-        setStatus('verified');
-        setMessage(text('emailVerificationSuccess'));
-      })
-      .catch((error: unknown) => {
-        setStatus('invalid');
-        setMessage(getErrorMessage(error));
-      });
-  }, [uid, token, text]);
+  const verify = async () => {
+    if (!uid || !token) return;
+    setStatus('verifying');
+    setMessage('');
+    try {
+      await verifyEmail({ uid, token });
+      setStatus('verified');
+      setMessage(text('emailVerificationSuccess'));
+    } catch (error: unknown) {
+      setStatus('invalid');
+      setMessage(getErrorMessage(error));
+    }
+  };
 
   const resend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -71,7 +70,11 @@ export function VerifyEmailPage({ text }: VerifyEmailPageProps) {
           {text(status === 'verified'
             ? 'emailVerifiedIntro'
             : uid && token
-              ? status === 'verifying' ? 'emailVerifying' : 'emailVerificationFailed'
+              ? status === 'verifying'
+                ? 'emailVerifying'
+                : status === 'invalid'
+                  ? 'emailVerificationFailed'
+                  : 'emailVerificationConfirmIntro'
               : 'verificationEmailSentIntro')}
         </p>
         {message && (
@@ -83,6 +86,21 @@ export function VerifyEmailPage({ text }: VerifyEmailPageProps) {
           <Link className="button button-primary" to="/login" state={{ from: next }}>
             {text('continueToSignIn')}<ArrowRight size={16} aria-hidden="true" />
           </Link>
+        ) : uid && token && status !== 'invalid' && status !== 'sent' ? (
+          <div className="auth-form">
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={() => void verify()}
+              disabled={status === 'verifying'}
+            >
+              {text(status === 'verifying' ? 'emailVerifying' : 'confirmEmailIsMine')}
+              <ArrowRight size={16} aria-hidden="true" />
+            </button>
+            <Link className="button button-outline" to="/">
+              {text('emailNotMine')}
+            </Link>
+          </div>
         ) : (
           <form className="auth-form" onSubmit={resend}>
             <label htmlFor="verification-email">{text('emailAddress')}
