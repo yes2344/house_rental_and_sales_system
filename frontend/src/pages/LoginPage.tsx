@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { ArrowRight, KeyRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, KeyRound } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
@@ -14,6 +14,32 @@ interface LoginLocationState {
   registered?: boolean;
   invitationAccepted?: boolean;
   username?: string;
+  from?: string | { pathname?: string; search?: string; hash?: string };
+}
+
+function getSafeRedirectTarget(from: unknown): string {
+  if (typeof from === 'string') {
+    return from.startsWith('/')
+      && !from.startsWith('//')
+      && !from.includes('\\')
+      && !/[\u0000-\u001f]/.test(from)
+      ? from
+      : '/';
+  }
+  if (from && typeof from === 'object') {
+    const candidate = from as { pathname?: string; search?: string; hash?: string };
+    if (
+      candidate.pathname?.startsWith('/')
+      && !candidate.pathname.startsWith('//')
+      && !candidate.pathname.includes('\\')
+      && !/[\u0000-\u001f]/.test(candidate.pathname)
+    ) {
+      return getSafeRedirectTarget(
+        `${candidate.pathname}${candidate.search ?? ''}${candidate.hash ?? ''}`,
+      );
+    }
+  }
+  return '/';
 }
 
 export function LoginPage({ text }: LoginPageProps) {
@@ -32,10 +58,8 @@ export function LoginPage({ text }: LoginPageProps) {
     setError('');
     try {
       const signedInAccount = await signIn(username.trim(), password);
-      navigate(
-        signedInAccount.broker_onboarding_required ? '/broker-onboarding' : '/',
-        { replace: true },
-      );
+      const destination = signedInAccount.broker_onboarding_required ? '/broker-onboarding' : getSafeRedirectTarget(state?.from);
+      navigate(destination, { replace: true });
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -43,24 +67,27 @@ export function LoginPage({ text }: LoginPageProps) {
     }
   };
 
-  if (!authLoading && account) return <Navigate to="/" replace />;
+  if (!authLoading && account) return <Navigate to={getSafeRedirectTarget(state?.from)} replace />;
 
   return (
     <main id="main-content" className="auth-page">
       <section className="auth-card">
+        <Link className="auth-back-home" to="/" aria-label={text('backHome')}>
+          <ArrowLeft size={19} aria-hidden="true" />
+        </Link>
         <span className="auth-icon"><KeyRound size={22} aria-hidden="true" /></span>
         <p className="eyebrow eyebrow-muted">{text('accountEyebrow')}</p>
-        <h1>{text('signIn')}</h1>
+        <h1>{text('loginHeading')}</h1>
         <p className="auth-intro">{text('loginIntro')}</p>
-        {state?.registered && <p className="auth-success" role="status">{text('registrationSuccess')}</p>}
         {state?.invitationAccepted && <p className="auth-success" role="status">{text('invitationAccepted')}</p>}
         {authError && <p className="auth-form-error" role="alert">{text('accountStatusError')} {authError}</p>}
         {error && <p className="auth-form-error" role="alert">{error}</p>}
         <form className="auth-form" onSubmit={submit}>
-          <label htmlFor="login-username">{text('username')}
+          <label htmlFor="login-username">{text('loginIdentifier')}
             <input
               id="login-username"
-              name="username"
+              name="identifier"
+              type="text"
               autoComplete="username"
               required
               value={username}
@@ -78,13 +105,13 @@ export function LoginPage({ text }: LoginPageProps) {
               onChange={(event) => setPassword(event.target.value)}
             />
           </label>
-          <p className="auth-helper">{text('usernameLoginHint')}</p>
+          <Link className="auth-recovery-link" to="/forgot-password">{text('forgotPassword')}</Link>
           <button className="button button-primary" type="submit" disabled={submitting || authLoading}>
             {submitting ? text('signingIn') : text('signIn')}<ArrowRight size={16} aria-hidden="true" />
           </button>
         </form>
         <p className="auth-switch">
-          {text('noAccount')} <Link to="/register">{text('createAccount')}</Link>
+          {text('noAccount')} <Link to="/register" state={{ from: state?.from }}>{text('signUp')}</Link>
         </p>
       </section>
     </main>

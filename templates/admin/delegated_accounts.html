@@ -5,15 +5,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
-    <title>Delegated account access | Addis Ababa Homes</title>
+    <title>Delegated account access | Habasha Property Center</title>
     <link rel="stylesheet" href="{% static 'portal.css' %}" />
   </head>
   <body>
     <header>
       <div class="container navbar">
         <div class="header-left">
-          <a class="header-back" href="{% if is_platform_owner %}/admin-portal/{% else %}/admin-portal/delegated-accounts/{% endif %}" aria-label="{% if is_platform_owner %}Back to dashboard{% else %}Broker accounts{% endif %}">←</a>
-          <div class="brand"><span class="brand-mark">D</span> Addis Ababa Admin</div>
+          <a class="header-back" href="{% if is_platform_owner %}/admin-portal/{% else %}/admin-portal/delegated-accounts/{% endif %}" aria-label="{% if is_platform_owner %}Back to dashboard{% else %}Agent accounts{% endif %}">←</a>
+          <div class="brand"><span class="brand-mark">H</span> Habasha Property Center · Admin</div>
         </div>
         <nav class="nav-links">
           {% if is_platform_owner %}
@@ -41,19 +41,19 @@
 
       <div class="layout-2" style="margin-top: 28px;">
         <section class="panel">
-          <h2>Create a broker account</h2>
-          <p>The broker must change the initial password and complete their profile before broker tools are enabled.</p>
+          <h2>Create an agent account</h2>
+          <p>The agent must change the initial password and complete their profile before agent tools are enabled.</p>
           <form method="post">
             {% csrf_token %}
             {{ create_form.as_p }}
-            <button class="btn btn-primary" type="submit">Create broker account</button>
+            <button class="btn btn-primary" type="submit">Create agent account</button>
           </form>
         </section>
 
         {% if selected_profile and edit_form %}
           <section class="panel">
             <h2>Update {{ selected_profile.user.username }}</h2>
-            <p>Update broker details, optionally reset their temporary password, or deactivate access.</p>
+            <p>Update agent details, optionally reset their temporary password, or deactivate access.</p>
             <form method="post">
               {% csrf_token %}
               <input type="hidden" name="account_id" value="{{ selected_profile.user_id }}" />
@@ -81,7 +81,7 @@
                   <td>{% if profile.broker_onboarding_required %}Profile setup required{% else %}Profile complete{% endif %}</td>
                   <td>
                     <a href="?account_id={{ profile.user_id }}">Edit</a>
-                    <form method="post" style="display:inline" onsubmit="return confirm('Permanently delete this broker account?');">
+                    <form method="post" style="display:inline" onsubmit="return confirm('Permanently delete this agent account?');">
                       {% csrf_token %}
                       <input type="hidden" name="delete_account_id" value="{{ profile.user_id }}" />
                       <button type="submit">Delete</button>
@@ -89,7 +89,7 @@
                   </td>
                 </tr>
               {% empty %}
-                <tr><td colspan="6">No broker accounts have been created.</td></tr>
+                <tr><td colspan="6">No agent accounts have been created.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -97,6 +97,6 @@
       </section>
     </main>
 
-    <footer><div class="container">Addis Ababa Homes · {% if is_platform_owner %}Owner-controlled access{% else %}Broker account management{% endif %}</div></footer>
+    <footer><div class="container">Habasha Property Center · {% if is_platform_owner %}Owner-controlled access{% else %}Agent account management{% endif %}</div></footer>
   </body>
 </html>

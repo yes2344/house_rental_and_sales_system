@@ -12,6 +12,7 @@ export const socialPlatformNames: Record<SocialPlatform, string> = {
   tiktok: 'TikTok',
   youtube: 'YouTube',
   linkedin: 'LinkedIn',
+  x: 'X',
 };
 
 export function SocialMark({ platform }: SocialMarkProps) {
@@ -32,6 +33,9 @@ export function SocialMark({ platform }: SocialMarkProps) {
   }
   if (platform === 'linkedin') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.2 8.6a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6ZM3.7 10h3v9h-3v-9Zm4.9 0h2.9v1.2h.1a3.2 3.2 0 0 1 2.9-1.5c3.1 0 3.7 2 3.7 4.6V19h-3v-4.2c0-1 0-2.4-1.5-2.4s-1.8 1.1-1.8 2.3V19h-3v-9Z" fill="currentColor" /></svg>;
+  }
+  if (platform === 'x') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3L12 14.7 5.6 22H2.4l7.3-8.4L1.8 2h6.5l4.5 6.7L18.9 2Zm-1.1 17.8h1.7L7.3 4.1H5.5l12.3 15.7Z" fill="currentColor" /></svg>;
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.3 3v11.1a3.5 3.5 0 1 1-2.8-3.4V7.8a6.3 6.3 0 1 0 5.7 6.3V8.6a8.4 8.4 0 0 0 4.1 1.1V6.8A5.5 5.5 0 0 1 16 5.4 5.5 5.5 0 0 1 14.4 3h-1.1Z" fill="currentColor" /></svg>;
 }

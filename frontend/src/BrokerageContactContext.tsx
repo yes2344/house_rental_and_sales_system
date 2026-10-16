@@ -70,7 +70,7 @@ export function BrokerageContactProvider({ children }: { children: ReactNode }) 
   }, []);
 
   useEffect(() => {
-    document.title = contact.site_name || 'habeshahome';
+    document.title = contact.site_name || 'Habasha Property Center';
   }, [contact.site_name]);
 
   const save = useCallback(async (updates: Partial<BrokerageContact>) => {

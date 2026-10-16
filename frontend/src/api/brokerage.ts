@@ -7,7 +7,8 @@ export type SocialPlatform =
   | 'instagram'
   | 'tiktok'
   | 'youtube'
-  | 'linkedin';
+  | 'linkedin'
+  | 'x';
 
 export interface BrokerageSocialLink {
   platform: SocialPlatform;
@@ -18,6 +19,7 @@ export interface BrokerageSocialLink {
 
 export interface BrokerageContact {
   site_name: string;
+  footer_copyright: string;
   site_logo: string | null;
   homepage_hero_image: string | null;
   business_name: string;
@@ -27,7 +29,8 @@ export interface BrokerageContact {
 }
 
 export const emptyBrokerageContact: BrokerageContact = {
-  site_name: 'habeshahome',
+  site_name: 'Habasha Property Center',
+  footer_copyright: '',
   site_logo: '',
   homepage_hero_image: '',
   business_name: '',
@@ -42,7 +45,7 @@ export async function getBrokerageContact(signal?: AbortSignal): Promise<Brokera
 }
 
 export async function updateBrokerageContact(
-  updates: Partial<Pick<BrokerageContact, 'business_name' | 'phone' | 'email' | 'social_links'>>,
+  updates: Partial<Pick<BrokerageContact, 'business_name' | 'phone' | 'email' | 'social_links' | 'footer_copyright'>>,
 ): Promise<BrokerageContact> {
   const response = await apiClient.patch<BrokerageContact>('/brokerage/contact/', updates);
   return response.data;

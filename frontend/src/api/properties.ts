@@ -34,6 +34,24 @@ export type PropertyType =
   | 'house' | 'villa' | 'apartment' | 'condominium' | 'land'
   | 'office' | 'shop' | 'warehouse' | 'commercial' | 'other';
 
+export interface PropertyTypeOption {
+  value: PropertyType;
+  label: string;
+}
+
+export function getUniquePropertyTypeOptions(options: PropertyTypeOption[]): PropertyTypeOption[] {
+  const unique = new Map<PropertyType, PropertyTypeOption>();
+  for (const option of options) {
+    if (!unique.has(option.value)) unique.set(option.value, option);
+  }
+  return [...unique.values()];
+}
+
+export async function getPropertyTypeOptions(signal?: AbortSignal): Promise<PropertyTypeOption[]> {
+  const response = await apiClient.get<PropertyTypeOption[]>('/property-types/', { signal });
+  return response.data;
+}
+
 export interface PropertySummary {
   id: number;
   title: string;
@@ -41,11 +59,13 @@ export interface PropertySummary {
   location: string;
   administrative_location: number | null;
   location_path: PropertyLocationPathItem[];
-  category: string;
+  category: PropertyType;
   listing_type: ListingType;
   rental_frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
   price: string;
   currency: 'ETB';
+  area_value: string | null;
+  area_unit: 'sqm' | 'sqft' | '';
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;
@@ -68,8 +88,8 @@ export interface PropertyDetail extends PropertySummary {
 
 export interface PropertyFilters {
   search?: string;
-  listing_type?: ListingType;
-  property_type?: PropertyType;
+  listing_type?: string;
+  property_type?: string;
   location?: string;
   location_id?: number;
   city_id?: number;

@@ -21,7 +21,7 @@ from accounts.serializers import (
     DelegatedAccountSerializer,
 )
 from admin.audit import record_admin_action
-from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote
+from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, PublicInformationPage
 from admin.serializers import (
     AdminAuditEventSerializer,
     AdminBrokerAssignmentSerializer,
@@ -30,6 +30,7 @@ from admin.serializers import (
     AdminUserSerializer,
     BrokerageSettingsSerializer,
     HomepageNoteSerializer,
+    PublicInformationPageSerializer,
     PublicBrokerageSettingsSerializer,
     PublicListingReportSerializer,
     PublicReportReceiptSerializer,
@@ -54,7 +55,7 @@ class BrokerageSettingsView(APIView):
         except BrokerageSettings.DoesNotExist:
             return BrokerageSettings(pk=1)
 
-    @extend_schema(summary='Retrieve public site branding, brokerage contact, and social links')
+    @extend_schema(summary='Retrieve public site branding, agent contact, and social links')
     def get(self, request):
         serializer_class = (
             BrokerageSettingsSerializer
@@ -65,7 +66,7 @@ class BrokerageSettingsView(APIView):
 
     @transaction.atomic
     @extend_schema(
-        summary='Update site branding or authorized brokerage contact and social links',
+        summary='Update site branding or authorized Habasha Property Center contact and social links',
         request=BrokerageSettingsSerializer,
         responses={200: BrokerageSettingsSerializer},
     )
@@ -167,6 +168,43 @@ class ManagedHomepageNoteDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
         instance.delete()
 
+
+class PublicInformationPageDetailView(generics.RetrieveAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PublicInformationPageSerializer
+    queryset = PublicInformationPage.objects.all()
+    lookup_field = 'page'
+    lookup_url_kwarg = 'page'
+
+
+class ManagedPublicInformationPageListView(generics.ListAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    serializer_class = PublicInformationPageSerializer
+    queryset = PublicInformationPage.objects.all()
+
+
+class ManagedPublicInformationPageDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.SETTINGS_MANAGE
+    serializer_class = PublicInformationPageSerializer
+    queryset = PublicInformationPage.objects.all()
+    lookup_field = 'page'
+    lookup_url_kwarg = 'page'
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        page = serializer.save()
+        record_admin_action(
+            self.request.user,
+            action='public_information_page_updated',
+            object_type='public_information_page',
+            object_id=page.page,
+            changes={'fields': list(serializer.validated_data)},
+        )
+
+
 class AdminUserListView(generics.ListAPIView):
     permission_classes = [HasManagementPermission]
     required_management_permission = Profile.Permission.USERS_MANAGE
@@ -242,7 +280,7 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
                 changes=changes,
             )
 
-    @extend_schema(summary='View or update a customer, owner, or broker account')
+    @extend_schema(    summary='View or update a customer, owner, or agent account')
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
 

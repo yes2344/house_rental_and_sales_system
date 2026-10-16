@@ -17,7 +17,7 @@ from accounts.models import Profile
 from admin.audit import record_admin_action
 from properties.access import editable_properties, managed_properties, public_properties
 from properties.access import broker_city_location_ids
-from properties.filters import PublicPropertyFilter
+from properties.filters import PublicPropertyFilter, PublicPropertyOrderingFilter
 from properties.location_search import matching_location_ids
 from properties.models import Amenity, Location, Property, PropertyImage
 from properties.search import BilingualPropertySearchFilter
@@ -28,6 +28,7 @@ from properties.serializers import (
     PublicPropertyDetailSerializer,
     PublicPropertyListSerializer,
     LocationSerializer,
+    PropertyTypeOptionSerializer,
 )
 
 
@@ -42,6 +43,19 @@ class PublicAmenityListView(generics.ListAPIView):
     @extend_schema(summary='List amenities available for property listings')
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
+
+
+class PublicPropertyTypeListView(generics.GenericAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = PropertyTypeOptionSerializer
+
+    @extend_schema(summary='List property types available for marketplace listings')
+    def get(self, request, *args, **kwargs):
+        data = [
+            {'value': value, 'label': label}
+            for value, label in Property.PROPERTY_TYPES
+        ]
+        return Response(self.get_serializer(data, many=True).data)
 
 
 class PublicLocationListView(generics.ListAPIView):
@@ -202,7 +216,7 @@ class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
             })
         if Profile.objects.filter(assigned_city=instance).exists():
             raise ValidationError({
-                'detail': 'This city is assigned to brokers. Reassign those brokers before deleting it.',
+                'detail': 'This city is assigned to agents. Reassign those agents before deleting it.',
             })
         record_admin_action(
             self.request.user,
@@ -221,9 +235,8 @@ class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
 class PublicPropertyListView(generics.ListAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublicPropertyListSerializer
-    filter_backends = [DjangoFilterBackend, BilingualPropertySearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, BilingualPropertySearchFilter, PublicPropertyOrderingFilter]
     filterset_class = PublicPropertyFilter
-    ordering_fields = ['created_at', 'price', 'bedrooms', 'bathrooms', 'area_sqft']
     ordering = ['-created_at']
 
     def get_queryset(self):
@@ -254,7 +267,10 @@ class PublicPropertyListView(generics.ListAPIView):
         description=(
             'Search with `search`; filter by `listing_type`, `property_type`, `status`, '
             '`min_price`, `max_price`, bedroom/bathroom ranges, size ranges, and comma-separated '
-            'amenity slugs. Public results always exclude unpublished, rented, sold, and inactive listings.'
+            'amenity slugs. `ordering` accepts only `-created_at`, `created_at`, `-price`, or `price`. '
+            'Price sorting groups sale listings first, followed by daily, weekly, monthly, then yearly '
+            'rentals; numeric ETB prices are sorted within each group without converting rental periods. '
+            'Public results always exclude unpublished, rented, sold, and inactive listings.'
         ),
         responses=PublicPropertyListSerializer(many=True),
     )

@@ -13,10 +13,13 @@ from admin.api_views import (
     AdminUserDetailView,
     AdminUserListView,
     BrokerageSettingsView,
+    ManagedPublicInformationPageDetailView,
+    ManagedPublicInformationPageListView,
     ManagedHomepageNoteDetailView,
     ManagedHomepageNoteListCreateView,
     PublicListingReportCreateView,
     PublicHomepageNoteListView,
+    PublicInformationPageDetailView,
 )
 from accounts.api_views import (
     AccountPreferencesResetView,
@@ -27,9 +30,13 @@ from accounts.api_views import (
     BrokerFirstLoginProfileView,
     CsrfTokenView,
     DelegatedInvitationAcceptView,
+    EmailVerificationView,
     LoginView,
     LogoutView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
     RegistrationView,
+    ResendVerificationEmailView,
 )
 from favorites.views import FavoriteDeleteView, FavoriteListCreateView
 from properties.views import (
@@ -42,10 +49,20 @@ from properties.views import (
     ManagedPropertyPublicationView,
     PublicAmenityListView,
     PublicLocationListView,
+    PublicPropertyTypeListView,
     PublicPropertyDetailView,
     PublicPropertyListView,
 )
-from owner_announcements.api_views import InAppNotificationListView, InAppNotificationReadView
+from owner_announcements.api_views import (
+    InAppNotificationListView,
+    InAppNotificationReadView,
+    OwnerAnnouncementDecisionView,
+    OwnerAnnouncementReviewDetailView,
+    OwnerAnnouncementReviewListView,
+    OwnerSubmissionDetailView,
+    OwnerSubmissionImageListCreateView,
+    OwnerSubmissionListCreateView,
+)
 from viewings.views import (
     CustomerViewingRequestCancelView,
     CustomerViewingRequestDetailView,
@@ -62,10 +79,15 @@ app_name = 'api'
 
 urlpatterns = [
     path('homepage-notes/', PublicHomepageNoteListView.as_view(), name='homepage-note-list'),
+    path('public-pages/<slug:page>/', PublicInformationPageDetailView.as_view(), name='public-information-page'),
     path('brokerage/contact/', BrokerageSettingsView.as_view(), name='brokerage-contact'),
     path('reports/', PublicListingReportCreateView.as_view(), name='listing-report-create'),
     path('auth/csrf/', CsrfTokenView.as_view(), name='csrf-token'),
     path('auth/register/', RegistrationView.as_view(), name='register'),
+    path('auth/verify-email/', EmailVerificationView.as_view(), name='verify-email'),
+    path('auth/verify-email/resend/', ResendVerificationEmailView.as_view(), name='resend-verification-email'),
+    path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset-request'),
+    path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path('auth/invitations/accept/', DelegatedInvitationAcceptView.as_view(), name='invitation-accept'),
     path('auth/login/', LoginView.as_view(), name='login'),
     path('auth/broker-onboarding/password/', BrokerFirstLoginPasswordView.as_view(), name='broker-onboarding-password'),
@@ -79,10 +101,33 @@ urlpatterns = [
     path('favorites/<int:property_id>/', FavoriteDeleteView.as_view(), name='favorite-delete'),
     path('amenities/', PublicAmenityListView.as_view(), name='amenity-list'),
     path('locations/', PublicLocationListView.as_view(), name='location-list'),
+    path('property-types/', PublicPropertyTypeListView.as_view(), name='property-type-list'),
     path('management/locations/', ManagedLocationListCreateView.as_view(), name='managed-location-list'),
     path('management/locations/<int:pk>/', ManagedLocationDetailView.as_view(), name='managed-location-detail'),
     path('notifications/', InAppNotificationListView.as_view(), name='notification-list'),
     path('notifications/<int:pk>/read/', InAppNotificationReadView.as_view(), name='notification-read'),
+    path('submissions/', OwnerSubmissionListCreateView.as_view(), name='owner-submission-list'),
+    path('submissions/<int:pk>/', OwnerSubmissionDetailView.as_view(), name='owner-submission-detail'),
+    path(
+        'submissions/<int:submission_id>/images/',
+        OwnerSubmissionImageListCreateView.as_view(),
+        name='owner-submission-images',
+    ),
+    path(
+        'management/submissions/',
+        OwnerAnnouncementReviewListView.as_view(),
+        name='owner-submission-review-list',
+    ),
+    path(
+        'management/submissions/<int:pk>/',
+        OwnerAnnouncementReviewDetailView.as_view(),
+        name='owner-submission-review-detail',
+    ),
+    path(
+        'management/submissions/<int:pk>/decision/',
+        OwnerAnnouncementDecisionView.as_view(),
+        name='owner-submission-review-decision',
+    ),
     path('properties/', PublicPropertyListView.as_view(), name='property-list'),
     path('properties/<slug:slug>/', PublicPropertyDetailView.as_view(), name='property-detail'),
     path('viewing-requests/', PublicViewingRequestCreateView.as_view(), name='viewing-request-create'),
@@ -110,6 +155,8 @@ urlpatterns = [
     path('management/properties/', ManagedPropertyListCreateView.as_view(), name='managed-property-list'),
     path('management/homepage-notes/', ManagedHomepageNoteListCreateView.as_view(), name='managed-homepage-note-list'),
     path('management/homepage-notes/<int:pk>/', ManagedHomepageNoteDetailView.as_view(), name='managed-homepage-note-detail'),
+    path('management/public-pages/', ManagedPublicInformationPageListView.as_view(), name='managed-public-information-page-list'),
+    path('management/public-pages/<slug:page>/', ManagedPublicInformationPageDetailView.as_view(), name='managed-public-information-page-detail'),
     path('management/properties/<int:pk>/', ManagedPropertyDetailView.as_view(), name='managed-property-detail'),
     path(
         'management/properties/<int:pk>/publication/',

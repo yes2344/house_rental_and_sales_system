@@ -27,11 +27,14 @@ export function DashboardPage({ text }: DashboardPageProps) {
   const isAdministrator = account.role === 'administrator';
   const isBroker = account.role === 'broker';
   const canManageListings = isBroker && permissions.some((permission) => permission.startsWith('properties.'));
+  const canReviewSubmissions = isBroker && permissions.includes('announcements.review');
   const canManageRequests = isBroker && permissions.some((permission) => permission.startsWith('viewings.'));
   const canManageSubcities = isBroker && permissions.includes('locations.manage_subcities');
   const canManageBrokers = account.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account.role === 'administrator' && permissions.includes('locations.manage_cities');
   const canManageBranding = account.role === 'administrator' && permissions.includes('branding.manage');
+  const canManageSettings = account.is_platform_owner
+    || (isBroker && permissions.includes('settings.manage'));
 
   const entries: {
     href: string;
@@ -45,6 +48,8 @@ export function DashboardPage({ text }: DashboardPageProps) {
         { href: '/management/locations', title: text('locationManagementTitle'), icon: <MapPinned aria-hidden="true" /> },
       ] : []).concat(canManageBranding ? [
         { href: '/management/branding', title: text('siteBrandingTitle'), icon: <Paintbrush aria-hidden="true" /> },
+      ] : []).concat(canManageSettings ? [
+        { href: '/management/brokerage', title: text('brokerageSettingsTitle'), icon: <Paintbrush aria-hidden="true" /> },
       ] : [])
       : [
       { href: '/properties', title: text('explore'), icon: <Search aria-hidden="true" /> },
@@ -64,6 +69,13 @@ export function DashboardPage({ text }: DashboardPageProps) {
     entries.push({
       href: '/management/listings',
       title: text('managerListings'),
+      icon: <Building2 aria-hidden="true" />,
+    });
+  }
+  if (canReviewSubmissions) {
+    entries.push({
+      href: '/management/submissions',
+      title: text('submissionReviewTitle'),
       icon: <Building2 aria-hidden="true" />,
     });
   }

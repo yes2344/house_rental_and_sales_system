@@ -100,7 +100,7 @@ export async function createManagedBrokerAccount(
 export async function updateManagedBrokerAccount(
   id: number,
   payload: Partial<Pick<ManagedBrokerAccount, 'username' | 'email' | 'first_name' | 'last_name' | 'phone' | 'is_active' | 'assigned_city_id'>>
-    & { initial_password?: string },
+    & { initial_password?: string; management_permissions?: string[] },
 ): Promise<ManagedBrokerAccount> {
   const response = await apiClient.patch<ManagedBrokerAccount>(`/admin/delegated-accounts/${id}/`, payload);
   return response.data;

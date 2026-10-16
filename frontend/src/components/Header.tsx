@@ -1,10 +1,16 @@
-import { useState } from 'react';
-import { Mail, Menu, Phone, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, Mail, Menu, Phone, UserRound, X } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
 import { useBrokerageContact } from '../BrokerageContactContext';
 import { getErrorMessage } from '../api/client';
+import {
+  getPropertyTypeOptions,
+  getUniquePropertyTypeOptions,
+  type PropertyType,
+  type PropertyTypeOption,
+} from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
 import { SocialMark, socialPlatformNames } from './SocialMark';
 
@@ -15,16 +21,35 @@ interface HeaderProps {
   text: (key: MessageKey) => string;
 }
 
+type ListingMenu = 'rent' | 'buy';
+
+const propertyTypeLabels: Record<PropertyType, MessageKey> = {
+  house: 'house',
+  villa: 'villa',
+  apartment: 'apartment',
+  condominium: 'condominium',
+  land: 'land',
+  office: 'office',
+  shop: 'shop',
+  warehouse: 'warehouse',
+  commercial: 'commercial',
+  other: 'otherPropertyType',
+};
+
 export function Header({ locale, onLocaleChange, preferenceError, text }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openListingMenu, setOpenListingMenu] = useState<ListingMenu | null>(null);
+  const [propertyTypes, setPropertyTypes] = useState<PropertyTypeOption[]>([]);
+  const [propertyTypesError, setPropertyTypesError] = useState('');
   const [logoutError, setLogoutError] = useState('');
   const [loggingOut, setLoggingOut] = useState(false);
+  const navigationRef = useRef<HTMLElement>(null);
   const { account, authLoading, signOut } = useAuth();
   const { contact } = useBrokerageContact();
+  const uniquePropertyTypes = getUniquePropertyTypeOptions(propertyTypes);
   const publicSocialLinks = contact.social_links.filter((link) => link.is_enabled && link.url);
   const hasBrokerageContact = Boolean(contact.phone || contact.email || publicSocialLinks.length);
   const canAccessDashboard = Boolean(account && ['broker', 'administrator'].includes(account.role ?? ''));
-  const isAdministrator = account?.role === 'administrator';
   const canManageListings = Boolean(
     account?.role === 'broker'
     && account.management_permissions.some((permission) => [
@@ -34,7 +59,98 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
       'properties.manage_assigned',
     ].includes(permission)),
   );
+  const addPropertyTarget = account?.role === 'broker'
+    ? canManageListings ? '/management/listings/new' : '/submissions/new'
+    : account?.role === 'administrator'
+      ? '/dashboard'
+      : account
+        ? '/submissions/new'
+        : '/login';
+  const isAdministrator = account?.role === 'administrator';
+  const accountDestination = account
+    ? canAccessDashboard ? '/dashboard' : '/account'
+    : '/login';
   const closeMenu = () => setMenuOpen(false);
+  const closeNavigation = () => {
+    closeMenu();
+    setOpenListingMenu(null);
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getPropertyTypeOptions(controller.signal)
+      .then(setPropertyTypes)
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setPropertyTypesError(getErrorMessage(error));
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!openListingMenu) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenListingMenu(null);
+    };
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!navigationRef.current?.contains(event.target as Node)) {
+        setOpenListingMenu(null);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+    };
+  }, [openListingMenu]);
+
+  const listingMenu = (kind: ListingMenu) => {
+    const listingType = kind === 'rent' ? 'rent' : 'sale';
+    const title = text(kind === 'rent' ? 'navRent' : 'navBuy');
+    const isOpen = openListingMenu === kind;
+    const eligiblePropertyTypes = kind === 'rent'
+      ? uniquePropertyTypes.filter((option) => option.value !== 'land')
+      : uniquePropertyTypes;
+    return (
+      <div className={`nav-dropdown${isOpen ? ' is-open' : ''}`} key={kind}>
+        <button
+          className="nav-dropdown-trigger"
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={`${kind}-navigation-menu`}
+          onClick={() => setOpenListingMenu((current) => current === kind ? null : kind)}
+        >
+          {title}<ChevronDown size={15} aria-hidden="true" />
+        </button>
+        <div
+          className="nav-dropdown-menu"
+          id={`${kind}-navigation-menu`}
+          aria-label={title}
+          hidden={!isOpen}
+        >
+          <Link
+            to={`/?listing_type=${listingType}`}
+            onClick={closeNavigation}
+          >
+            {text(kind === 'rent' ? 'allRentals' : 'allPropertiesForSale')}
+          </Link>
+          {eligiblePropertyTypes.map((option) => (
+            <Link
+              key={option.value}
+              to={`/?listing_type=${listingType}&property_type=${option.value}`}
+              onClick={closeNavigation}
+            >
+              {text(propertyTypeLabels[option.value]) || option.label}
+            </Link>
+          ))}
+          {propertyTypesError && (
+            <span className="nav-dropdown-error" role="alert">{text('navigationOptionsError')}</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const logout = () => {
     setLogoutError('');
     setLoggingOut(true);
@@ -57,8 +173,8 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
           <Link
             className="brand"
             to="/"
-            aria-label={contact.site_name || 'habeshahome'}
-            onClick={closeMenu}
+            aria-label={contact.site_name || 'Habasha Property Center'}
+            onClick={closeNavigation}
           >
             {contact.site_logo ? (
               <img className="brand-logo" src={contact.site_logo} alt="" />
@@ -71,43 +187,72 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                 </svg>
               </span>
             )}
-            <span className="brand-copy"><strong>{contact.site_name || 'habeshahome'}</strong></span>
+            <span className="brand-copy"><strong>{contact.site_name || 'Habasha Property Center'}</strong></span>
           </Link>
 
-          <button
-            className="menu-toggle"
-            type="button"
-            aria-label={menuOpen ? text('mobileMenuClose') : text('mobileMenuOpen')}
-            aria-expanded={menuOpen}
-            aria-controls="primary-navigation"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {menuOpen ? <X size={21} /> : <Menu size={21} />}
-          </button>
+          <div className="mobile-header-actions">
+            <button
+              className="menu-toggle"
+              type="button"
+              aria-label={menuOpen ? text('mobileMenuClose') : text('mobileMenuOpen')}
+              aria-expanded={menuOpen}
+              aria-controls="primary-navigation"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              {menuOpen ? <X size={21} /> : <Menu size={21} />}
+            </button>
+            <Link
+              className="mobile-account-link"
+              to={accountDestination}
+              state={account ? undefined : { from: '/account' }}
+              aria-label={text(account ? 'myAccount' : 'signIn')}
+              onClick={closeNavigation}
+            >
+              <UserRound size={21} aria-hidden="true" />
+            </Link>
+          </div>
 
           <nav
             className={`primary-navigation${menuOpen ? ' is-open' : ''}`}
             id="primary-navigation"
             aria-label={text('primaryNavigation')}
+            ref={navigationRef}
           >
-            <NavLink to="/" end onClick={closeMenu}>{text('home')}</NavLink>
+            <NavLink to="/" end onClick={closeNavigation}>{text('home')}</NavLink>
+            <Link to="/#latest-listings" onClick={closeNavigation}>{text('allPropertiesNav')}</Link>
+            {listingMenu('rent')}
+            {listingMenu('buy')}
+            <NavLink to="/about" onClick={closeNavigation}>{text('about')}</NavLink>
+            <NavLink to="/contact" onClick={closeNavigation}>{text('contact')}</NavLink>
+            <NavLink to="/property-management" onClick={closeNavigation}>{text('propertyManagement')}</NavLink>
+            {account?.role !== 'administrator' && (
+              <Link
+                className="button button-small button-primary header-cta"
+                to={addPropertyTarget}
+                state={account ? undefined : { from: '/submissions/new' }}
+                onClick={closeNavigation}
+                aria-label={text('addYourProperty')}
+              >
+                {text('addYourProperty')}
+              </Link>
+            )}
             {hasBrokerageContact && (
               <section className="mobile-menu-contact" aria-label={text('brokerContactTitle')}>
                 <h2>{text('brokerContactTitle')}</h2>
                 {contact.phone && (
-                  <a href={`tel:${contact.phone}`} onClick={closeMenu}>
+                  <a href={`tel:${contact.phone}`} onClick={closeNavigation}>
                     <Phone size={16} aria-hidden="true" />
                     <span><small>{text('contactByPhone')}</small><strong>{contact.phone}</strong></span>
                   </a>
                 )}
                 {publicSocialLinks.map((link) => (
-                  <a key={link.platform} href={link.url} target="_blank" rel="noreferrer" onClick={closeMenu}>
+                  <a key={link.platform} href={link.url} target="_blank" rel="noreferrer" onClick={closeNavigation}>
                     <SocialMark platform={link.platform} />
                     <span><small>{socialPlatformNames[link.platform]}</small><strong>{link.url}</strong></span>
                   </a>
                 ))}
                 {contact.email && (
-                  <a href={`mailto:${contact.email}`} onClick={closeMenu}>
+                  <a href={`mailto:${contact.email}`} onClick={closeNavigation}>
                     <Mail size={16} aria-hidden="true" />
                     <span><small>{text('contactByEmail')}</small><strong>{contact.email}</strong></span>
                   </a>
@@ -130,13 +275,16 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             ) : account ? (
               <>
                 {canAccessDashboard && (
-                  <Link className="header-sign-in" to="/dashboard" onClick={closeMenu}>{text('dashboardTitle')}</Link>
+                  <Link className="header-sign-in" to="/dashboard" onClick={closeNavigation}>{text('dashboardTitle')}</Link>
                 )}
                 {!isAdministrator && (
-                  <Link className="header-sign-in" to="/account" onClick={closeMenu}>{text('myAccount')}</Link>
+                  <Link className="header-sign-in" to="/account" onClick={closeNavigation}>{text('myAccount')}</Link>
                 )}
                 {account.role !== 'broker' && account.role !== 'administrator' && (
-                  <Link className="header-sign-in" to="/viewing-requests" onClick={closeMenu}>
+                  <Link className="header-sign-in" to="/my-submissions" onClick={closeNavigation}>{text('mySubmissions')}</Link>
+                )}
+                {account.role !== 'broker' && account.role !== 'administrator' && (
+                  <Link className="header-sign-in" to="/viewing-requests" onClick={closeNavigation}>
                     {text('yourViewingRequests')}
                   </Link>
                 )}
@@ -145,10 +293,10 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                 </button>
               </>
             ) : (
-              <Link className="header-sign-in" to="/login" onClick={closeMenu}>{text('signIn')}</Link>
+              <Link className="header-sign-in" to="/login" onClick={closeNavigation}>{text('signIn')}</Link>
             )}
             {canManageListings && (
-              <Link className="button button-small button-primary" to="/management/listings" onClick={closeMenu}>
+              <Link className="button button-small button-primary" to="/management/listings" onClick={closeNavigation}>
                 {text('managerListings')}
               </Link>
             )}

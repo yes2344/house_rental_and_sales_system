@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUpRight, Check, ChevronDown, House, MapPin, Search } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, House, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
@@ -7,12 +7,16 @@ import {
   getLocations,
   getLocationsByTypes,
   getProperties,
+  getPropertyTypeOptions,
+  getUniquePropertyTypeOptions,
   type ListingType,
   type MarketplaceLocation,
+  type LocationType,
   type PaginatedResponse,
   type PropertyFilters,
   type PropertySummary,
   type PropertyType,
+  type PropertyTypeOption,
 } from '../api/properties';
 import { PropertyCard } from '../components/PropertyCard';
 import { useHomepageContent } from '../HomepageContentContext';
@@ -25,68 +29,119 @@ export interface HomePageProps {
   text: (key: MessageKey) => string;
 }
 
+const propertyTypeMessageKeys: Record<PropertyType, MessageKey> = {
+  house: 'house',
+  villa: 'villa',
+  apartment: 'apartment',
+  condominium: 'condominium',
+  land: 'land',
+  office: 'office',
+  shop: 'shop',
+  warehouse: 'warehouse',
+  commercial: 'commercial',
+  other: 'otherPropertyType',
+};
+
+const categoryFallbackImages: Partial<Record<PropertyType, string>> = {
+  house: '/category-images/house.jpg',
+  villa: '/category-images/house.jpg',
+  apartment: '/category-images/apartment.jpg',
+  condominium: '/category-images/apartment.jpg',
+  land: '/category-images/land.jpg',
+  office: '/category-images/office.jpg',
+  shop: '/category-images/shop.jpg',
+  warehouse: '/category-images/warehouse.jpg',
+  commercial: '/category-images/commercial.jpg',
+  other: '/category-images/house.jpg',
+};
+
+const childLocationMessageKeys: Partial<Record<LocationType, MessageKey>> = {
+  subcity: 'locationSubcity',
+  woreda: 'locationWoreda',
+  neighborhood: 'locationNeighborhood',
+};
+
 export function HomePage({ locale, text }: HomePageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const urlListingType = searchParams.get('listing_type') ?? '';
+  const urlPropertyType = searchParams.get('property_type') ?? '';
+  const urlOrdering = searchParams.get('ordering') ?? '-created_at';
+  const urlLocationId = searchParams.get('location_id') ?? '';
+  const urlCityId = searchParams.get('city_id') ?? '';
+  const urlKeyword = searchParams.get('search') ?? '';
+  const urlMinPrice = searchParams.get('min_price') ?? '';
+  const urlMaxPrice = searchParams.get('max_price') ?? '';
+  const urlMinBedrooms = searchParams.get('min_bedrooms') ?? '';
+  const urlMinBathrooms = searchParams.get('min_bathrooms') ?? '';
   const { notes } = useHomepageContent();
   const { contact } = useBrokerageContact();
-  const [listingType, setListingType] = useState('');
-  const [propertyType, setPropertyType] = useState('');
-  const [ordering, setOrdering] = useState('-created_at');
-  const [locationId, setLocationId] = useState<number | null>(null);
-  const [cityId, setCityId] = useState<number | null>(null);
+  const [listingType, setListingType] = useState(urlListingType);
+  const [propertyType, setPropertyType] = useState(urlPropertyType);
+  const [ordering, setOrdering] = useState(urlOrdering);
+  const [locationId, setLocationId] = useState<number | null>(Number(urlLocationId) || null);
+  const [cityId, setCityId] = useState<number | null>(Number(urlCityId) || null);
   const [cities, setCities] = useState<MarketplaceLocation[]>([]);
-  const [subcities, setSubcities] = useState<MarketplaceLocation[]>([]);
+  const [childLocations, setChildLocations] = useState<MarketplaceLocation[]>([]);
+  const [propertyTypeOptions, setPropertyTypeOptions] = useState<PropertyTypeOption[]>([]);
+  const [propertyTypeOptionsLoading, setPropertyTypeOptionsLoading] = useState(true);
+  const [propertyTypeOptionsRetryKey, setPropertyTypeOptionsRetryKey] = useState(0);
   const [locationOptionsError, setLocationOptionsError] = useState('');
+  const [propertyTypeOptionsError, setPropertyTypeOptionsError] = useState('');
   const [result, setResult] = useState<PaginatedResponse<PropertySummary> | null>(null);
   const [additionalProperties, setAdditionalProperties] = useState<PropertySummary[]>([]);
   const [listingsLoading, setListingsLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [listingsError, setListingsError] = useState('');
   const [moreError, setMoreError] = useState('');
+  const [retryListingsKey, setRetryListingsKey] = useState(0);
   const moreRequestController = useRef<AbortController | null>(null);
+  const uniquePropertyTypeOptions = useMemo(
+    () => getUniquePropertyTypeOptions(propertyTypeOptions),
+    [propertyTypeOptions],
+  );
+  const availablePropertyTypes = useMemo(() => {
+    const options = uniquePropertyTypeOptions;
+    return listingType === 'rent'
+      ? options.filter((option) => option.value !== 'land')
+      : options;
+  }, [listingType, uniquePropertyTypeOptions]);
+  const childLocationLabelKey = childLocations.length > 0
+    && childLocations.every((item) => item.location_type === childLocations[0].location_type)
+    ? childLocationMessageKeys[childLocations[0].location_type] ?? 'location'
+    : 'location';
   const apiFilters = useMemo<PropertyFilters>(() => {
-    const validPropertyTypes: PropertyType[] = [
-      'house', 'villa', 'apartment', 'condominium', 'land',
-      'office', 'shop', 'warehouse', 'commercial', 'other',
-    ];
-    const listingTypeParam = searchParams.get('listing_type');
-    const propertyTypeParam = searchParams.get('property_type');
-    const orderingParam = searchParams.get('ordering');
-    const locationIdParam = Number(searchParams.get('location_id'));
-    const cityIdParam = Number(searchParams.get('city_id'));
+    const locationIdParam = Number(urlLocationId);
+    const cityIdParam = Number(urlCityId);
     const locationParam = searchParams.get('location')?.trim();
     return {
       page_size: 12,
-      ordering: orderingParam && ['-created_at', 'price', '-price', '-area_sqft'].includes(orderingParam)
-        ? orderingParam
-        : '-created_at',
-      listing_type: listingTypeParam === 'sale' || listingTypeParam === 'rent'
-        ? listingTypeParam as ListingType
-        : undefined,
-      property_type: validPropertyTypes.includes(propertyTypeParam as PropertyType)
-        ? propertyTypeParam as PropertyType
-        : undefined,
+      ordering: urlOrdering || undefined,
+      search: urlKeyword.trim() || undefined,
+      listing_type: urlListingType || undefined,
+      property_type: urlListingType === 'rent' && urlPropertyType === 'land'
+        ? undefined
+        : urlPropertyType || undefined,
       location_id: Number.isInteger(locationIdParam) && locationIdParam > 0 ? locationIdParam : undefined,
       city_id: Number.isInteger(cityIdParam) && cityIdParam > 0 ? cityIdParam : undefined,
       location: !locationIdParam && locationParam ? locationParam : undefined,
+      min_price: urlMinPrice || undefined,
+      max_price: urlMaxPrice || undefined,
+      min_bedrooms: urlMinBedrooms || undefined,
+      min_bathrooms: urlMinBathrooms || undefined,
     };
-  }, [searchParams]);
-
-  const loadListings = useCallback(async () => {
-    moreRequestController.current?.abort();
-    setAdditionalProperties([]);
-    setMoreError('');
-    setListingsLoading(true);
-    setListingsError('');
-    try {
-      setResult(await getProperties(apiFilters));
-    } catch (error) {
-      setListingsError(getErrorMessage(error));
-      setResult(null);
-    } finally {
-      setListingsLoading(false);
-    }
-  }, [apiFilters]);
+  }, [
+    searchParams,
+    urlCityId,
+    urlKeyword,
+    urlListingType,
+    urlLocationId,
+    urlMaxPrice,
+    urlMinBathrooms,
+    urlMinBedrooms,
+    urlMinPrice,
+    urlOrdering,
+    urlPropertyType,
+  ]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -96,7 +151,9 @@ export function HomePage({ locale, text }: HomePageProps) {
     setListingsLoading(true);
     setListingsError('');
     void getProperties(apiFilters, controller.signal)
-      .then(setResult)
+      .then((response) => {
+        if (!controller.signal.aborted) setResult(response);
+      })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           setListingsError(getErrorMessage(error));
@@ -110,24 +167,47 @@ export function HomePage({ locale, text }: HomePageProps) {
       controller.abort();
       moreRequestController.current?.abort();
     };
-  }, [apiFilters]);
+  }, [apiFilters, retryListingsKey]);
 
   useEffect(() => {
-    setListingType(searchParams.get('listing_type') ?? '');
-    setPropertyType(searchParams.get('property_type') ?? '');
-    setOrdering(searchParams.get('ordering') ?? '-created_at');
-    const selectedLocation = Number(searchParams.get('location_id')) || null;
+    setListingType(urlListingType);
+    setPropertyType(urlPropertyType);
+    setOrdering(urlOrdering);
+    const selectedLocation = Number(urlLocationId) || null;
     setLocationId(selectedLocation);
-    setCityId(Number(searchParams.get('city_id')) || null);
-  }, [searchParams]);
+    setCityId(Number(urlCityId) || null);
+  }, [
+    urlCityId,
+    urlListingType,
+    urlLocationId,
+    urlOrdering,
+    urlPropertyType,
+  ]);
 
-  const updateResults = (updates: {
-    listing_type?: string;
-    property_type?: string;
-    location?: string;
-    location_id?: number | null;
-    city_id?: number | null;
-  }) => {
+  useEffect(() => {
+    const controller = new AbortController();
+    void getPropertyTypeOptions(controller.signal)
+      .then((options) => {
+        if (!controller.signal.aborted) {
+          setPropertyTypeOptions(options);
+          setPropertyTypeOptionsError('');
+          setPropertyTypeOptionsLoading(false);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setPropertyTypeOptionsError(getErrorMessage(error));
+          setPropertyTypeOptionsLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [propertyTypeOptionsRetryKey]);
+
+  const updateResults = useCallback((updates: Partial<Record<
+    'listing_type' | 'property_type' | 'location' | 'location_id' | 'city_id'
+      | 'ordering' | 'search' | 'min_price' | 'max_price' | 'min_bedrooms' | 'min_bathrooms',
+    string | number | null
+  >>) => {
     const next = new URLSearchParams(searchParams);
     next.delete('page');
     for (const [key, value] of Object.entries(updates)) {
@@ -135,23 +215,45 @@ export function HomePage({ locale, text }: HomePageProps) {
       else next.set(key, String(value));
     }
     setSearchParams(next);
-  };
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (urlListingType === 'rent' && urlPropertyType === 'land') {
+      setPropertyType('');
+      updateResults({ property_type: null });
+    }
+  }, [urlListingType, urlPropertyType, updateResults]);
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const next = new URLSearchParams();
-    if (listingType) next.set('listing_type', listingType);
-    if (propertyType) next.set('property_type', propertyType);
-    if (ordering !== '-created_at') next.set('ordering', ordering);
-    if (locationId) next.set('location_id', String(locationId));
-    if (cityId) next.set('city_id', String(cityId));
-    setSearchParams(next);
+    updateResults({
+      search: null,
+      min_price: null,
+      max_price: null,
+      min_bedrooms: null,
+      min_bathrooms: null,
+    });
     document.getElementById('latest-listings')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const changeListingType = (value: ListingType | '') => {
+    setListingType(value);
+    if (value === 'rent' && propertyType === 'land') {
+      setPropertyType('');
+      updateResults({ listing_type: value, property_type: null });
+      return;
+    }
+    updateResults({ listing_type: value });
   };
 
   const searchCategory = (category: string) => {
     setPropertyType(category);
-    updateResults({ property_type: category });
+    if (category === 'land' && listingType === 'rent') {
+      setListingType('');
+      updateResults({ listing_type: null, property_type: category });
+    } else {
+      updateResults({ property_type: category });
+    }
     document.getElementById('latest-listings')?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -160,8 +262,15 @@ export function HomePage({ locale, text }: HomePageProps) {
     setPropertyType('');
     setLocationId(null);
     setCityId(null);
-    setSubcities([]);
+    setChildLocations([]);
     setSearchParams({});
+  };
+
+  const retryListings = () => setRetryListingsKey((current) => current + 1);
+  const retryPropertyTypes = () => {
+    setPropertyTypeOptionsError('');
+    setPropertyTypeOptionsLoading(true);
+    setPropertyTypeOptionsRetryKey((current) => current + 1);
   };
 
   const loadMoreListings = async () => {
@@ -187,6 +296,17 @@ export function HomePage({ locale, text }: HomePageProps) {
   };
 
   const properties = [...(result?.results ?? []), ...additionalProperties];
+  const categoryListingImages = useMemo(() => {
+    const images: Partial<Record<PropertyType, string>> = {};
+    for (const property of properties) {
+      if (images[property.category]) continue;
+      const image = property.primary_image
+        || property.images.find((candidate) => candidate.is_primary && candidate.url)?.url
+        || property.images.find((candidate) => candidate.url)?.url;
+      if (image) images[property.category] = image;
+    }
+    return images;
+  }, [properties]);
   const hasMoreListings = Boolean(result?.next) && properties.length < (result?.count ?? 0);
 
   useEffect(() => {
@@ -203,12 +323,12 @@ export function HomePage({ locale, text }: HomePageProps) {
   }, []);
 
   useEffect(() => {
-    setSubcities([]);
+    setChildLocations([]);
     if (!cityId) return;
     const controller = new AbortController();
-    void getLocations(cityId, controller.signal, false, 'subcity')
+    void getLocations(cityId, controller.signal)
       .then((items) => {
-        setSubcities(items);
+        setChildLocations(items);
         setLocationOptionsError('');
       })
       .catch((error: unknown) => {
@@ -220,55 +340,20 @@ export function HomePage({ locale, text }: HomePageProps) {
   return (
     <main id="main-content">
       <section className="hero-section">
-        <div className="container hero-grid">
+        <img
+          className="hero-background"
+          src={contact.homepage_hero_image || '/category-images/house.jpg'}
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          decoding="async"
+        />
+        <div className="hero-grid">
           <div className="hero-copy">
-            <p className="eyebrow"><span className="eyebrow-dot" />{text('heroEyebrow')}</p>
-            <h1>{text('heroTitle')}</h1>
-            <p className="hero-description">{text('heroBody')}</p>
-            <a className="hero-scroll-link" href="#latest-listings">
-              <span className="scroll-icon"><ArrowDown size={15} aria-hidden="true" /></span>
-              <span>{text('explore')}</span>
-            </a>
-          </div>
-          <div className="hero-visual">
-            <img
-              src={contact.homepage_hero_image || '/addis-ababa-hills.svg'}
-              alt={text('heroArt')}
-            />
-            <div className="hero-note">
-              <span className="hero-note-icon"><MapPin size={16} aria-hidden="true" /></span>
-              <span><strong>{text('illustrationCity')}</strong><small>Ethiopia · ኢትዮጵያ</small></span>
-            </div>
-            <div className="hero-image-caption">{text('illustrationCaption')}</div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section category-section">
-        <div className="container">
-          <div className="section-heading category-heading">
-            <div>
-              <p className="eyebrow eyebrow-muted">{text('categoryEyebrow')}</p>
-              <h2>{text('categoryTitle')}</h2>
-              <p className="section-description">{text('categoryDescription')}</p>
-            </div>
-          </div>
-          <div className="category-grid">
-            {[
-              { key: 'house', type: 'house', symbol: '01' },
-              { key: 'apartment', type: 'apartment', symbol: '02' },
-              { key: 'land', type: 'land', symbol: '03' },
-              { key: 'commercial', type: 'commercial', symbol: '04' },
-            ].map((item) => (
-              <button className="category-card" type="button" key={item.type} onClick={() => searchCategory(item.type)}>
-                <span className="category-number">{item.symbol}</span>
-                <span className="category-icon"><House size={22} strokeWidth={1.6} aria-hidden="true" /></span>
-                <span className="category-copy">
-                  <span className="category-name">{text(item.key as MessageKey)}</span>
-                  <span className="category-action">{text('categorySearch')} <ArrowUpRight size={15} aria-hidden="true" /></span>
-                </span>
-              </button>
-            ))}
+            <h1>
+              {text('heroHeadline')}
+              <span>{text('heroBrandLine')}</span>
+            </h1>
           </div>
         </div>
       </section>
@@ -277,27 +362,24 @@ export function HomePage({ locale, text }: HomePageProps) {
         <div className="container">
           <form className="search-panel" onSubmit={submitSearch}>
             <div className="search-panel-head">
-              <div>
-                <span className="search-overline"><Search size={14} aria-hidden="true" /> {text('searchLabel')}</span>
-              </div>
               <div className="listing-type-toggle" role="group" aria-label={text('searchLabel')}>
                 <button
                   type="button"
                   className={!listingType ? 'is-active' : ''}
                   aria-pressed={!listingType}
-                  onClick={() => setListingType('')}
+                  onClick={() => changeListingType('')}
                 >{text('anyType')}</button>
                 <button
                   type="button"
                   className={listingType === 'sale' ? 'is-active' : ''}
                   aria-pressed={listingType === 'sale'}
-                  onClick={() => setListingType('sale')}
+                  onClick={() => changeListingType('sale')}
                 >{text('searchBuy')}</button>
                 <button
                   type="button"
                   className={listingType === 'rent' ? 'is-active' : ''}
                   aria-pressed={listingType === 'rent'}
-                  onClick={() => setListingType('rent')}
+                  onClick={() => changeListingType('rent')}
                 >{text('searchRent')}</button>
               </div>
             </div>
@@ -311,7 +393,8 @@ export function HomePage({ locale, text }: HomePageProps) {
                     const selectedCityId = Number(event.target.value) || null;
                     setCityId(selectedCityId);
                     setLocationId(null);
-                    setSubcities([]);
+                    setChildLocations([]);
+                    updateResults({ city_id: selectedCityId, location_id: null });
                   }}
                 >
                   <option value="">{text('chooseCity')}</option>
@@ -324,16 +407,20 @@ export function HomePage({ locale, text }: HomePageProps) {
               </div>
               {cityId && (
                 <label className="search-field search-field-subcity">
-                  <span>{text('locationSubcity')}</span>
+                  <span>{text(childLocationLabelKey)}</span>
                   <select
                     value={locationId ?? ''}
-                    onChange={(event) => setLocationId(Number(event.target.value) || null)}
-                    disabled={!subcities.length}
+                    onChange={(event) => {
+                      const selectedLocationId = Number(event.target.value) || null;
+                      setLocationId(selectedLocationId);
+                      updateResults({ location_id: selectedLocationId });
+                    }}
+                    disabled={!childLocations.length}
                   >
                     <option value="">{text('allAreas')}</option>
-                    {subcities.map((subcity) => (
-                      <option key={subcity.id} value={subcity.id}>
-                        {locale === 'am' && subcity.name_am ? subcity.name_am : subcity.name}
+                    {childLocations.map((childLocation) => (
+                      <option key={childLocation.id} value={childLocation.id}>
+                        {locale === 'am' && childLocation.name_am ? childLocation.name_am : childLocation.name}
                       </option>
                     ))}
                   </select>
@@ -341,27 +428,36 @@ export function HomePage({ locale, text }: HomePageProps) {
               )}
               <label className="search-field search-field-type">
                 <span>{text('propertyType')}</span>
-                <select value={propertyType} onChange={(event) => setPropertyType(event.target.value)}>
+                <select
+                  value={propertyType}
+                  onChange={(event) => {
+                    const selectedType = event.target.value;
+                    setPropertyType(selectedType);
+                    updateResults({ property_type: selectedType });
+                  }}
+                >
                   <option value="">{text('anyType')}</option>
-                  <option value="house">{text('house')}</option>
-                  <option value="villa">{text('house')}</option>
-                  <option value="apartment">{text('apartment')}</option>
-                  <option value="condominium">Condominium</option>
-                  <option value="land">{text('land')}</option>
-                  <option value="office">Office</option>
-                  <option value="shop">Shop</option>
-                  <option value="warehouse">Warehouse</option>
-                  <option value="commercial">{text('commercial')}</option>
-                  <option value="other">Other</option>
+                  {availablePropertyTypes.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {text(propertyTypeMessageKeys[option.value])}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="search-field search-field-ordering">
                 <span>{text('sortBy')}</span>
-                <select value={ordering} onChange={(event) => setOrdering(event.target.value)}>
+                <select
+                  value={ordering}
+                  onChange={(event) => {
+                    const selectedOrdering = event.target.value;
+                    setOrdering(selectedOrdering);
+                    updateResults({ ordering: selectedOrdering });
+                  }}
+                >
                   <option value="-created_at">{text('sortNewest')}</option>
+                  <option value="created_at">{text('sortOldest')}</option>
                   <option value="price">{text('sortPriceLow')}</option>
                   <option value="-price">{text('sortPriceHigh')}</option>
-                  <option value="-area_sqft">{text('sortLargest')}</option>
                 </select>
               </label>
               <button className="button button-primary search-submit" type="submit">
@@ -370,7 +466,10 @@ export function HomePage({ locale, text }: HomePageProps) {
             </div>
             {locationOptionsError
               ? <p className="search-note" role="status">{text('locationLoadError')} {locationOptionsError}</p>
-              : <p className="search-note"><Check size={14} aria-hidden="true" />{text('searchNote')}</p>}
+              : null}
+            {propertyTypeOptionsError
+              ? <p className="search-note" role="alert">{text('propertyTypeOptionsLoadError')} {propertyTypeOptionsError}</p>
+              : null}
           </form>
         </div>
       </section>
@@ -379,7 +478,6 @@ export function HomePage({ locale, text }: HomePageProps) {
         <div className="container">
           <div className="section-heading">
             <div>
-              <p className="eyebrow eyebrow-muted">{text('latestEyebrow')}</p>
               <h2>{text('latestTitle')}</h2>
               <p className="section-description">
                 {listingsLoading ? text('loadingListings') : `${result?.count ?? 0} ${text('resultCount')}`}
@@ -392,13 +490,19 @@ export function HomePage({ locale, text }: HomePageProps) {
           ) : listingsError ? (
             <div className="listing-state listing-error" role="alert">
               <span>{text('listingsError')} <small>{listingsError}</small></span>
-              <button className="button button-outline" type="button" onClick={() => void loadListings()}>{text('retry')}</button>
+              <button className="button button-outline" type="button" onClick={retryPropertyTypes}>{text('retry')}</button>
             </div>
           ) : properties.length ? (
             <>
               <div className="listing-grid">
-                {properties.map((property) => (
-                  <PropertyCard key={property.id} property={property} locale={locale} text={text} />
+                {properties.map((property, index) => (
+                  <PropertyCard
+                    key={property.id}
+                    property={property}
+                    locale={locale}
+                    text={text}
+                    imageLoading={index < 3 ? 'eager' : 'lazy'}
+                  />
                 ))}
               </div>
               {hasMoreListings && (
@@ -418,6 +522,76 @@ export function HomePage({ locale, text }: HomePageProps) {
               <h2>{text('noSearchResults')}</h2>
               <p>{text('adjustFilters')}</p>
               <button className="button button-outline" type="button" onClick={clearFilters}>{text('clearFilters')}</button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="section category-section" aria-labelledby="category-section-title">
+        <div className="container">
+          <div className="section-heading category-heading">
+            <div>
+              <h2 id="category-section-title">{text('explorePropertiesByType')}</h2>
+              <p className="section-description">{text('categorySectionDescription')}</p>
+            </div>
+          </div>
+          {propertyTypeOptionsLoading ? (
+            <div className="listing-state" role="status">
+              <span className="loading-spinner" />{text('loadingPropertyTypes')}
+            </div>
+          ) : propertyTypeOptionsError ? (
+            <div className="listing-state listing-error" role="alert">
+              <span>{text('propertyTypeOptionsLoadError')} <small>{propertyTypeOptionsError}</small></span>
+              <button className="button button-outline" type="button" onClick={retryListings}>{text('retry')}</button>
+            </div>
+          ) : uniquePropertyTypeOptions.length ? (
+            <>
+              <div className="category-grid">
+                {uniquePropertyTypeOptions.map((option) => (
+                  <button
+                    className="category-card"
+                    type="button"
+                    key={option.value}
+                    onClick={() => searchCategory(option.value)}
+                    aria-label={`${text(propertyTypeMessageKeys[option.value])}: ${text('categorySearch')}`}
+                  >
+                    {(categoryListingImages[option.value] || categoryFallbackImages[option.value]) && (
+                      <img
+                        className="category-card-image"
+                        src={categoryListingImages[option.value] || categoryFallbackImages[option.value]}
+                        alt=""
+                        aria-hidden="true"
+                        loading="lazy"
+                        decoding="async"
+                        onError={(event) => {
+                          const fallbackImage = categoryFallbackImages[option.value];
+                          if (
+                            categoryListingImages[option.value]
+                            && fallbackImage
+                            && categoryListingImages[option.value] !== fallbackImage
+                            && event.currentTarget.dataset.usingFallback !== 'true'
+                          ) {
+                            event.currentTarget.dataset.usingFallback = 'true';
+                            event.currentTarget.src = fallbackImage;
+                          } else {
+                            event.currentTarget.hidden = true;
+                          }
+                        }}
+                      />
+                    )}
+                    <span className="category-card-shade" aria-hidden="true" />
+                    <span className="category-copy">
+                      <span className="category-name">{text(propertyTypeMessageKeys[option.value]) || option.label}</span>
+                      <span className="category-action">{text('categorySearch')} <ArrowUpRight size={16} aria-hidden="true" /></span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="listing-empty">
+              <span className="empty-icon"><House size={23} aria-hidden="true" /></span>
+              <p>{text('noPropertyTypesAvailable')}</p>
             </div>
           )}
         </div>

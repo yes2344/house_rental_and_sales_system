@@ -18,6 +18,7 @@ interface PropertySlideshowProps {
   previousLabel: string;
   nextLabel: string;
   photoLabel: string;
+  imageLoading?: 'eager' | 'lazy';
 }
 
 export function PropertySlideshow({
@@ -28,6 +29,7 @@ export function PropertySlideshow({
   previousLabel,
   nextLabel,
   photoLabel,
+  imageLoading = 'lazy',
 }: PropertySlideshowProps) {
   const orderedImages = useMemo(
     () => [...images].filter((image) => image.url).sort(
@@ -136,6 +138,7 @@ export function PropertySlideshow({
           className="listing-image slideshow-current"
           fallbackClassName="listing-image listing-image-placeholder slideshow-current"
           fallbackLabel={fallbackLabel}
+          loading={imageLoading}
         />
       )}
       {next && orderedImages.length > 1 && (
@@ -146,6 +149,7 @@ export function PropertySlideshow({
           className="listing-image slideshow-next"
           fallbackClassName="listing-image listing-image-placeholder slideshow-next"
           fallbackLabel={fallbackLabel}
+          loading="lazy"
           style={{ visibility: nextImageReady ? 'visible' : 'hidden' }}
         />
       )}
@@ -156,6 +160,7 @@ export function PropertySlideshow({
           className="listing-image"
           fallbackClassName="listing-image listing-image-placeholder"
           fallbackLabel={fallbackLabel}
+          loading={imageLoading}
         />
       )}
       {orderedImages.length > 1 && (

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useAuth } from '../AuthContext';
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import {
   createManagedBrokerAccount,
@@ -23,6 +24,7 @@ interface BrokerEditValues {
   phone: string;
   is_active: boolean;
   assigned_city_id: string;
+  manage_public_settings: boolean;
 }
 
 const emptyEditValues: BrokerEditValues = {
@@ -34,9 +36,12 @@ const emptyEditValues: BrokerEditValues = {
   phone: '',
   is_active: true,
   assigned_city_id: '',
+  manage_public_settings: false,
 };
 
 export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPageProps) {
+  const { account: currentAccount } = useAuth();
+  const isPlatformOwner = Boolean(currentAccount?.is_platform_owner);
   const [accounts, setAccounts] = useState<ManagedBrokerAccount[]>([]);
   const [cities, setCities] = useState<MarketplaceLocation[]>([]);
   const [username, setUsername] = useState('');
@@ -111,6 +116,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
       phone: account.phone,
       is_active: account.is_active,
       assigned_city_id: account.assigned_city_id === null ? '' : String(account.assigned_city_id),
+      manage_public_settings: account.management_permissions.includes('settings.manage'),
     });
     setError('');
     setSuccess('');
@@ -129,11 +135,19 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
     setSuccess('');
     setFieldErrors({});
     try {
-      const { initial_password, assigned_city_id, ...accountChanges } = editValues;
+      const { initial_password, assigned_city_id, manage_public_settings, ...accountChanges } = editValues;
+      const managementPermissions = editing.management_permissions.filter(
+        (permission) => permission !== 'settings.manage',
+      );
       const updated = await updateManagedBrokerAccount(editing.id, {
         ...accountChanges,
         assigned_city_id: Number(assigned_city_id),
         ...(initial_password ? { initial_password } : {}),
+        ...(isPlatformOwner ? {
+          management_permissions: manage_public_settings
+            ? [...managementPermissions, 'settings.manage']
+            : managementPermissions,
+        } : {}),
       });
       setAccounts((current) => current.map((item) => item.id === updated.id ? updated : item));
       setEditing(null);
@@ -330,6 +344,20 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
               />
               {' '}{text('brokerAccountActive')}
             </label>
+            {isPlatformOwner && (
+              <label className="filter-label">
+                <input
+                  type="checkbox"
+                  checked={editValues.manage_public_settings}
+                  onChange={(event) => setEditValues((current) => ({
+                    ...current,
+                    manage_public_settings: event.target.checked,
+                  }))}
+                />
+                {' '}{text('managePublicSettings')}
+                <small>{text('managePublicSettingsHelp')}</small>
+              </label>
+            )}
             <div className="location-form-actions">
               <button className="button button-primary" type="submit" disabled={saving}>
                 {saving ? text('savingLocation') : text('saveBroker')}

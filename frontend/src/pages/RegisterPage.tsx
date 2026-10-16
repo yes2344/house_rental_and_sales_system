@@ -22,6 +22,31 @@ interface RegistrationLocationState {
   from?: string | { pathname?: string; search?: string; hash?: string };
 }
 
+function getSafeRedirectTarget(from: unknown): string {
+  if (typeof from === 'string') {
+    return from.startsWith('/')
+      && !from.startsWith('//')
+      && !from.includes('\\')
+      && !/[\u0000-\u001f]/.test(from)
+      ? from
+      : '/';
+  }
+  if (from && typeof from === 'object') {
+    const candidate = from as { pathname?: string; search?: string; hash?: string };
+    if (
+      candidate.pathname?.startsWith('/')
+      && !candidate.pathname.startsWith('//')
+      && !candidate.pathname.includes('\\')
+      && !/[\u0000-\u001f]/.test(candidate.pathname)
+    ) {
+      return getSafeRedirectTarget(
+        `${candidate.pathname}${candidate.search ?? ''}${candidate.hash ?? ''}`,
+      );
+    }
+  }
+  return '/';
+}
+
 export function RegisterPage({ text }: RegisterPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -54,15 +79,19 @@ export function RegisterPage({ text }: RegisterPageProps) {
     setError('');
     setFieldErrors({});
     try {
-      const account = await registerAccount({
+      await registerAccount({
         username: values.username.trim(),
         email: values.email.trim(),
         phone: values.phone.trim(),
         password: values.password,
+        next_path: getSafeRedirectTarget(state?.from),
       });
-      navigate('/login', {
+      navigate('/verify-email', {
         replace: true,
-        state: { registered: true, username: account.username, from: state?.from },
+        state: {
+          email: values.email.trim(),
+          next: getSafeRedirectTarget(state?.from),
+        },
       });
     } catch (requestError: unknown) {
       const apiErrors = getApiFieldErrors(requestError);

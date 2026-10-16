@@ -1,14 +1,22 @@
 from collections.abc import Mapping
 
 from django.contrib.auth import get_user_model, password_validation
+from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
-from accounts.models import DelegatedAccountInvitation, Profile, UserPreferences
-from accounts.permissions import broker_work_permissions, effective_management_permissions
+from accounts.email_messages import get_user_from_uid
+from accounts.models import (
+    DelegatedAccountInvitation,
+    EmailVerificationToken,
+    Profile,
+    TabSessionToken,
+    UserPreferences,
+)
+from accounts.permissions import broker_work_permissions, effective_management_permissions, is_platform_owner
 from favorites.models import Favorite
 from properties.models import Location, Property
 from viewings.models import ViewingRequest
@@ -88,7 +96,7 @@ class AccountSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.BooleanField())
     def get_is_platform_owner(self, obj):
-        return False
+        return is_platform_owner(obj)
 
     @extend_schema_field(serializers.BooleanField())
     def get_broker_onboarding_required(self, obj):
@@ -133,6 +141,7 @@ class RegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
     phone = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    next_path = serializers.CharField(max_length=2048, required=False, default='/')
 
     def validate_username(self, value):
         if User.objects.filter(username__iexact=value).exists():
@@ -155,11 +164,114 @@ class RegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(exc.messages) from exc
         return value
 
+    def validate_next_path(self, value):
+        if (
+            not value.startswith('/')
+            or value.startswith('//')
+            or '\\' in value
+            or any(ord(char) < 32 for char in value)
+        ):
+            raise serializers.ValidationError('The return path must be a local application path.')
+        return value
+
     @transaction.atomic
     def create(self, validated_data):
+        from accounts.email_messages import send_verification_email
+
         phone = validated_data.pop('phone', '')
-        user = User.objects.create_user(**validated_data)
+        next_path = validated_data.pop('next_path', '/')
+        user = User.objects.create_user(is_active=False, **validated_data)
         Profile.objects.create(user=user, role=Profile.Role.CUSTOMER, phone=phone)
+        _, token = EmailVerificationToken.issue(user)
+        send_verification_email(user, token, next_path)
+        return user
+
+
+class EmailAddressSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class EmailVerificationSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+
+    def validate(self, attrs):
+        user = get_user_from_uid(attrs['uid'])
+        if (
+            not user
+            or user.is_active
+            or user.is_staff
+            or user.is_superuser
+            or not Profile.objects.filter(user=user, role=Profile.Role.CUSTOMER).exists()
+        ):
+            raise serializers.ValidationError('This verification link is invalid or expired.')
+        verification = EmailVerificationToken.objects.filter(
+            user=user,
+            token_digest=EmailVerificationToken.digest(attrs['token']),
+            email__iexact=user.email,
+            expires_at__gt=timezone.now(),
+        ).first()
+        if not verification:
+            raise serializers.ValidationError('This verification link is invalid or expired.')
+        attrs['user'] = user
+        attrs['verification'] = verification
+        return attrs
+
+    @transaction.atomic
+    def save(self, **kwargs):
+        user = User.objects.select_for_update().get(pk=self.validated_data['user'].pk)
+        token = EmailVerificationToken.objects.select_for_update().filter(
+            pk=self.validated_data['verification'].pk,
+            user=user,
+            token_digest=EmailVerificationToken.digest(self.validated_data['token']),
+            email__iexact=user.email,
+            expires_at__gt=timezone.now(),
+        ).first()
+        if user.is_active or not token:
+            raise serializers.ValidationError('This verification link is invalid or expired.')
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+        EmailVerificationToken.objects.filter(user=user).delete()
+        return user
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    password_confirmation = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        user = get_user_from_uid(attrs['uid'])
+        if (
+            not user
+            or not user.is_active
+            or not default_token_generator.check_token(user, attrs['token'])
+        ):
+            raise serializers.ValidationError('This password reset link is invalid or expired.')
+        if attrs['password'] != attrs['password_confirmation']:
+            raise serializers.ValidationError({'password_confirmation': 'Passwords do not match.'})
+        try:
+            password_validation.validate_password(attrs['password'], user=user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({'password': exc.messages}) from exc
+        attrs['user'] = user
+        return attrs
+
+    @transaction.atomic
+    def save(self, **kwargs):
+        user = User.objects.select_for_update().get(pk=self.validated_data['user'].pk)
+        if (
+            not user.is_active
+            or not default_token_generator.check_token(user, self.validated_data['token'])
+        ):
+            raise serializers.ValidationError('This password reset link is invalid or expired.')
+        user.set_password(self.validated_data['password'])
+        user.save(update_fields=['password'])
+        TabSessionToken.objects.filter(
+            user=user,
+            revoked_at__isnull=True,
+        ).update(revoked_at=timezone.now())
         return user
 
 
@@ -168,7 +280,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(source='profile.phone', max_length=50, required=False, allow_blank=True)
     initial_password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
     role = serializers.ChoiceField(
-        choices=[(Profile.Role.BROKER, 'Broker')],
+        choices=[(Profile.Role.BROKER, 'Agent')],
         source='profile.role',
     )
     assigned_city_id = serializers.PrimaryKeyRelatedField(
@@ -236,15 +348,17 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         return value
 
     def validate_management_permissions(self, permissions):
-        owner_only = {
-            Profile.Permission.STAFF_MANAGE,
-        }
-        if owner_only.intersection(permissions):
+        owner_only = {Profile.Permission.STAFF_MANAGE, Profile.Permission.SETTINGS_MANAGE}
+        owner_is_actor = is_platform_owner(self.context['request'].user)
+        if owner_only.intersection(permissions) and not owner_is_actor:
             raise serializers.ValidationError('These permissions are reserved for the platform owner.')
-        unsupported = set(permissions) - set(broker_work_permissions())
+        permitted = set(broker_work_permissions())
+        if owner_is_actor:
+            permitted.add(Profile.Permission.SETTINGS_MANAGE)
+        unsupported = set(permissions) - permitted
         if unsupported:
             raise serializers.ValidationError(
-                'Brokers can only receive broker-work permissions.'
+                'Agents can only receive agent-work permissions.'
             )
         return list(dict.fromkeys(permissions))
 
@@ -264,7 +378,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         )
         if role != Profile.Role.BROKER:
             raise serializers.ValidationError(
-                {'role': 'This endpoint manages broker accounts only.'}
+                {'role': 'This endpoint manages agent accounts only.'}
             )
         permissions = profile_data.get(
             'management_permissions',
@@ -273,20 +387,22 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         if not self.instance:
             if profile_data.get('assigned_city') is None:
                 raise serializers.ValidationError({
-                    'assigned_city': 'Assign an active city to this broker account.',
+                    'assigned_city': 'Assign an active city to this agent account.',
                 })
             profile_data['management_permissions'] = broker_work_permissions()
             permissions = profile_data['management_permissions']
-        owner_only = {
-            Profile.Permission.STAFF_MANAGE,
-        }
-        if owner_only.intersection(permissions):
+        owner_only = {Profile.Permission.STAFF_MANAGE, Profile.Permission.SETTINGS_MANAGE}
+        owner_is_actor = is_platform_owner(self.context['request'].user)
+        if owner_only.intersection(permissions) and not owner_is_actor:
             raise serializers.ValidationError(
                 {'management_permissions': 'These permissions are reserved for the platform owner.'}
             )
-        if set(permissions) - set(broker_work_permissions()):
+        permitted = set(broker_work_permissions())
+        if owner_is_actor:
+            permitted.add(Profile.Permission.SETTINGS_MANAGE)
+        if set(permissions) - permitted:
             raise serializers.ValidationError(
-                {'management_permissions': 'Brokers may receive only broker-work permissions.'}
+                {'management_permissions': 'Agents may receive only agent-work permissions.'}
             )
         return attrs
 
@@ -304,7 +420,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         profile = instance.profile
         role = profile_data.get('role', profile.role)
         if role != Profile.Role.BROKER:
-            raise serializers.ValidationError({'role': 'This endpoint manages broker accounts only.'})
+            raise serializers.ValidationError({'role': 'This endpoint manages agent accounts only.'})
         profile.role = role
         profile.assigned_city = profile_data.get('assigned_city', profile.assigned_city)
         if permissions is not None:
@@ -480,10 +596,10 @@ class BrokerFirstLoginProfileSerializer(serializers.Serializer):
             or not profile.broker_onboarding_required
             or not profile.broker_password_changed
         ):
-            raise serializers.ValidationError('Change the initial password before completing your broker profile.')
+            raise serializers.ValidationError('Change the initial password before completing your agent profile.')
         if profile.assigned_city_id is None:
             raise serializers.ValidationError(
-                'Contact an administrator to assign your city before completing broker setup.'
+                'Contact an administrator to assign your city before completing agent setup.'
             )
         return attrs
 
@@ -497,7 +613,7 @@ class BrokerFirstLoginProfileSerializer(serializers.Serializer):
             or not profile.broker_onboarding_required
             or not profile.broker_password_changed
         ):
-            raise serializers.ValidationError('Change the initial password before completing your broker profile.')
+            raise serializers.ValidationError('Change the initial password before completing your agent profile.')
         for field in ('first_name', 'last_name', 'email'):
             setattr(user, field, self.validated_data[field])
         user.save(update_fields=['first_name', 'last_name', 'email'])
@@ -583,15 +699,34 @@ class DelegatedInvitationAcceptSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    username = serializers.CharField()
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
+    identifier = serializers.CharField(required=False)
+    username = serializers.CharField(required=False, write_only=True)
+    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
 
     def validate(self, attrs):
         from django.contrib.auth import authenticate
 
+        identifier = (attrs.get('identifier') or attrs.get('username') or '').strip()
+        missing = {}
+        if not identifier:
+            missing['username'] = 'Enter your email address, phone, or username.'
+        if not attrs.get('password'):
+            missing['password'] = 'This field is required.'
+        if missing:
+            raise serializers.ValidationError(missing)
+        if '@' in identifier:
+            matches = list(User.objects.filter(email__iexact=identifier)[:2])
+        else:
+            phone_matches = list(
+                User.objects.filter(profile__phone__iexact=identifier).distinct()[:2]
+            )
+            matches = phone_matches or list(User.objects.filter(username__iexact=identifier)[:2])
+        if len(matches) != 1:
+            raise serializers.ValidationError('Invalid username or password.')
+
         user = authenticate(
             request=self.context.get('request'),
-            username=attrs['username'],
+            username=matches[0].username,
             password=attrs['password'],
         )
         if user is None:

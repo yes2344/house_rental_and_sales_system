@@ -14,7 +14,8 @@ class BrokerageSettings(models.Model):
         blank=True,
     )
     business_name = models.CharField(max_length=160, blank=True)
-    site_name = models.CharField(max_length=100, default='habeshahome')
+    site_name = models.CharField(max_length=100, default='Habasha Property Center')
+    footer_copyright = models.CharField(max_length=200, blank=True)
     site_logo = models.ImageField(upload_to='site-branding/', blank=True)
     homepage_hero_image = models.ImageField(upload_to='site-branding/homepage/', blank=True)
     phone = models.CharField(max_length=50, blank=True)
@@ -29,21 +30,28 @@ class BrokerageSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name_plural = 'brokerage settings'
+        verbose_name_plural = 'Habasha Property Center contact settings'
 
     def save(self, *args, **kwargs):
         self.pk = 1
-        if self.platform_owner_id is None:
+        has_active_superuser_owner = self.platform_owner_id and get_user_model().objects.filter(
+            pk=self.platform_owner_id,
+            is_superuser=True,
+            is_active=True,
+        ).exists()
+        if not has_active_superuser_owner:
             self.platform_owner = get_user_model().objects.filter(
                 is_superuser=True,
                 is_active=True,
             ).order_by('pk').first()
             if self.platform_owner is None:
-                raise ValidationError('Create an active platform-owner account before saving brokerage settings.')
+                raise ValidationError(
+                    'Create an active platform-owner account before saving Habasha Property Center contact settings.'
+                )
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.business_name or 'Brokerage contact settings'
+        return self.business_name or 'Habasha Property Center contact settings'
 
 
 class SocialMediaLink(models.Model):
@@ -55,6 +63,7 @@ class SocialMediaLink(models.Model):
         TIKTOK = 'tiktok', 'TikTok'
         YOUTUBE = 'youtube', 'YouTube'
         LINKEDIN = 'linkedin', 'LinkedIn'
+        X = 'x', 'X'
 
     brokerage = models.ForeignKey(
         BrokerageSettings,
@@ -94,6 +103,28 @@ class HomepageNote(models.Model):
 
     def __str__(self):
         return self.title or self.text[:60]
+
+
+class PublicInformationPage(models.Model):
+    class Page(models.TextChoices):
+        ABOUT = 'about', 'About'
+        CONTACT = 'contact', 'Contact'
+        PROPERTY_MANAGEMENT = 'property-management', 'Property management'
+
+    page = models.CharField(max_length=32, choices=Page.choices, unique=True)
+    title_en = models.CharField(max_length=160)
+    title_am = models.CharField(max_length=160)
+    introduction_en = models.CharField(max_length=500)
+    introduction_am = models.CharField(max_length=500)
+    body_en = models.TextField(max_length=5000, blank=True)
+    body_am = models.TextField(max_length=5000, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['page']
+
+    def __str__(self):
+        return self.get_page_display()
 
 
 class AdminAuditEvent(models.Model):

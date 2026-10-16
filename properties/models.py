@@ -151,7 +151,7 @@ class Property(models.Model):
         WITHDRAWN = 'withdrawn', 'Withdrawn'
 
     class ServiceType(models.TextChoices):
-        BROKER_MANAGED = 'broker_managed', 'Broker-managed'
+        BROKER_MANAGED = 'broker_managed', 'Agent-managed'
         OWNER_ANNOUNCED = 'owner_announced', 'Owner-announced'
 
     class AreaUnit(models.TextChoices):

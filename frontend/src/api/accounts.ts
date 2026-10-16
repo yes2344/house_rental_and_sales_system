@@ -29,6 +29,21 @@ export interface RegistrationPayload {
   email: string;
   password: string;
   phone?: string;
+  next_path?: string;
+}
+
+export interface AccountEmailPayload {
+  email: string;
+}
+
+export interface AccountTokenPayload {
+  uid: string;
+  token: string;
+}
+
+export interface PasswordResetPayload extends AccountTokenPayload {
+  password: string;
+  password_confirmation: string;
 }
 
 export interface AccountUpdatePayload {
@@ -96,11 +111,27 @@ export async function registerAccount(payload: RegistrationPayload): Promise<Acc
   return response.data;
 }
 
-export async function startSession(username: string, password: string): Promise<Account> {
+export async function verifyEmail(payload: AccountTokenPayload): Promise<void> {
+  await apiClient.post('/auth/verify-email/', payload);
+}
+
+export async function resendVerificationEmail(payload: AccountEmailPayload): Promise<void> {
+  await apiClient.post('/auth/verify-email/resend/', payload);
+}
+
+export async function requestPasswordReset(payload: AccountEmailPayload): Promise<void> {
+  await apiClient.post('/auth/password-reset/', payload);
+}
+
+export async function confirmPasswordReset(payload: PasswordResetPayload): Promise<void> {
+  await apiClient.post('/auth/password-reset/confirm/', payload);
+}
+
+export async function startSession(identifier: string, password: string): Promise<Account> {
   const csrfToken = await getCsrfToken();
   const response = await apiClient.post<Account & { csrf_token: string; session_token: string }>(
     '/auth/login/',
-    { username, password },
+    { identifier, password },
     { headers: { 'X-CSRFToken': csrfToken } },
   );
   setCsrfToken(response.data.csrf_token);

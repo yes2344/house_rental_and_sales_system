@@ -1,8 +1,9 @@
 import hashlib
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -10,7 +11,7 @@ class Profile(models.Model):
     class Role(models.TextChoices):
         CUSTOMER = 'customer', 'Customer'
         OWNER = 'owner', 'Property owner'
-        BROKER = 'broker', 'Authorized broker'
+        BROKER = 'broker', 'Authorized agent'
         ADMINISTRATOR = 'administrator', 'Delegated administrator'
 
     class Permission(models.TextChoices):
@@ -23,11 +24,11 @@ class Profile(models.Model):
         VIEWING_MANAGE_ALL = 'viewings.manage_all', 'Manage all viewing requests'
         VIEWING_MANAGE_ASSIGNED = 'viewings.manage_assigned', 'Manage assigned viewing requests'
         USERS_MANAGE = 'users.manage', 'Manage ordinary user accounts'
-        OWNER_ANNOUNCEMENTS_REVIEW = 'announcements.review', 'Review owner property announcements'
+        OWNER_ANNOUNCEMENTS_REVIEW = 'announcements.review', 'Review owner property submissions'
         REPORTS_REVIEW = 'reports.review', 'Review listing reports'
         STATISTICS_VIEW = 'statistics.view', 'View management statistics'
         AUDIT_VIEW = 'audit.view', 'View audit records'
-        BROKERS_ASSIGN = 'brokers.assign', 'Assign brokers to listings'
+        BROKERS_ASSIGN = 'brokers.assign', 'Assign agents to listings'
         SETTINGS_MANAGE = 'settings.manage', 'Manage platform settings'
         BRANDING_MANAGE = 'branding.manage', 'Manage site branding'
         LOCATIONS_MANAGE_CITIES = 'locations.manage_cities', 'Manage marketplace cities'
@@ -132,6 +133,42 @@ class TabSessionToken(models.Model):
         if self.revoked_at is None:
             self.revoked_at = timezone.now()
             self.save(update_fields=['revoked_at'])
+
+
+class EmailVerificationToken(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='email_verification_tokens',
+    )
+    email = models.EmailField()
+    token_digest = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'expires_at'], name='account_verify_user_exp_idx'),
+        ]
+
+    @classmethod
+    @transaction.atomic
+    def issue(cls, user):
+        user = user.__class__.objects.select_for_update().get(pk=user.pk)
+        token = secrets.token_urlsafe(32)
+        token_digest = hashlib.sha256(token.encode('utf-8')).hexdigest()
+        cls.objects.filter(user=user).delete()
+        verification = cls.objects.create(
+            user=user,
+            email=user.email,
+            token_digest=token_digest,
+            expires_at=timezone.now() + settings.EMAIL_VERIFICATION_TIMEOUT,
+        )
+        return verification, token
+
+    @staticmethod
+    def digest(token):
+        return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
 
 class DelegatedAccountInvitation(models.Model):

@@ -7,6 +7,7 @@ interface PropertyPhotoProps {
   className: string;
   fallbackClassName: string;
   fallbackLabel: string;
+  loading?: 'eager' | 'lazy';
   style?: CSSProperties;
 }
 
@@ -16,6 +17,7 @@ export function PropertyPhoto({
   className,
   fallbackClassName,
   fallbackLabel,
+  loading = 'lazy',
   style,
 }: PropertyPhotoProps) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function PropertyPhoto({
       src={src}
       alt={alt}
       style={style}
-      loading="lazy"
+      loading={loading}
       onLoad={(event) => {
         if (event.currentTarget.naturalWidth < 256 || event.currentTarget.naturalHeight < 160) {
           setFailedSource(src);

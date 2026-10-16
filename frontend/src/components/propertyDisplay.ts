@@ -11,9 +11,11 @@ export function formatPropertyPrice(
   locale: Locale,
   text: (key: MessageKey) => string,
 ): string {
+  const numericPrice = Number(price);
+  if (!Number.isFinite(numericPrice) || numericPrice <= 0) return text('priceOnRequest');
   const formattedPrice = new Intl.NumberFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
     maximumFractionDigits: 0,
-  }).format(Number(price));
+  }).format(numericPrice);
   const periodKey: Record<Exclude<RentalPeriod, ''>, MessageKey> = {
     daily: 'daily',
     weekly: 'weekly',

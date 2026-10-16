@@ -1,7 +1,8 @@
 from django.db.models import Q
 from rest_framework.filters import BaseFilterBackend
+from rest_framework.exceptions import ValidationError
 
-from properties.location_search import matching_location_subtree_ids
+from properties.location_search import matching_location_ids, matching_location_subtree_ids
 from properties.models import Amenity, Property
 from properties.search_terms import SearchConcept, match_search_concepts
 
@@ -45,6 +46,9 @@ def apply_search_concept(queryset, concept: SearchConcept, count: int | None):
 
 class BilingualPropertySearchFilter(BaseFilterBackend):
     def filter_queryset(self, request, queryset, view):
+        if len(request.query_params.getlist('search')) > 1:
+            raise ValidationError({'search': 'Provide the search query only once.'})
+
         query = request.query_params.get('search', '')
         if not query.strip():
             return queryset
@@ -67,8 +71,7 @@ class BilingualPropertySearchFilter(BaseFilterBackend):
                 | Q(amenities__name_am__icontains=term)
                 | Q(administrative_location__name__icontains=term)
                 | Q(administrative_location__name_am__icontains=term)
-                | Q(administrative_location__aliases_en__contains=[term])
-                | Q(administrative_location__aliases_am__contains=[term])
+                | Q(administrative_location_id__in=matching_location_ids(term))
                 for term in remaining
             ]
             for condition in search_conditions:

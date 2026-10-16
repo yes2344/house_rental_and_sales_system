@@ -1,3 +1,6 @@
+from django.db.models import Q
+from django.utils import timezone
+
 from accounts.models import Profile
 from accounts.permissions import (
     has_management_permission,
@@ -29,8 +32,16 @@ def public_properties():
         Property.objects.filter(
             publication_status=Property.PublicationStatus.PUBLISHED,
             status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
-            service_type=Property.ServiceType.BROKER_MANAGED,
-        )
+        ).filter(
+            Q(service_type=Property.ServiceType.BROKER_MANAGED)
+            | Q(
+                service_type=Property.ServiceType.OWNER_ANNOUNCED,
+                owner_announcement__status='approved',
+                owner_announcement__agreements__status='active',
+                owner_announcement__agreements__start_date__lte=timezone.localdate(),
+                owner_announcement__agreements__end_date__gte=timezone.localdate(),
+            )
+        ).distinct()
     )
 
 

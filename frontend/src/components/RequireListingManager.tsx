@@ -12,10 +12,10 @@ export function RequireListingManager({ text }: RequireListingManagerProps) {
 
   const canManage = Boolean(
     account?.role === 'broker' && account.management_permissions.some(
-        (permission) => permission.startsWith('properties.')
-          || permission.startsWith('viewings.')
-          || permission === 'settings.manage',
-      ),
+      (permission) => permission.startsWith('properties.')
+        || permission.startsWith('viewings.')
+        || permission === 'announcements.review',
+    ),
   );
 
   if (canManage) {

@@ -182,7 +182,7 @@ class LocationSerializer(serializers.ModelSerializer):
         if profile and profile.role == Profile.Role.BROKER:
             if location.location_type != Location.Type.SUBCITY:
                 raise serializers.ValidationError({
-                    'location_type': 'Brokers can manage sub-cities within their assigned city only.',
+                    'location_type': 'Agents can manage sub-cities within their assigned city only.',
                 })
             if candidate_parent is None or candidate_parent.pk != profile.assigned_city_id:
                 raise serializers.ValidationError({
@@ -265,6 +265,11 @@ class AmenitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Amenity
         fields = ['id', 'name', 'name_am', 'slug']
+
+
+class PropertyTypeOptionSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    label = serializers.CharField()
 
 
 class PropertyImageSerializer(serializers.ModelSerializer):

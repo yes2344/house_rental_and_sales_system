@@ -1,10 +1,10 @@
-import { CalendarDays, Mail, MapPin, Phone, Ruler } from 'lucide-react';
+import { BedDouble, Bath, MapPin, Phone, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import type { PropertySummary } from '../api/properties';
+import type { PropertySummary, PropertyType } from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
-import { formatPropertyPrice, formatRegistrationDate } from './propertyDisplay';
+import { formatPropertyPrice } from './propertyDisplay';
 import { formatPropertyLocation } from './locationDisplay';
 import { PropertySlideshow } from './PropertySlideshow';
 
@@ -12,9 +12,41 @@ interface PropertyCardProps {
   property: PropertySummary;
   locale: Locale;
   text: (key: MessageKey) => string;
+  imageLoading?: 'eager' | 'lazy';
 }
 
-export function PropertyCard({ property, locale, text }: PropertyCardProps) {
+const propertyTypeMessageKeys: Record<PropertyType, MessageKey> = {
+  house: 'house',
+  villa: 'villa',
+  apartment: 'apartment',
+  condominium: 'condominium',
+  land: 'land',
+  office: 'office',
+  shop: 'shop',
+  warehouse: 'warehouse',
+  commercial: 'commercial',
+  other: 'otherPropertyType',
+};
+
+const statusMessageKeys: Record<PropertySummary['status'], MessageKey> = {
+  available: 'available',
+  rented: 'statusRented',
+  sold: 'statusSold',
+  inactive: 'statusInactive',
+};
+
+function getAreaSquareMetres(property: PropertySummary): number | null {
+  if (property.area_value && property.area_unit) {
+    const areaValue = Number(property.area_value);
+    if (Number.isFinite(areaValue) && areaValue > 0) {
+      return property.area_unit === 'sqm' ? areaValue : areaValue * 0.09290304;
+    }
+  }
+
+  return property.area_sqft > 0 ? property.area_sqft * 0.09290304 : null;
+}
+
+export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: PropertyCardProps) {
   const price = formatPropertyPrice(
     property.price,
     property.listing_type,
@@ -22,17 +54,19 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
     locale,
     text,
   );
-  const registrationDate = formatRegistrationDate(property.created_at, locale);
-  const statusMessage: Record<string, MessageKey> = {
-    rented: 'statusRented',
-    sold: 'statusSold',
-    inactive: 'statusInactive',
-  };
-  const statusKey = statusMessage[property.status] ?? 'available';
+  const statusKey = statusMessageKeys[property.status];
+  const isLand = property.category === 'land';
+  const areaSquareMetres = getAreaSquareMetres(property);
+  const phoneNumber = property.public_contact_phone;
+  const phoneDigits = phoneNumber.replace(/\D/g, '');
+  const phoneHref = phoneNumber
+    ? `tel:${phoneNumber.trim().startsWith('+') ? '+' : ''}${phoneDigits}`
+    : '';
+  const propertyTypeLabel = text(propertyTypeMessageKeys[property.category]);
+  const location = formatPropertyLocation(property, locale);
 
   return (
     <article className="listing-card">
-      <FavoriteButton propertyId={property.id} text={text} />
       <div className="listing-image-link">
         <PropertySlideshow
           images={property.images ?? []}
@@ -42,41 +76,66 @@ export function PropertyCard({ property, locale, text }: PropertyCardProps) {
           previousLabel={text('previousPage')}
           nextLabel={text('nextPage')}
           photoLabel={text('photoNumber')}
+          imageLoading={imageLoading}
         />
         <Link className="listing-image-target" to={`/properties/${property.slug}`}>
           <span className="visually-hidden">{property.title}</span>
         </Link>
+        <div className="listing-image-shade" aria-hidden="true" />
+        <span className={`listing-status listing-status-overlay${statusKey === 'available' ? '' : ' is-unavailable'}`}>
+          <span aria-hidden="true" />{text(statusKey)}
+        </span>
         <span className={`listing-type ${property.listing_type === 'rent' ? 'is-rent' : ''}`}>
           {property.listing_type === 'rent' ? text('forRent') : text('forSale')}
         </span>
+        <div className="listing-image-bottom">
+          <strong className="listing-price listing-price-overlay">{price}</strong>
+          <div className="listing-image-contact">
+            {phoneNumber && (
+              <a
+                href={phoneHref}
+                aria-label={`${text('contactByPhone')}: ${phoneNumber}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Phone size={13} aria-hidden="true" />
+                <span>{phoneNumber}</span>
+              </a>
+            )}
+            <span className="listing-image-property-type">{propertyTypeLabel}</span>
+          </div>
+        </div>
+        <FavoriteButton propertyId={property.id} text={text} />
       </div>
+
       <div className="listing-card-content">
-        <div className="listing-location">
-          <MapPin size={14} aria-hidden="true" />
-          <span>{formatPropertyLocation(property, locale)}</span>
-        </div>
         <h3><Link to={`/properties/${property.slug}`}>{property.title}</Link></h3>
-        <div className="listing-specs listing-contact">
-          {property.public_contact_phone && (
-            <a href={`tel:${property.public_contact_phone}`} aria-label={`${text('contactByPhone')}: ${property.public_contact_phone}`}>
-              <Phone size={13} aria-hidden="true" /><span>{property.public_contact_phone}</span>
-            </a>
-          )}
-          {property.public_contact_email && (
-            <a href={`mailto:${property.public_contact_email}`} aria-label={`${text('contactByEmail')}: ${property.public_contact_email}`}>
-              <Mail size={13} aria-hidden="true" /><span>{property.public_contact_email}</span>
-            </a>
-          )}
-          {property.area_sqft > 0 && <span><Ruler size={15} aria-hidden="true" />{property.area_sqft.toLocaleString(locale === 'am' ? 'am-ET' : 'en-ET')} {text('area')}</span>}
-        </div>
-        {registrationDate && (
-          <p className="listing-registration-date">
-            <CalendarDays size={13} aria-hidden="true" />{text('registeredDate')} {registrationDate}
-          </p>
+        {location && (
+          <div className="listing-location">
+            <MapPin size={14} aria-hidden="true" />
+            <span>{location}</span>
+          </div>
         )}
-        <div className="listing-card-bottom">
-          <strong className="listing-price">{price}</strong>
-          <span className={`listing-status${statusKey === 'available' ? '' : ' is-unavailable'}`}><span />{text(statusKey)}</span>
+        <div className="listing-specs listing-card-specs">
+          {areaSquareMetres !== null && (
+            <span>
+              <Ruler size={15} aria-hidden="true" />
+              {new Intl.NumberFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
+                maximumFractionDigits: 1,
+              }).format(areaSquareMetres)} {text('squareMetreSymbol')}
+            </span>
+          )}
+          {!isLand && property.bedrooms > 0 && (
+            <span>
+              <BedDouble size={15} aria-hidden="true" />
+              {property.bedrooms.toLocaleString(locale === 'am' ? 'am-ET' : 'en-ET')} {text('cardBedrooms')}
+            </span>
+          )}
+          {!isLand && property.bathrooms > 0 && (
+            <span>
+              <Bath size={15} aria-hidden="true" />
+              {property.bathrooms.toLocaleString(locale === 'am' ? 'am-ET' : 'en-ET')} {text('cardBathrooms')}
+            </span>
+          )}
         </div>
       </div>
     </article>

@@ -183,6 +183,9 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'account_login': '10/minute',
         'account_registration': '5/hour',
+        'account_email_verification': '5/hour',
+        'account_email_resend': '5/hour',
+        'account_password_reset': '5/hour',
         'public_viewing_request': '10/hour',
         'public_viewing_receipt': '20/hour',
         'public_listing_report': '5/hour',
@@ -190,6 +193,30 @@ REST_FRAMEWORK = {
     },
 }
 API_TAB_SESSION_LIFETIME = timedelta(days=14)
+EMAIL_VERIFICATION_TIMEOUT = timedelta(
+    seconds=env.int('EMAIL_VERIFICATION_TIMEOUT_SECONDS', default=86400),
+)
+PASSWORD_RESET_TIMEOUT = env.int('PASSWORD_RESET_TIMEOUT_SECONDS', default=86400)
+EMAIL_BACKEND = env(
+    'EMAIL_BACKEND',
+    default=(
+        'django.core.mail.backends.console.EmailBackend'
+        if DEBUG
+        else 'django.core.mail.backends.smtp.EmailBackend'
+    ),
+)
+EMAIL_HOST = env('EMAIL_HOST', default='')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+EMAIL_USE_SSL = env.bool('EMAIL_USE_SSL', default=False)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
+EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT_SECONDS', default=10)
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Habasha Property Center <no-reply@example.com>')
+PUBLIC_FRONTEND_URL = env(
+    'PUBLIC_FRONTEND_URL',
+    default='http://127.0.0.1:5173' if DEBUG else '',
+)
 
 cache_backend = env(
     'DJANGO_CACHE_BACKEND',
@@ -215,7 +242,7 @@ CACHES = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Addis Ababa Property Marketplace API',
+    'TITLE': 'Habasha Property Center API',
     'DESCRIPTION': 'Versioned API for verified property listings and viewing requests.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,

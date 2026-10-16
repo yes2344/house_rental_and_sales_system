@@ -1,3 +1,6 @@
+import logging
+
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
@@ -9,7 +12,12 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from accounts.models import Profile, TabSessionToken, UserPreferences
+from accounts.models import EmailVerificationToken, Profile, TabSessionToken, UserPreferences
+from accounts.email_messages import (
+    AccountEmailDeliveryError,
+    send_password_reset_email,
+    send_verification_email,
+)
 from accounts.serializers import (
     AccountActivitySerializer,
     AccountSerializer,
@@ -18,13 +26,18 @@ from accounts.serializers import (
     CsrfTokenSerializer,
     DelegatedInvitationAcceptSerializer,
     EmptySerializer,
+    EmailAddressSerializer,
+    EmailVerificationSerializer,
     LoginResponseSerializer,
     LoginSerializer,
+    PasswordResetSerializer,
     RegistrationSerializer,
     UserPreferencesSerializer,
 )
 from favorites.models import Favorite
 from viewings.models import ViewingRequest
+
+logger = logging.getLogger(__name__)
 
 
 class CsrfTokenView(generics.GenericAPIView):
@@ -51,8 +64,106 @@ class RegistrationView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        try:
+            user = serializer.save()
+        except AccountEmailDeliveryError:
+            return Response(
+                {'detail': 'The verification email could not be sent. Please try again later.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(AccountSerializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class EmailVerificationView(generics.GenericAPIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'account_email_verification'
+    serializer_class = EmailVerificationSerializer
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {'detail': 'Your email address is verified. You can now sign in.'},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ResendVerificationEmailView(generics.GenericAPIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'account_email_resend'
+    serializer_class = EmailAddressSerializer
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = get_user_model().objects.filter(
+            email__iexact=serializer.validated_data['email'],
+            is_active=False,
+            is_staff=False,
+            is_superuser=False,
+            profile__role=Profile.Role.CUSTOMER,
+            email_verification_tokens__isnull=False,
+        ).first()
+        if user:
+            _, token = EmailVerificationToken.issue(user)
+            try:
+                send_verification_email(user, token)
+            except AccountEmailDeliveryError:
+                logger.warning('Verification email resend failed.')
+        return Response(
+            {'detail': 'If an unverified account matches that email, a verification message will be sent.'},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class PasswordResetRequestView(generics.GenericAPIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'account_password_reset'
+    serializer_class = EmailAddressSerializer
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = get_user_model().objects.filter(
+            email__iexact=serializer.validated_data['email'],
+            is_active=True,
+        ).first()
+        if user:
+            try:
+                send_password_reset_email(user)
+            except AccountEmailDeliveryError:
+                logger.warning('Password reset email delivery failed.')
+        return Response(
+            {'detail': 'If an account matches that email, password reset instructions will be sent.'},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class PasswordResetConfirmView(generics.GenericAPIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'account_password_reset'
+    serializer_class = PasswordResetSerializer
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(
+            {'detail': 'Your password has been changed. You can now sign in.'},
+            status=status.HTTP_200_OK,
+        )
 
 
 class DelegatedInvitationAcceptView(generics.GenericAPIView):
@@ -63,7 +174,7 @@ class DelegatedInvitationAcceptView(generics.GenericAPIView):
     serializer_class = DelegatedInvitationAcceptSerializer
 
     @extend_schema(
-        summary='Accept an owner-issued administrator or broker invitation',
+        summary='Accept an owner-issued administrator or agent invitation',
         request=DelegatedInvitationAcceptSerializer,
         responses={200: AccountSerializer},
     )
@@ -131,7 +242,7 @@ class BrokerFirstLoginPasswordView(generics.GenericAPIView):
 
     @transaction.atomic
     @extend_schema(
-        summary='Set a provisioned broker’s permanent password and optional username',
+        summary='Set a provisioned agent’s permanent password and optional username',
         request=BrokerFirstLoginPasswordSerializer,
         responses={200: AccountSerializer},
     )
@@ -148,7 +259,7 @@ class BrokerFirstLoginProfileView(generics.GenericAPIView):
 
     @transaction.atomic
     @extend_schema(
-        summary='Complete a provisioned broker’s contact profile and activate broker permissions',
+        summary='Complete a provisioned agent’s contact profile and activate agent permissions',
         request=BrokerFirstLoginProfileSerializer,
         responses={200: AccountSerializer},
     )

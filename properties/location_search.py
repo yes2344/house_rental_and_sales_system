@@ -1,6 +1,3 @@
-from django.db.models import Q, TextField
-from django.db.models.functions import Cast
-
 from properties.models import Location
 from properties.search_terms import normalize_search_text
 
@@ -9,20 +6,27 @@ def matching_location_ids(value: str) -> set[int]:
     normalized = normalize_search_text(value)
     if not normalized:
         return set()
-    return set(
-        Location.objects.filter(is_active=True)
-        .annotate(
-            aliases_en_text=Cast('aliases_en', TextField()),
-            aliases_am_text=Cast('aliases_am', TextField()),
-        )
-        .filter(
-            Q(name__icontains=value.strip())
-            | Q(name_am__icontains=value.strip())
-            | Q(aliases_en_text__icontains=normalized)
-            | Q(aliases_am_text__icontains=normalized)
-        )
-        .values_list('pk', flat=True)
-    )
+    matches = set()
+    for location in Location.objects.filter(is_active=True).only(
+        'id',
+        'name',
+        'name_am',
+        'aliases_en',
+        'aliases_am',
+    ):
+        searchable_values = [
+            location.name,
+            location.name_am,
+            *(location.aliases_en or []),
+            *(location.aliases_am or []),
+        ]
+        if any(
+            normalized in normalize_search_text(searchable_value)
+            for searchable_value in searchable_values
+            if isinstance(searchable_value, str)
+        ):
+            matches.add(location.pk)
+    return matches
 
 
 def location_subtree_ids(root_ids: set[int]) -> set[int]:

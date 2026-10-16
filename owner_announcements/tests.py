@@ -1,87 +1,445 @@
+from io import BytesIO
+from tempfile import TemporaryDirectory
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
+from PIL import Image
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from owner_announcements.models import InAppNotification, OwnerAnnouncement
-from properties.models import Property
+from accounts.models import Profile
+from owner_announcements.models import (
+    InAppNotification,
+    OwnerAnnouncement,
+    OwnerAnnouncementAgreement,
+)
+from properties.models import Location, Property
 
 
 User = get_user_model()
 
 
-class RetiredOwnerAnnouncementWorkflowTests(APITestCase):
+class OwnerSubmissionWorkflowTests(APITestCase):
     def setUp(self):
-        self.customer = User.objects.create_user(
-            username='legacy-owner',
-            email='legacy-owner@example.test',
+        self.country = Location.objects.create(
+            name='Ethiopia',
+            slug='submission-ethiopia',
+            location_type=Location.Type.COUNTRY,
+        )
+        self.city = Location.objects.create(
+            name='Submission Test City',
+            slug='submission-test-city',
+            location_type=Location.Type.CITY,
+            parent=self.country,
+        )
+        self.submitter = User.objects.create_user(
+            username='submission-owner',
+            email='owner@example.test',
             password='secure-password-123',
         )
-        self.property = Property.objects.create(
+        Profile.objects.create(
+            user=self.submitter,
+            role=Profile.Role.CUSTOMER,
+        )
+        self.other_user = User.objects.create_user(
+            username='other-owner',
+            email='other@example.test',
+            password='secure-password-123',
+        )
+        Profile.objects.create(user=self.other_user, role=Profile.Role.CUSTOMER)
+        self.agent = User.objects.create_user(
+            username='submission-agent',
+            email='agent@example.test',
+            password='secure-password-123',
+        )
+        Profile.objects.create(
+            user=self.agent,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            assigned_city=self.city,
+        )
+        self.submission_url = reverse('api:owner-submission-list')
+        self.valid_payload = {
+            'title': 'Owner-submitted family house',
+            'location': 'Submission Test City',
+            'administrative_location': self.city.pk,
+            'category': 'house',
+            'listing_type': 'sale',
+            'price': '2500000.00',
+            'bedrooms': 3,
+            'bathrooms': 2,
+            'area_value': '130',
+            'area_unit': 'sqm',
+            'rental_frequency': '',
+            'description': 'A house submitted for review.',
+            'features': 'Private garden',
+            'amenities': [],
+            'owner_contact_name': 'Private Owner',
+            'owner_contact_phone': '+251900000001',
+            'owner_contact_email': 'private-owner@example.test',
+            'authorization_confirmed': True,
+            'terms_accepted': True,
+        }
+
+    def submit(self):
+        self.client.force_authenticate(self.submitter)
+        response = self.client.post(self.submission_url, self.valid_payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        return response
+
+    def test_anonymous_submission_is_rejected(self):
+        response = self.client.post(self.submission_url, self.valid_payload, format='json')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Property.objects.count(), 0)
+
+    def test_authenticated_submission_is_pending_private_and_audited(self):
+        response = self.submit()
+        property_obj = Property.objects.get(pk=response.data['id'])
+        announcement = property_obj.owner_announcement
+
+        self.assertEqual(property_obj.service_type, Property.ServiceType.OWNER_ANNOUNCED)
+        self.assertEqual(property_obj.publication_status, Property.PublicationStatus.PENDING_REVIEW)
+        self.assertEqual(property_obj.submitted_by_id, self.submitter.pk)
+        self.assertEqual(response.data['owner_contact_name'], 'Private Owner')
+        self.assertEqual(response.data['owner_contact_phone'], '+251900000001')
+        self.assertEqual(response.data['owner_contact_email'], 'private-owner@example.test')
+        self.assertEqual(announcement.status, OwnerAnnouncement.Status.PENDING_REVIEW)
+        self.assertTrue(announcement.authorization_confirmed)
+        self.assertEqual(announcement.events.count(), 1)
+        self.assertEqual(announcement.notifications.count(), 1)
+        public_list = self.client.get(reverse('api:property-list'))
+        public_detail = self.client.get(reverse('api:property-detail', args=[property_obj.slug]))
+        self.assertEqual(public_list.data['count'], 0)
+        self.assertEqual(public_detail.status_code, 404)
+
+    def test_cannot_set_publication_or_contact_fields_during_submission(self):
+        self.client.force_authenticate(self.submitter)
+        for field, value in (
+            ('publication_status', 'published'),
+            ('status', 'available'),
+            ('service_type', 'broker_managed'),
+            ('contact_phone', '+251900000009'),
+        ):
+            payload = {**self.valid_payload, field: value}
+            with self.subTest(field=field):
+                response = self.client.post(self.submission_url, payload, format='json')
+                self.assertEqual(response.status_code, 400)
+        self.assertEqual(Property.objects.count(), 0)
+
+    def test_invalid_location_and_missing_consent_are_rejected(self):
+        self.client.force_authenticate(self.submitter)
+        invalid_location = self.client.post(
+            self.submission_url,
+            {**self.valid_payload, 'administrative_location': 999999},
+            format='json',
+        )
+        missing_consent = self.client.post(
+            self.submission_url,
+            {**self.valid_payload, 'authorization_confirmed': False},
+            format='json',
+        )
+
+        self.assertEqual(invalid_location.status_code, 400)
+        self.assertEqual(missing_consent.status_code, 400)
+        self.assertEqual(Property.objects.count(), 0)
+
+    def test_city_administration_requires_a_configured_subcity(self):
+        city_administration = Location.objects.create(
+            name='Submission Test City Administration',
+            slug='submission-test-city-administration',
+            location_type=Location.Type.CITY_ADMINISTRATION,
+            parent=self.country,
+        )
+        subcity = Location.objects.create(
+            name='Submission Test Kifle Ketema',
+            slug='submission-test-kifle-ketema',
+            location_type=Location.Type.SUBCITY,
+            parent=city_administration,
+        )
+        self.client.force_authenticate(self.submitter)
+
+        missing_subcity = self.client.post(
+            self.submission_url,
+            {**self.valid_payload, 'administrative_location': city_administration.pk},
+            format='json',
+        )
+        valid_subcity = self.client.post(
+            self.submission_url,
+            {**self.valid_payload, 'administrative_location': subcity.pk},
+            format='json',
+        )
+
+        self.assertEqual(missing_subcity.status_code, 400)
+        self.assertEqual(valid_subcity.status_code, 201, valid_subcity.data)
+
+    def test_multiple_submissions_are_saved_independently(self):
+        first = self.submit()
+        second = self.client.post(
+            self.submission_url,
+            {**self.valid_payload, 'title': 'Another submitted property'},
+            format='json',
+        )
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201, second.data)
+        self.assertNotEqual(first.data['id'], second.data['id'])
+        self.assertEqual(OwnerAnnouncement.objects.filter(submitter=self.submitter).count(), 2)
+
+    def test_submitter_cannot_read_or_edit_another_users_submission(self):
+        created = self.submit()
+        self.client.force_authenticate(self.other_user)
+
+        read = self.client.get(reverse('api:owner-submission-detail', args=[created.data['id']]))
+        edit = self.client.patch(
+            reverse('api:owner-submission-detail', args=[created.data['id']]),
+            {'title': 'Changed by another user'},
+            format='json',
+        )
+
+        self.assertEqual(read.status_code, 404)
+        self.assertEqual(edit.status_code, 404)
+        self.assertEqual(Property.objects.get(pk=created.data['id']).title, self.valid_payload['title'])
+
+    def test_unauthorized_account_cannot_review_submissions(self):
+        created = self.submit()
+        announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
+        self.client.force_authenticate(self.other_user)
+
+        response = self.client.get(reverse('api:owner-submission-review-list'))
+        detail = self.client.get(
+            reverse('api:owner-submission-review-detail', args=[announcement.pk]),
+        )
+        decision = self.client.post(
+            reverse('api:owner-submission-review-decision', args=[announcement.pk]),
+            {'action': 'reject', 'feedback': 'Unauthorized review attempt.'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(detail.status_code, 403)
+        self.assertEqual(decision.status_code, 403)
+        announcement.refresh_from_db()
+        self.assertEqual(announcement.status, OwnerAnnouncement.Status.PENDING_REVIEW)
+
+    def test_submitter_can_upload_images_but_another_user_cannot_access_them(self):
+        created = self.submit()
+        image_buffer = BytesIO()
+        Image.new('RGB', (1, 1), color='white').save(image_buffer, format='PNG')
+        image_url = reverse('api:owner-submission-images', args=[created.data['id']])
+
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self.client.force_authenticate(self.submitter)
+            uploaded = self.client.post(
+                image_url,
+                {
+                    'image': SimpleUploadedFile(
+                        'front.png',
+                        image_buffer.getvalue(),
+                        content_type='image/png',
+                    ),
+                },
+                format='multipart',
+            )
+            self.client.force_authenticate(self.other_user)
+            forbidden = self.client.get(image_url)
+
+        self.assertEqual(uploaded.status_code, 201, uploaded.data)
+        self.assertEqual(forbidden.status_code, 404)
+
+    def test_agent_can_request_corrections_and_submitter_can_resubmit(self):
+        created = self.submit()
+        announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
+        self.client.force_authenticate(self.agent)
+        decision = self.client.post(
+            reverse('api:owner-submission-review-decision', args=[announcement.pk]),
+            {'action': 'request_corrections', 'feedback': 'Please update the property description.'},
+            format='json',
+        )
+        self.assertEqual(decision.status_code, 200, decision.data)
+        self.assertEqual(decision.data['status'], OwnerAnnouncement.Status.CORRECTIONS_REQUESTED)
+        self.assertEqual(announcement.notifications.count(), 2)
+
+        self.client.force_authenticate(self.submitter)
+        protected_update = self.client.patch(
+            reverse('api:owner-submission-detail', args=[created.data['id']]),
+            {'publication_status': Property.PublicationStatus.PUBLISHED},
+            format='json',
+        )
+        updated = self.client.patch(
+            reverse('api:owner-submission-detail', args=[created.data['id']]),
+            {'title': 'Updated property after review'},
+            format='json',
+        )
+
+        self.assertEqual(protected_update.status_code, 400)
+        self.assertEqual(updated.status_code, 200, updated.data)
+        self.assertEqual(updated.data['submission_status'], OwnerAnnouncement.Status.PENDING_REVIEW)
+        self.assertEqual(updated.data['title'], 'Updated property after review')
+
+    def test_agent_cannot_approve_own_submission(self):
+        created = self.submit()
+        profile = self.submitter.profile
+        profile.role = Profile.Role.BROKER
+        profile.broker_approved = True
+        profile.assigned_city = self.city
+        profile.save()
+        self.client.force_authenticate(self.submitter)
+
+        response = self.client.post(
+            reverse('api:owner-submission-review-decision', args=[created.data['id']]),
+            {'action': 'approve'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            Property.objects.get(pk=created.data['id']).publication_status,
+            Property.PublicationStatus.PENDING_REVIEW,
+        )
+
+    def test_agent_approval_requires_a_valid_agreement_and_publishes_safely(self):
+        created = self.submit()
+        announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
+        self.client.force_authenticate(self.agent)
+        decision_url = reverse('api:owner-submission-review-decision', args=[announcement.pk])
+        missing_agreement = self.client.post(decision_url, {'action': 'approve'}, format='json')
+        self.assertEqual(missing_agreement.status_code, 400)
+        self.assertEqual(
+            Property.objects.get(pk=created.data['id']).publication_status,
+            Property.PublicationStatus.PENDING_REVIEW,
+        )
+
+        response = self.client.post(
+            decision_url,
+            {
+                'action': 'approve',
+                'agreement_start_date': timezone.localdate().isoformat(),
+                'agreement_duration_months': 12,
+                'agreement_terms': 'The platform will manage contact and listing inquiries.',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        announcement.refresh_from_db()
+        property_obj = Property.objects.get(pk=created.data['id'])
+        agreement = OwnerAnnouncementAgreement.objects.get(announcement=announcement)
+        self.assertEqual(announcement.status, OwnerAnnouncement.Status.APPROVED)
+        self.assertEqual(property_obj.publication_status, Property.PublicationStatus.PUBLISHED)
+        self.assertFalse(agreement.public_contact_visible)
+        self.assertFalse(property_obj.contact_publicly_visible)
+        self.assertEqual(announcement.notifications.count(), 2)
+        public_list = self.client.get(reverse('api:property-list'))
+        self.assertEqual(public_list.data['count'], 1)
+        public_property = public_list.data['results'][0]
+        self.assertEqual(public_property['id'], property_obj.pk)
+        self.assertEqual(public_property['public_contact_name'], '')
+        self.assertEqual(public_property['public_contact_phone'], '')
+        self.assertEqual(public_property['public_contact_email'], '')
+
+    def test_agent_rejection_requires_explanation_and_keeps_property_hidden(self):
+        created = self.submit()
+        announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
+        self.client.force_authenticate(self.agent)
+        decision_url = reverse('api:owner-submission-review-decision', args=[announcement.pk])
+        missing_reason = self.client.post(decision_url, {'action': 'reject'}, format='json')
+        rejected = self.client.post(
+            decision_url,
+            {'action': 'reject', 'feedback': 'The submission details could not be verified.'},
+            format='json',
+        )
+        property_obj = Property.objects.get(pk=created.data['id'])
+        public_detail = self.client.get(reverse('api:property-detail', args=[property_obj.slug]))
+
+        self.assertEqual(missing_reason.status_code, 400)
+        self.assertEqual(rejected.status_code, 200, rejected.data)
+        announcement.refresh_from_db()
+        self.assertEqual(property_obj.publication_status, Property.PublicationStatus.REJECTED)
+        self.assertEqual(announcement.status, OwnerAnnouncement.Status.REJECTED)
+        self.assertEqual(public_detail.status_code, 404)
+
+    def test_review_is_city_scoped_for_agents(self):
+        foreign_city = Location.objects.create(
+            name='Foreign Submission City',
+            slug='foreign-submission-city',
+            location_type=Location.Type.CITY,
+            parent=self.country,
+        )
+        self.client.force_authenticate(self.submitter)
+        foreign = self.client.post(
+            self.submission_url,
+            {**self.valid_payload, 'administrative_location': foreign_city.pk},
+            format='json',
+        )
+        self.assertEqual(foreign.status_code, 201, foreign.data)
+        self.client.force_authenticate(self.agent)
+
+        response = self.client.get(reverse('api:owner-submission-review-list'))
+        announcement = OwnerAnnouncement.objects.get(property_id=foreign.data['id'])
+        foreign_detail = self.client.get(
+            reverse('api:owner-submission-review-detail', args=[announcement.pk]),
+        )
+        foreign_decision = self.client.post(
+            reverse('api:owner-submission-review-decision', args=[announcement.pk]),
+            {'action': 'approve'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 0)
+        self.assertEqual(foreign_detail.status_code, 404)
+        self.assertEqual(foreign_decision.status_code, 404)
+
+    def test_historical_owner_announcements_are_retained_but_not_public(self):
+        legacy_property = Property.objects.create(
             title='Historical owner listing',
             location='Recorded location',
             property_type='house',
             listing_type=Property.ListingType.SALE,
             price='2500000.00',
-            description='Historical record retained after owner submissions were retired.',
+            description='Historical record retained for audit purposes.',
             status=Property.Status.AVAILABLE,
             publication_status=Property.PublicationStatus.PUBLISHED,
             service_type=Property.ServiceType.OWNER_ANNOUNCED,
-            submitted_by=self.customer,
+            submitted_by=self.submitter,
         )
-        self.announcement = OwnerAnnouncement.objects.create(
-            property=self.property,
-            submitter=self.customer,
+        announcement = OwnerAnnouncement.objects.create(
+            property=legacy_property,
+            submitter=self.submitter,
             owner_contact_name='Legacy Owner',
-            owner_contact_phone='+251900000001',
+            owner_contact_phone='+251900000002',
             authorization_confirmed=True,
             terms_accepted_at=timezone.now(),
         )
 
-    def test_owner_submission_and_review_endpoints_are_not_routable(self):
-        retired_paths = [
-            '/api/v1/owner/announcements/',
-            '/api/v1/owner/announcements/1/',
-            '/api/v1/owner/announcements/1/images/',
-            '/api/v1/owner/announcements/1/renew/',
-            '/api/v1/owner/announcements/1/withdraw/',
-            '/api/v1/management/owner-announcements/',
-            '/api/v1/management/owner-announcements/1/',
-            '/api/v1/management/owner-announcements/1/decision/',
-            '/api/v1/management/owner-announcements/1/renewal/',
-            '/api/v1/management/owner-announcements/agreements/',
-        ]
-        for path in retired_paths:
-            with self.subTest(path=path):
-                self.assertEqual(self.client.post(path, {}, format='json').status_code, 404)
-
-    def test_historical_owner_announcement_and_property_are_retained_but_not_public(self):
-        response = self.client.get(reverse('api:property-list'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn(
-            self.property.pk,
-            {item['id'] for item in response.data['results']},
+        public_list = self.client.get(reverse('api:property-list'))
+        public_detail = self.client.get(
+            reverse('api:property-detail', args=[legacy_property.slug]),
         )
-        self.assertTrue(OwnerAnnouncement.objects.filter(pk=self.announcement.pk).exists())
-        self.assertTrue(Property.objects.filter(pk=self.property.pk).exists())
-        self.assertEqual(self.property.publication_status, Property.PublicationStatus.PUBLISHED)
+
+        self.assertEqual(public_list.status_code, 200)
+        self.assertNotIn(
+            legacy_property.pk,
+            {item['id'] for item in public_list.data['results']},
+        )
+        self.assertEqual(public_detail.status_code, 404)
+        self.assertTrue(Property.objects.filter(pk=legacy_property.pk).exists())
+        self.assertTrue(OwnerAnnouncement.objects.filter(pk=announcement.pk).exists())
 
     def test_shared_notification_list_and_read_endpoints_remain_available(self):
-        notification = InAppNotification.objects.create(
-            recipient=self.customer,
-            announcement=self.announcement,
-            notification_type='viewing_request_update',
-            message='A viewing request was updated.',
-            idempotency_key='viewing-request-update:legacy-test',
-        )
-        self.client.force_authenticate(self.customer)
+        self.submit()
+        self.client.force_authenticate(self.submitter)
 
         response = self.client.get(reverse('api:notification-list'))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['results'][0]['id'], notification.pk)
+        notification_id = response.data['results'][0]['id']
 
-        read_response = self.client.post(reverse('api:notification-read', args=[notification.pk]))
+        read_response = self.client.post(
+            reverse('api:notification-read', args=[notification_id]),
+        )
         self.assertEqual(read_response.status_code, 200)
-        notification.refresh_from_db()
+        notification = InAppNotification.objects.get(pk=notification_id)
         self.assertIsNotNone(notification.read_at)

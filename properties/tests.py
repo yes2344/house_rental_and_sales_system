@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -9,6 +10,7 @@ from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APITestCase
 from PIL import Image
 
@@ -147,6 +149,30 @@ class PublicPropertyApiTests(APITestCase):
         )
         self.property.amenities.add(self.garden)
 
+    def create_public_property(
+        self,
+        slug,
+        *,
+        listing_type=Property.ListingType.SALE,
+        property_type='house',
+        price=100000,
+        rental_frequency='',
+        location=None,
+    ):
+        return Property.objects.create(
+            title=slug.replace('-', ' ').title(),
+            slug=slug,
+            location='Submitted location',
+            administrative_location=location,
+            property_type=property_type,
+            listing_type=listing_type,
+            price=price,
+            rental_frequency=rental_frequency,
+            description='Published test listing.',
+            status=Property.Status.AVAILABLE,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+
     def test_public_list_returns_paginated_etb_properties(self):
         response = self.client.get(reverse('api:property-list'))
 
@@ -160,6 +186,199 @@ class PublicPropertyApiTests(APITestCase):
         self.assertNotIn('owner', result)
         self.assertIn('rental_frequency', result)
         self.assertIn('created_at', result)
+        self.assertEqual(result['slug'], self.property.slug)
+
+    def test_public_property_type_options_match_the_model_choices(self):
+        response = self.client.get(reverse('api:property-type-list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data,
+            [
+                {'value': value, 'label': label}
+                for value, label in Property.PROPERTY_TYPES
+            ],
+        )
+
+    def test_transaction_type_filter_excludes_the_other_listing_type(self):
+        rental = self.create_public_property(
+            'available-rental-property',
+            listing_type=Property.ListingType.RENT,
+            rental_frequency=Property.RentalFrequency.MONTHLY,
+            price=25000,
+        )
+
+        for listing_type, expected_slug in (
+            (Property.ListingType.RENT, rental.slug),
+            (Property.ListingType.SALE, self.property.slug),
+        ):
+            with self.subTest(listing_type=listing_type):
+                response = self.client.get(
+                    reverse('api:property-list'),
+                    {'listing_type': listing_type},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data['count'], 1)
+                self.assertEqual(response.data['results'][0]['slug'], expected_slug)
+
+    def test_price_sorting_uses_numeric_prices_with_stable_sale_and_rental_period_groups(self):
+        sale_high = self.create_public_property('sale-high-price', price=1000000)
+        sale_equal = self.create_public_property('sale-equal-price', price=500000)
+        daily = self.create_public_property(
+            'daily-rental',
+            listing_type=Property.ListingType.RENT,
+            rental_frequency=Property.RentalFrequency.DAILY,
+            price=900,
+        )
+        weekly = self.create_public_property(
+            'weekly-rental',
+            listing_type=Property.ListingType.RENT,
+            rental_frequency=Property.RentalFrequency.WEEKLY,
+            price=1200,
+        )
+        monthly = self.create_public_property(
+            'monthly-rental',
+            listing_type=Property.ListingType.RENT,
+            rental_frequency=Property.RentalFrequency.MONTHLY,
+            price=300,
+        )
+        yearly = self.create_public_property(
+            'yearly-rental',
+            listing_type=Property.ListingType.RENT,
+            rental_frequency=Property.RentalFrequency.YEARLY,
+            price=100,
+        )
+
+        ascending = self.client.get(reverse('api:property-list'), {'ordering': 'price'})
+        descending = self.client.get(reverse('api:property-list'), {'ordering': '-price'})
+
+        self.assertEqual(ascending.status_code, 200)
+        self.assertEqual(
+            [item['slug'] for item in ascending.data['results']],
+            [
+                self.property.slug,
+                sale_equal.slug,
+                sale_high.slug,
+                daily.slug,
+                weekly.slug,
+                monthly.slug,
+                yearly.slug,
+            ],
+        )
+        self.assertEqual(
+            [item['slug'] for item in descending.data['results']],
+            [
+                sale_high.slug,
+                self.property.slug,
+                sale_equal.slug,
+                daily.slug,
+                weekly.slug,
+                monthly.slug,
+                yearly.slug,
+            ],
+        )
+
+    def test_date_sort_options_are_stable_and_reject_other_ordering_fields(self):
+        now = timezone.now()
+        earlier = now - timedelta(days=2)
+        middle = now - timedelta(days=1)
+        later = now
+        older_property = self.create_public_property('older-date-property')
+        tie_property = self.create_public_property('tied-date-property')
+        newer_property = self.create_public_property('newer-date-property')
+        Property.objects.filter(pk=self.property.pk).update(created_at=middle)
+        Property.objects.filter(pk=tie_property.pk).update(created_at=middle)
+        Property.objects.filter(pk=older_property.pk).update(created_at=earlier)
+        Property.objects.filter(pk=newer_property.pk).update(created_at=later)
+
+        newest_first = self.client.get(
+            reverse('api:property-list'),
+            {'ordering': '-created_at'},
+        )
+        oldest_first = self.client.get(
+            reverse('api:property-list'),
+            {'ordering': 'created_at'},
+        )
+        invalid = self.client.get(
+            reverse('api:property-list'),
+            {'ordering': '-area_sqft'},
+        )
+        default_order = self.client.get(reverse('api:property-list'))
+
+        self.assertEqual(newest_first.status_code, 200)
+        self.assertEqual(
+            [item['slug'] for item in newest_first.data['results'][:3]],
+            [newer_property.slug, tie_property.slug, self.property.slug],
+        )
+        self.assertEqual(oldest_first.status_code, 200)
+        self.assertEqual(
+            [item['slug'] for item in oldest_first.data['results'][:3]],
+            [older_property.slug, self.property.slug, tie_property.slug],
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn('ordering', invalid.data['error']['details'])
+        self.assertEqual(
+            [item['slug'] for item in default_order.data['results'][:3]],
+            [newer_property.slug, tie_property.slug, self.property.slug],
+        )
+
+    def test_invalid_and_incompatible_location_filters_are_rejected(self):
+        country = Location.objects.create(
+            name='Validation Test Country',
+            slug='validation-test-country',
+            location_type=Location.Type.COUNTRY,
+        )
+        city = Location.objects.create(
+            name='Validation Test City',
+            slug='validation-test-city',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
+        other_city = Location.objects.create(
+            name='Other Validation Test City',
+            slug='other-validation-test-city',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
+        subcity = Location.objects.create(
+            name='Validation Test Subcity',
+            slug='validation-test-subcity',
+            location_type=Location.Type.SUBCITY,
+            parent=city,
+        )
+
+        invalid_location = self.client.get(
+            reverse('api:property-list'),
+            {'location_id': 999999},
+        )
+        invalid_city_type = self.client.get(
+            reverse('api:property-list'),
+            {'city_id': country.id},
+        )
+        incompatible_pair = self.client.get(
+            reverse('api:property-list'),
+            {'city_id': other_city.id, 'location_id': subcity.id},
+        )
+
+        self.assertEqual(invalid_location.status_code, 400)
+        self.assertEqual(invalid_city_type.status_code, 400)
+        self.assertEqual(incompatible_pair.status_code, 400)
+
+    def test_unsupported_property_type_and_duplicate_search_or_sort_values_are_rejected(self):
+        invalid_type = self.client.get(
+            reverse('api:property-list'),
+            {'property_type': 'unsupported-type'},
+        )
+        duplicate_search = self.client.get(
+            f"{reverse('api:property-list')}?search=house&search=rent",
+        )
+        duplicate_ordering = self.client.get(
+            f"{reverse('api:property-list')}?ordering=price&ordering=-price",
+        )
+
+        self.assertEqual(invalid_type.status_code, 400)
+        self.assertEqual(duplicate_search.status_code, 400)
+        self.assertEqual(duplicate_ordering.status_code, 400)
 
     def test_city_filter_uses_location_hierarchy_and_returns_location_path(self):
         country = Location.objects.create(
@@ -181,18 +400,56 @@ class PublicPropertyApiTests(APITestCase):
             location_type=Location.Type.SUBCITY,
             parent=city,
         )
+        other_city = Location.objects.create(
+            name='Other Test City Filter',
+            slug='other-test-city-filter',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
+        self.create_public_property(
+            'same-city-apartment-filter-decoy',
+            property_type='apartment',
+            price=500000,
+            location=subcity,
+        )
+        self.create_public_property(
+            'other-city-house-filter-decoy',
+            property_type='house',
+            price=500000,
+            location=other_city,
+        )
         self.property.administrative_location = subcity
         self.property.save(update_fields=['administrative_location'])
 
-        filtered = self.client.get(reverse('api:property-list'), {'city_id': city.id})
+        filtered = self.client.get(
+            reverse('api:property-list'),
+            {
+                'city_id': city.id,
+                'property_type': 'house',
+                'min_price': '400000',
+                'max_price': '600000',
+            },
+        )
         cities = self.client.get(reverse('api:location-list'), {'types': 'city,city_administration'})
 
         self.assertEqual(filtered.status_code, 200)
         self.assertEqual(filtered.data['count'], 1)
         self.assertEqual(filtered.data['results'][0]['location_path'][-1]['id'], subcity.id)
-        self.assertEqual([item['id'] for item in cities.data], [city.id])
+        self.assertEqual(filtered.data['results'][0]['slug'], self.property.slug)
+        self.assertCountEqual([item['id'] for item in cities.data], [city.id, other_city.id])
 
     def test_broker_managed_listing_exposes_the_approved_brokers_public_account_contacts(self):
+        country = Location.objects.create(
+            name='Public Broker Contact Country',
+            slug='public-broker-contact-country',
+            location_type=Location.Type.COUNTRY,
+        )
+        city = Location.objects.create(
+            name='Public Broker Contact City',
+            slug='public-broker-contact-city',
+            location_type=Location.Type.CITY,
+            parent=country,
+        )
         broker = get_user_model().objects.create_user(
             username='public-listing-broker',
             email='broker@example.com',
@@ -201,7 +458,7 @@ class PublicPropertyApiTests(APITestCase):
             user=broker,
             role=Profile.Role.BROKER,
             broker_approved=True,
-            assigned_city=self.city,
+            assigned_city=city,
             phone='+251911222333',
         )
         self.property.submitted_by = broker
@@ -422,6 +679,20 @@ class PublicPropertyApiTests(APITestCase):
             property_type='apartment',
             listing_type=Property.ListingType.RENT,
             price=100000,
+            rental_frequency=Property.RentalFrequency.MONTHLY,
+            bathrooms=1,
+            description='Available apartment.',
+            status=Property.Status.AVAILABLE,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        Property.objects.create(
+            title='Higher priced bathroom rental property',
+            slug='higher-priced-bathroom-rental-property',
+            location='Submitted location',
+            property_type='apartment',
+            listing_type=Property.ListingType.RENT,
+            price=200000,
+            rental_frequency=Property.RentalFrequency.MONTHLY,
             bathrooms=1,
             description='Available apartment.',
             status=Property.Status.AVAILABLE,
@@ -430,7 +701,7 @@ class PublicPropertyApiTests(APITestCase):
 
         response = self.client.get(
             reverse('api:property-list'),
-            {'search': 'bathroom', 'ordering': 'price', 'page_size': 1},
+            {'search': 'bathroom', 'listing_type': 'rent', 'ordering': 'price', 'page_size': 1},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -1403,7 +1674,7 @@ class ManagedLocationApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn('assigned to brokers', str(response.data))
+        self.assertIn('assigned to agents', str(response.data))
         self.assertTrue(Location.objects.filter(pk=city.pk).exists())
 
     def test_active_parent_cannot_be_deactivated_while_descendants_are_active(self):

@@ -17,6 +17,10 @@ export function Footer({ contact, contactError, text }: FooterProps) {
   const isAdministrator = account?.role === 'administrator';
   const configuredSocial = contact.social_links.filter((link) => link.is_enabled && link.url);
   const hasBrokerageContact = Boolean(contact.phone || contact.email || configuredSocial.length);
+  const currentYear = new Date().getFullYear();
+  const footerCopyright = contact.footer_copyright.trim()
+    ? contact.footer_copyright.replaceAll('{year}', String(currentYear))
+    : `© ${currentYear} ${contact.site_name || 'Habasha Property Center'}`;
 
   return (
     <footer className="site-footer">
@@ -34,19 +38,24 @@ export function Footer({ contact, contactError, text }: FooterProps) {
                 </svg>
               </span>
             )}
-            <span className="brand-copy"><strong>{contact.site_name || 'habeshahome'}</strong></span>
+            <span className="brand-copy"><strong>{contact.site_name || 'Habasha Property Center'}</strong></span>
           </Link>
           <p>{text('footerNote')}</p>
         </div>
-        {!isAdministrator && (
-          <div className="footer-links">
-            <Link to="/">{text('footerBrowse')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-            <Link to={account ? '/account' : '/login'}>
-              {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
-            </Link>
-          </div>
-        )}
-        {hasBrokerageContact && (
+        <nav className="footer-links" aria-label={text('footerNavigation')}>
+          <h2>{text('footerNavigation')}</h2>
+          <Link to="/">{text('home')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to="/#latest-listings">{text('allPropertiesNav')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to="/?listing_type=rent">{text('navRent')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to="/?listing_type=sale">{text('navBuy')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to="/about">{text('about')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to="/contact">{text('contact')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to="/property-management">{text('propertyManagement')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to={account ? '/account' : '/login'}>
+            {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
+        </nav>
+        {(hasBrokerageContact || contactError) && (
           <section className="footer-contact" aria-label={text('brokerContactTitle')}>
             <h2>{text('brokerContactTitle')}</h2>
             {contact.phone && (
@@ -56,7 +65,8 @@ export function Footer({ contact, contactError, text }: FooterProps) {
               <a href={`mailto:${contact.email}`}><Mail size={15} aria-hidden="true" />{contact.email}</a>
             )}
             {configuredSocial.length > 0 && (
-              <div className="footer-socials" aria-label={text('brokerSocialLinks')}>
+              <div className="footer-socials" aria-label={text('followUs')}>
+                <span>{text('followUs')}</span>
                 {configuredSocial.map((link) => (
                   <a
                     key={link.platform}
@@ -76,7 +86,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
         )}
       </div>
       <div className="container footer-bottom">
-        <span>© {new Date().getFullYear()} {contact.site_name || 'habeshahome'}</span>
+        <span>{footerCopyright}</span>
       </div>
     </footer>
   );

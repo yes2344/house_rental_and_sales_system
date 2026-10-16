@@ -1,13 +1,16 @@
 from datetime import timedelta
+from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
+from django.core import mail
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
-from accounts.models import Profile, TabSessionToken, UserPreferences
+from accounts.models import EmailVerificationToken, Profile, TabSessionToken, UserPreferences
 from accounts.permissions import (
     BROKER_WORK_PERMISSIONS,
     IsPropertyManagerOrAdministrator,
@@ -29,6 +32,10 @@ class ProfileConstraintTests(TestCase):
 
 
 class AccountApiTests(APITestCase):
+    def setUp(self):
+        super().setUp()
+        cache.clear()
+
     def create_assigned_city(self):
         country = Location.objects.create(
             name='Account Test Country',
@@ -165,10 +172,14 @@ class AccountApiTests(APITestCase):
         self.assertEqual(
             response.data['management_permissions'],
             [
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.SETTINGS_MANAGE,
+                Profile.Permission.BRANDING_MANAGE,
                 Profile.Permission.LOCATIONS_MANAGE_CITIES,
                 Profile.Permission.STAFF_MANAGE,
             ],
         )
+        self.assertTrue(response.data['is_platform_owner'])
 
     def test_django_superuser_has_the_same_platform_role_as_delegated_administrator(self):
         administrator = get_user_model().objects.create_superuser(
@@ -190,14 +201,18 @@ class AccountApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['role'], Profile.Role.ADMINISTRATOR)
         self.assertEqual(
-            response.data['management_permissions'],
+            [
+                permission
+                for permission in response.data['management_permissions']
+                if permission != Profile.Permission.SETTINGS_MANAGE
+            ],
             effective_management_permissions(broker_admin),
         )
-        self.assertFalse(response.data['is_platform_owner'])
+        self.assertTrue(response.data['is_platform_owner'])
         self.assertFalse(has_management_permission(administrator, Profile.Permission.USERS_MANAGE))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.PROPERTY_VIEW_ALL))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.VIEWING_VIEW_ALL))
-        self.assertFalse(has_management_permission(administrator, Profile.Permission.SETTINGS_MANAGE))
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.SETTINGS_MANAGE))
         self.assertTrue(has_management_permission(administrator, Profile.Permission.BRANDING_MANAGE))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.AUDIT_VIEW))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.REPORTS_REVIEW))
@@ -241,7 +256,26 @@ class AccountApiTests(APITestCase):
         self.assertNotIn(Profile.Permission.BROKERS_ASSIGN, effective_management_permissions(broker))
         self.assertNotIn(Profile.Permission.USERS_MANAGE, profile.management_permissions)
 
-    def test_registration_creates_customer_and_ignores_client_role(self):
+    def test_agent_settings_permission_is_effective_only_when_explicitly_granted(self):
+        broker = get_user_model().objects.create_user(username='settings-permission-agent')
+        profile = Profile.objects.create(
+            user=broker,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            management_permissions=[Profile.Permission.SETTINGS_MANAGE],
+        )
+
+        self.assertTrue(has_management_permission(broker, Profile.Permission.SETTINGS_MANAGE))
+        self.assertIn(Profile.Permission.SETTINGS_MANAGE, effective_management_permissions(broker))
+        profile.broker_approved = False
+        profile.save(update_fields=['broker_approved'])
+        self.assertFalse(has_management_permission(broker, Profile.Permission.SETTINGS_MANAGE))
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_registration_creates_inactive_customer_and_ignores_client_role(self):
         response = self.client.post(
             reverse('api:register'),
             {
@@ -258,9 +292,278 @@ class AccountApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         user = get_user_model().objects.get(username='new-customer')
         self.assertTrue(user.check_password('Evergreen!Place42'))
+        self.assertFalse(user.is_active)
         self.assertEqual(user.profile.role, Profile.Role.CUSTOMER)
         self.assertFalse(user.profile.broker_approved)
         self.assertEqual(response.data['role'], Profile.Role.CUSTOMER)
+        self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_registration_rejects_external_return_paths(self):
+        response = self.client.post(
+            reverse('api:register'),
+            {
+                'username': 'unsafe-return-customer',
+                'email': 'unsafe-return@example.com',
+                'password': 'Evergreen!Place42',
+                'next_path': '//outside.example/path',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(get_user_model().objects.filter(username='unsafe-return-customer').exists())
+
+    @staticmethod
+    def _last_email_query(path):
+        link = next(
+            line.strip()
+            for line in reversed(mail.outbox[-1].body.splitlines())
+            if line.strip().startswith('https://')
+        )
+        parsed = urlsplit(link)
+        if parsed.path != path:
+            raise AssertionError(f'Expected an email link to {path}, received {parsed.path}.')
+        return {key: values[0] for key, values in parse_qs(parsed.query).items()}
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_email_verification_activates_account_and_preserves_safe_return_path(self):
+        response = self.client.post(
+            reverse('api:register'),
+            {
+                'username': 'email-verified-customer',
+                'email': 'verified@example.com',
+                'password': 'Evergreen!Place42',
+                'phone': '+251900000001',
+                'next_path': '/submissions/new',
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        user = get_user_model().objects.get(username='email-verified-customer')
+        self.assertFalse(user.is_active)
+
+        params = self._last_email_query('/verify-email')
+        self.assertEqual(params['next'], '/submissions/new')
+        verified = self.client.post(reverse('api:verify-email'), params, format='json')
+        self.assertEqual(verified.status_code, 200)
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        self.assertFalse(EmailVerificationToken.objects.filter(user=user).exists())
+
+        reused = self.client.post(reverse('api:verify-email'), params, format='json')
+        self.assertEqual(reused.status_code, 400)
+        email_login = self.client.post(
+            reverse('api:login'),
+            {'identifier': 'verified@example.com', 'password': 'Evergreen!Place42'},
+            format='json',
+        )
+        self.assertEqual(email_login.status_code, 200)
+        protected_agent_api = self.client.get(
+            reverse('api:managed-property-list'),
+            HTTP_AUTHORIZATION=f"Bearer {email_login.data['session_token']}",
+        )
+        self.assertEqual(protected_agent_api.status_code, 403)
+
+        phone_login = self.client.post(
+            reverse('api:login'),
+            {'identifier': '+251900000001', 'password': 'Evergreen!Place42'},
+            format='json',
+        )
+        self.assertEqual(phone_login.status_code, 200)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_expired_verification_link_does_not_activate_account(self):
+        self.client.post(
+            reverse('api:register'),
+            {
+                'username': 'expired-verification-customer',
+                'email': 'expired@example.com',
+                'password': 'Evergreen!Place42',
+            },
+            format='json',
+        )
+        user = get_user_model().objects.get(username='expired-verification-customer')
+        EmailVerificationToken.objects.filter(user=user).update(
+            expires_at=timezone.now() - timedelta(seconds=1),
+        )
+        response = self.client.post(
+            reverse('api:verify-email'),
+            self._last_email_query('/verify-email'),
+            format='json',
+        )
+        user.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(user.is_active)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_resend_does_not_reactivate_preexisting_inactive_accounts(self):
+        customer = get_user_model().objects.create_user(
+            username='deactivated-customer',
+            email='deactivated-customer@example.com',
+            is_active=False,
+        )
+        agent = get_user_model().objects.create_user(
+            username='inactive-agent',
+            email='inactive-agent@example.com',
+            is_active=False,
+        )
+        Profile.objects.create(user=customer, role=Profile.Role.CUSTOMER)
+        Profile.objects.create(user=agent, role=Profile.Role.BROKER)
+
+        for email in (customer.email, agent.email):
+            response = self.client.post(
+                reverse('api:resend-verification-email'),
+                {'email': email},
+                format='json',
+            )
+            self.assertEqual(response.status_code, 202)
+
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(EmailVerificationToken.objects.exists())
+        customer.refresh_from_db()
+        agent.refresh_from_db()
+        self.assertFalse(customer.is_active)
+        self.assertFalse(agent.is_active)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_password_reset_link_changes_password_once(self):
+        user = get_user_model().objects.create_user(
+            username='password-reset-customer',
+            email='password-reset@example.com',
+            password='Old!Password9283',
+        )
+        Profile.objects.create(user=user, role=Profile.Role.CUSTOMER, phone='+251900000002')
+        response = self.client.post(
+            reverse('api:password-reset-request'),
+            {'email': user.email},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(len(mail.outbox), 1)
+        session, token = TabSessionToken.issue(user)
+        params = self._last_email_query('/reset-password')
+        params.update({
+            'password': 'New!Password9283',
+            'password_confirmation': 'New!Password9283',
+        })
+        reset = self.client.post(
+            reverse('api:password-reset-confirm'),
+            params,
+            format='json',
+        )
+        self.assertEqual(reset.status_code, 200)
+        user.refresh_from_db()
+        session.refresh_from_db()
+        self.assertTrue(user.check_password('New!Password9283'))
+        self.assertIsNotNone(session.revoked_at)
+
+        revoked_session = self.client.get(
+            reverse('api:managed-property-list'),
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
+        self.assertIn(revoked_session.status_code, (401, 403))
+
+        reused = self.client.post(
+            reverse('api:password-reset-confirm'),
+            params,
+            format='json',
+        )
+        self.assertEqual(reused.status_code, 400)
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+        PASSWORD_RESET_TIMEOUT=-1,
+    )
+    def test_expired_password_reset_link_is_rejected(self):
+        user = get_user_model().objects.create_user(
+            username='expired-reset-customer',
+            email='expired-reset@example.com',
+            password='Old!Password9283',
+        )
+        response = self.client.post(
+            reverse('api:password-reset-request'),
+            {'email': user.email},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 202)
+        params = self._last_email_query('/reset-password')
+        params.update({
+            'password': 'New!Password9283',
+            'password_confirmation': 'New!Password9283',
+        })
+        rejected = self.client.post(
+            reverse('api:password-reset-confirm'),
+            params,
+            format='json',
+        )
+        user.refresh_from_db()
+        self.assertEqual(rejected.status_code, 400)
+        self.assertTrue(user.check_password('Old!Password9283'))
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_unverified_users_cannot_login_or_reuse_manually_issued_session_tokens(self):
+        self.client.post(
+            reverse('api:register'),
+            {
+                'username': 'unverified-customer',
+                'email': 'unverified@example.com',
+                'password': 'Evergreen!Place42',
+            },
+            format='json',
+        )
+        user = get_user_model().objects.get(username='unverified-customer')
+        login = self.client.post(
+            reverse('api:login'),
+            {'username': user.email, 'password': 'Evergreen!Place42'},
+            format='json',
+        )
+        _, token = TabSessionToken.issue(user)
+        protected = self.client.get(
+            reverse('api:managed-property-list'),
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+        )
+        self.assertEqual(login.status_code, 400)
+        self.assertIn(protected.status_code, (401, 403))
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+    )
+    def test_password_reset_response_does_not_disclose_unknown_email(self):
+        user = get_user_model().objects.create_user(
+            username='reset-enumeration-customer',
+            email='reset-enumeration@example.com',
+            password='Evergreen!Place42',
+        )
+        known = self.client.post(
+            reverse('api:password-reset-request'),
+            {'email': user.email},
+            format='json',
+        )
+        unknown = self.client.post(
+            reverse('api:password-reset-request'),
+            {'email': 'missing@example.com'},
+            format='json',
+        )
+        self.assertEqual(known.status_code, 202)
+        self.assertEqual(unknown.status_code, 202)
+        self.assertEqual(known.data['detail'], unknown.data['detail'])
 
     def test_weak_password_is_rejected(self):
         response = self.client.post(

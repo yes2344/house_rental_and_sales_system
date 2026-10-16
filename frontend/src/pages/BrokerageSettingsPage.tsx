@@ -12,6 +12,7 @@ import {
   type HomepageNotePayload,
 } from '../api/homepageContent';
 import { useHomepageContent } from '../HomepageContentContext';
+import { PublicInformationPagesEditor } from '../components/PublicInformationPagesEditor';
 import { SocialMark } from '../components/SocialMark';
 import { useBrokerageContact } from '../BrokerageContactContext';
 import type { MessageKey } from '../i18n';
@@ -34,6 +35,7 @@ const socialPlatforms: SocialPlatform[] = [
   'tiktok',
   'youtube',
   'linkedin',
+  'x',
 ];
 
 const socialLabelKey: Record<SocialPlatform, MessageKey> = {
@@ -44,6 +46,7 @@ const socialLabelKey: Record<SocialPlatform, MessageKey> = {
   tiktok: 'brokerageTikTok',
   youtube: 'brokerageYouTube',
   linkedin: 'brokerageLinkedIn',
+  x: 'brokerageX',
 };
 
 const blankNote: HomepageNotePayload = {
@@ -71,7 +74,8 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
   const [noteSaveError, setNoteSaveError] = useState('');
   const [noteSaved, setNoteSaved] = useState(false);
   const canEdit = Boolean(
-    account?.role === 'broker' && account.management_permissions.includes('settings.manage'),
+    account?.is_platform_owner
+    || (account?.role === 'broker' && account.management_permissions.includes('settings.manage')),
   );
 
   useEffect(() => {
@@ -134,6 +138,7 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
         business_name: values.business_name,
         phone: values.phone,
         email: values.email,
+        footer_copyright: values.footer_copyright,
         social_links: socialLinks
           .filter((link) => link.url.trim())
           .map((link) => ({ ...link, url: link.url.trim() })),
@@ -244,6 +249,19 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
             </div>
           </section>
           <section className="manager-form-section">
+            <h2>{text('footerCopyrightHeading')}</h2>
+            <p className="manager-hint">{text('footerCopyrightHint')}</p>
+            <label className="manager-field">
+              <span>{text('footerCopyrightLabel')}</span>
+              <input
+                maxLength={200}
+                value={values.footer_copyright}
+                placeholder={text('footerCopyrightPlaceholder')}
+                onChange={(event) => update('footer_copyright', event.target.value)}
+              />
+            </label>
+          </section>
+          <section className="manager-form-section">
             <h2>{text('socialLinksHeading')}</h2>
             <p className="manager-hint">{text('socialLinksHint')}</p>
             <div className="social-link-editor-list">
@@ -299,6 +317,8 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
             </div>
           </section>
         </form>
+
+        <PublicInformationPagesEditor text={text} />
 
         <section className="manager-form manager-form-section homepage-note-manager" aria-labelledby="homepage-note-heading">
           <div>

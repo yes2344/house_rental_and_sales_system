@@ -100,6 +100,9 @@ class AdminApiTests(APITestCase):
         self.assertEqual(
             me.data['management_permissions'],
             [
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.SETTINGS_MANAGE,
+                Profile.Permission.BRANDING_MANAGE,
                 Profile.Permission.LOCATIONS_MANAGE_CITIES,
                 Profile.Permission.STAFF_MANAGE,
             ],
@@ -146,6 +149,7 @@ class AdminApiTests(APITestCase):
     def test_brokerage_contact_is_public_but_brokers_cannot_manage_platform_settings(self):
         public = self.client.get(reverse('api:brokerage-contact'))
         self.assertEqual(public.status_code, 200)
+        self.assertEqual(public.data['site_name'], 'Habasha Property Center')
         self.assertEqual(public.data['business_name'], '')
 
         self.client.force_authenticate(user=self.customer)
@@ -189,8 +193,8 @@ class AdminApiTests(APITestCase):
             },
             format='json',
         )
-        self.assertEqual(administrator_update.status_code, 403)
-        self.assertFalse(BrokerageSettings.objects.exists())
+        self.assertEqual(administrator_update.status_code, 200)
+        self.assertTrue(BrokerageSettings.objects.exists())
         contact_manager = self.create_broker('brokerage-contact-broker')
         self.client.force_authenticate(user=contact_manager)
         updated = self.client.patch(
@@ -203,9 +207,9 @@ class AdminApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(updated.status_code, 403)
-        self.assertFalse(BrokerageSettings.objects.exists())
+        self.assertTrue(BrokerageSettings.objects.exists())
         audits = AdminAuditEvent.objects.filter(action='brokerage_settings_updated')
-        self.assertEqual(audits.count(), 0)
+        self.assertEqual(audits.count(), 1)
 
     def test_administrator_can_update_public_site_branding_but_customer_cannot(self):
         endpoint = reverse('api:brokerage-contact')
@@ -492,6 +496,170 @@ class AdminApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(invalid.status_code, 403)
+
+    def test_platform_owner_can_grant_settings_access_and_social_links_upsert_without_deleting_disabled_urls(self):
+        broker = self.create_broker('social-settings-agent')
+        delegated_admin = User.objects.create_user(
+            username='social-settings-delegated-admin',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated_admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.STAFF_MANAGE],
+        )
+        account_url = reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk})
+        self.client.force_authenticate(user=delegated_admin)
+        denied_grant = self.client.patch(
+            account_url,
+            {'management_permissions': [Profile.Permission.SETTINGS_MANAGE]},
+            format='json',
+        )
+        self.assertEqual(denied_grant.status_code, 400)
+
+        self.client.force_authenticate(user=self.admin_user)
+        granted = self.client.patch(
+            account_url,
+            {
+                'management_permissions': [
+                    *sorted(BROKER_WORK_PERMISSIONS),
+                    Profile.Permission.SETTINGS_MANAGE,
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(granted.status_code, 200)
+        self.assertIn(Profile.Permission.SETTINGS_MANAGE, granted.data['management_permissions'])
+
+        contact_url = reverse('api:brokerage-contact')
+        self.client.force_authenticate(user=broker)
+        initial_links = self.client.patch(
+            contact_url,
+            {
+                'social_links': [
+                    {
+                        'platform': 'facebook',
+                        'url': 'https://facebook.com/habasha-center',
+                        'is_enabled': True,
+                        'display_order': 0,
+                    },
+                    {
+                        'platform': 'x',
+                        'url': 'https://x.com/habasha-center',
+                        'is_enabled': True,
+                        'display_order': 1,
+                    },
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(initial_links.status_code, 200)
+        self.assertEqual(SocialMediaLink.objects.count(), 2)
+
+        disabled = self.client.patch(
+            contact_url,
+            {
+                'social_links': [
+                    {
+                        'platform': 'x',
+                        'url': 'https://x.com/habasha-center',
+                        'is_enabled': False,
+                        'display_order': 1,
+                    },
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(disabled.status_code, 200)
+        x_link = SocialMediaLink.objects.get(platform='x')
+        self.assertEqual(x_link.url, 'https://x.com/habasha-center')
+        self.assertFalse(x_link.is_enabled)
+        self.assertEqual(SocialMediaLink.objects.count(), 2)
+
+        self.client.force_authenticate(user=None)
+        public_links = self.client.get(contact_url)
+        self.assertEqual(
+            [link['platform'] for link in public_links.data['social_links']],
+            ['facebook'],
+        )
+        self.assertNotIn('x', [link['platform'] for link in public_links.data['social_links']])
+        self.client.force_authenticate(user=broker)
+        private_links = self.client.get(contact_url)
+        self.assertIn(
+            'https://x.com/habasha-center',
+            [link['url'] for link in private_links.data['social_links']],
+        )
+
+    def test_social_media_x_requires_https(self):
+        broker = self.create_broker('invalid-x-settings-agent')
+        broker.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
+        broker.profile.save(update_fields=['management_permissions'])
+        self.client.force_authenticate(user=broker)
+
+        response = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {
+                'social_links': [
+                    {
+                        'platform': 'x',
+                        'url': 'http://x.com/habasha-center',
+                        'is_enabled': True,
+                        'display_order': 0,
+                    },
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(SocialMediaLink.objects.filter(platform='x').exists())
+
+    def test_non_owner_superuser_cannot_manage_or_grant_platform_settings(self):
+        broker = self.create_broker('non-owner-settings-agent')
+        non_owner = User.objects.create_superuser(
+            username='additional-platform-superuser',
+            email='additional-superuser@example.com',
+            password='SecurePass123!value',
+        )
+        self.client.force_authenticate(user=non_owner)
+
+        self.assertFalse(self.client.get(reverse('api:me')).data['is_platform_owner'])
+        denied_update = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {'business_name': 'Unapproved change'},
+            format='json',
+        )
+        denied_grant = self.client.patch(
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk}),
+            {'management_permissions': [Profile.Permission.SETTINGS_MANAGE]},
+            format='json',
+        )
+
+        self.assertEqual(denied_update.status_code, 403)
+        self.assertEqual(denied_grant.status_code, 400)
+        self.assertFalse(BrokerageSettings.objects.exists())
+
+    def test_settings_owner_recovers_to_an_active_superuser_after_deactivation(self):
+        settings = BrokerageSettings.objects.create(business_name='Existing contact')
+        next_owner = User.objects.create_superuser(
+            username='replacement-platform-owner',
+            email='replacement-owner@example.com',
+            password='SecurePass123!value',
+        )
+        self.admin_user.is_active = False
+        self.admin_user.save(update_fields=['is_active'])
+        self.client.force_authenticate(user=next_owner)
+
+        account = self.client.get(reverse('api:me'))
+        updated = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {'business_name': 'Updated contact'},
+            format='json',
+        )
+
+        settings.refresh_from_db()
+        self.assertTrue(account.data['is_platform_owner'])
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(settings.platform_owner_id, next_owner.pk)
 
     def test_application_user_management_cannot_access_non_broker_or_admin_accounts(self):
         self.client.force_authenticate(user=self.admin_user)
@@ -795,6 +963,8 @@ class AdminApiTests(APITestCase):
         self.assertEqual(
             current_account.data['management_permissions'],
             [
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.BRANDING_MANAGE,
                 Profile.Permission.LOCATIONS_MANAGE_CITIES,
                 Profile.Permission.STAFF_MANAGE,
             ],
@@ -841,7 +1011,7 @@ class AdminApiTests(APITestCase):
         response = client.get(reverse('admin_delegated_accounts'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Create a broker account')
+        self.assertContains(response, 'Create an agent account')
         self.assertNotContains(response, '/admin-portal/properties/')
         self.assertNotContains(response, '/admin-portal/viewing-requests/')
         self.assertEqual(client.get(reverse('admin_property_list')).status_code, 302)
@@ -873,6 +1043,87 @@ class AdminApiTests(APITestCase):
         self.assertEqual(protected_owner.status_code, 403)
         self.admin_user.refresh_from_db()
         self.assertTrue(self.admin_user.is_active)
+
+    def test_public_information_pages_are_public_and_settings_managers_can_update_them(self):
+        public_response = self.client.get(
+            reverse('api:public-information-page', kwargs={'page': 'property-management'})
+        )
+        self.assertEqual(public_response.status_code, 200)
+        self.assertIn('title_en', public_response.data)
+        self.assertIn('title_am', public_response.data)
+
+        self.client.force_authenticate(user=self.customer)
+        denied = self.client.patch(
+            reverse('api:managed-public-information-page-detail', kwargs={'page': 'about'}),
+            {'title_en': 'Unauthorized edit'},
+            format='json',
+        )
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_authenticate(user=self.admin_user)
+        managed_pages = self.client.get(reverse('api:managed-public-information-page-list'))
+        self.assertEqual(managed_pages.status_code, 200)
+        self.assertEqual(len(managed_pages.data['results']), 3)
+        update = self.client.patch(
+            reverse('api:managed-public-information-page-detail', kwargs={'page': 'about'}),
+            {
+                'title_en': 'About updated',
+                'title_am': 'ስለ እኛ ተዘምኗል',
+                'introduction_en': 'Updated introduction.',
+                'introduction_am': 'የተዘመነ መግቢያ።',
+            },
+            format='json',
+        )
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(
+            self.client.get(
+                reverse('api:public-information-page', kwargs={'page': 'about'})
+            ).data['title_en'],
+            'About updated',
+        )
+        self.assertTrue(
+            AdminAuditEvent.objects.filter(
+                action='public_information_page_updated',
+                object_id='about',
+                actor=self.admin_user,
+            ).exists()
+        )
+
+        broker = self.create_broker('public-page-settings-agent')
+        broker.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
+        broker.profile.save(update_fields=['management_permissions'])
+        self.client.force_authenticate(user=broker)
+        agent_update = self.client.patch(
+            reverse(
+                'api:managed-public-information-page-detail',
+                kwargs={'page': 'property-management'},
+            ),
+            {'introduction_en': 'Agent-managed service information.'},
+            format='json',
+        )
+        self.assertEqual(agent_update.status_code, 200)
+
+    def test_settings_agent_can_manage_public_footer_copyright(self):
+        self.client.force_authenticate(user=None)
+        public_before = self.client.get(reverse('api:brokerage-contact'))
+        self.assertEqual(public_before.status_code, 200)
+        self.assertEqual(public_before.data['footer_copyright'], '')
+
+        broker = self.create_broker('footer-copyright-settings-agent')
+        broker.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
+        broker.profile.save(update_fields=['management_permissions'])
+        self.client.force_authenticate(user=broker)
+        updated = self.client.patch(
+            reverse('api:brokerage-contact'),
+            {'footer_copyright': '© {year} Habasha Homes'},
+            format='json',
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.data['footer_copyright'], '© {year} Habasha Homes')
+
+        self.client.force_authenticate(user=None)
+        public_after = self.client.get(reverse('api:brokerage-contact'))
+        self.assertEqual(public_after.data['footer_copyright'], '© {year} Habasha Homes')
         self.assertTrue(self.admin_user.is_superuser)
 
     def test_superuser_can_deactivate_a_broker_but_not_a_delegated_administrator(self):

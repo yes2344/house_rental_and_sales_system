@@ -1,3 +1,5 @@
+from django.apps import apps
+from django.contrib.auth import get_user_model
 from rest_framework.permissions import BasePermission
 
 from accounts.models import Profile
@@ -8,11 +10,13 @@ ADMIN_MANAGEMENT_PERMISSIONS = frozenset({
     Profile.Permission.BRANDING_MANAGE,
     Profile.Permission.LOCATIONS_MANAGE_CITIES,
     Profile.Permission.STAFF_MANAGE,
+    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
 })
 BROKER_WORK_PERMISSIONS = frozenset({
     Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
     Profile.Permission.VIEWING_MANAGE_ASSIGNED,
     Profile.Permission.LOCATIONS_MANAGE_SUBCITIES,
+    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
 })
 
 
@@ -24,12 +28,37 @@ def broker_work_permissions():
     ]
 
 
+def is_platform_owner(user):
+    if not user or not user.is_authenticated or not user.is_active or not user.is_superuser:
+        return False
+    settings_model = apps.get_model('portal_admin', 'BrokerageSettings')
+    owner_id = settings_model.objects.filter(pk=1).values_list('platform_owner_id', flat=True).first()
+    if owner_id is not None and get_user_model().objects.filter(
+        pk=owner_id,
+        is_superuser=True,
+        is_active=True,
+    ).exists():
+        return owner_id == user.pk
+    else:
+        owner_id = get_user_model().objects.filter(
+            is_superuser=True,
+            is_active=True,
+        ).order_by('pk').values_list('pk', flat=True).first()
+    return owner_id == user.pk
+
+
 def effective_management_permissions(user):
     if user.is_superuser:
         permissions = [
             permission
             for permission, _ in Profile.Permission.choices
-            if user.is_active and permission in ADMIN_MANAGEMENT_PERMISSIONS
+            if user.is_active and (
+                permission in ADMIN_MANAGEMENT_PERMISSIONS
+                or (
+                    permission == Profile.Permission.SETTINGS_MANAGE
+                    and is_platform_owner(user)
+                )
+            )
         ]
         return permissions
     profile = getattr(user, 'profile', None)
@@ -42,7 +71,10 @@ def effective_management_permissions(user):
             if user.is_staff and permission in ADMIN_MANAGEMENT_PERMISSIONS
         ]
     if profile.role == Profile.Role.BROKER and profile.broker_approved:
-        return broker_work_permissions()
+        permissions = broker_work_permissions()
+        if Profile.Permission.SETTINGS_MANAGE in profile.management_permissions:
+            permissions.append(Profile.Permission.SETTINGS_MANAGE)
+        return permissions
     return []
 
 
@@ -50,14 +82,26 @@ def has_management_permission(user, permission):
     if not user or not user.is_authenticated or not user.is_active:
         return False
     if user.is_superuser:
-        return permission in ADMIN_MANAGEMENT_PERMISSIONS
+        return (
+            permission in ADMIN_MANAGEMENT_PERMISSIONS
+            or (
+                permission == Profile.Permission.SETTINGS_MANAGE
+                and is_platform_owner(user)
+            )
+        )
     profile = Profile.objects.filter(user_id=user.pk).first()
     if profile is None:
         return False
     if profile.role == Profile.Role.ADMINISTRATOR:
         return bool(user.is_staff and permission in ADMIN_MANAGEMENT_PERMISSIONS)
     if profile.role == Profile.Role.BROKER:
-        return profile.broker_approved and permission in BROKER_WORK_PERMISSIONS
+        return profile.broker_approved and (
+            permission in BROKER_WORK_PERMISSIONS
+            or (
+                permission == Profile.Permission.SETTINGS_MANAGE
+                and permission in profile.management_permissions
+            )
+        )
     return False
 
 

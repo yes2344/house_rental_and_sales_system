@@ -4,8 +4,15 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from accounts.models import Profile
+from accounts.permissions import has_management_permission
 from accounts.serializers import EffectiveManagementPermissionsField
-from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
+from admin.models import (
+    AdminAuditEvent,
+    BrokerageSettings,
+    HomepageNote,
+    PublicInformationPage,
+    SocialMediaLink,
+)
 from properties.access import public_properties
 from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
@@ -33,6 +40,7 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
         model = BrokerageSettings
         fields = [
             'site_name',
+            'footer_copyright',
             'site_logo',
             'clear_site_logo',
             'homepage_hero_image',
@@ -50,6 +58,12 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
             'social_links',
         ]
         extra_kwargs = {'site_logo': {'required': False}}
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if representation['site_name'].casefold() == 'habeshahome':
+            representation['site_name'] = 'Habasha Property Center'
+        return representation
 
     def get_fields(self):
         fields = super().get_fields()
@@ -125,16 +139,31 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
         if clear_homepage_hero_image:
             instance.homepage_hero_image = ''
         if social_links is not None:
-            links_by_platform = {link['platform']: link['url'] for link in social_links}
-            for platform in SocialMediaLink.Platform.values:
-                validated_data[f'{platform}_url'] = links_by_platform.get(platform, '')
+            legacy_fields = {
+                'facebook': 'facebook_url',
+                'whatsapp': 'whatsapp_url',
+                'telegram': 'telegram_url',
+                'instagram': 'instagram_url',
+                'tiktok': 'tiktok_url',
+                'youtube': 'youtube_url',
+                'linkedin': 'linkedin_url',
+            }
+            for link in social_links:
+                legacy_field = legacy_fields.get(link['platform'])
+                if legacy_field:
+                    validated_data[legacy_field] = link['url']
         instance = super().update(instance, validated_data)
         if social_links is not None:
-            instance.social_links.all().delete()
-            SocialMediaLink.objects.bulk_create([
-                SocialMediaLink(brokerage=instance, **link)
-                for link in social_links
-            ])
+            for link in social_links:
+                SocialMediaLink.objects.update_or_create(
+                    brokerage=instance,
+                    platform=link['platform'],
+                    defaults={
+                        'url': link['url'],
+                        'is_enabled': link.get('is_enabled', True),
+                        'display_order': link.get('display_order', 0),
+                    },
+                )
         if old_logo_name and old_logo_name != instance.site_logo.name:
             storage = instance.site_logo.storage
             transaction.on_commit(lambda: storage.delete(old_logo_name))
@@ -155,6 +184,7 @@ class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
     class Meta(BrokerageSettingsSerializer.Meta):
         fields = [
             'site_name',
+            'footer_copyright',
             'site_logo',
             'homepage_hero_image',
             'business_name',
@@ -182,10 +212,14 @@ class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
     def get_social_links(self, obj):
         if not obj.pk:
             return []
-        queryset = SocialMediaLink.objects.filter(
-            brokerage_id=obj.pk,
-            is_enabled=True,
-        ).order_by('display_order', 'platform')
+        queryset = SocialMediaLink.objects.filter(brokerage_id=obj.pk)
+        request = self.context.get('request')
+        if not request or not has_management_permission(
+            request.user,
+            Profile.Permission.SETTINGS_MANAGE,
+        ):
+            queryset = queryset.filter(is_enabled=True)
+        queryset = queryset.order_by('display_order', 'platform')
         return SocialMediaLinkSerializer(queryset, many=True).data
 
 
@@ -200,6 +234,32 @@ class HomepageNoteSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError('Enter note text.')
         return value
+
+
+class PublicInformationPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PublicInformationPage
+        fields = [
+            'page',
+            'title_en',
+            'title_am',
+            'introduction_en',
+            'introduction_am',
+            'body_en',
+            'body_am',
+            'updated_at',
+        ]
+        read_only_fields = ['page', 'updated_at']
+
+    def validate(self, attrs):
+        for field in ('title_en', 'title_am', 'introduction_en', 'introduction_am'):
+            value = attrs.get(field)
+            if value is not None:
+                attrs[field] = value.strip()
+        for field in ('body_en', 'body_am'):
+            if field in attrs:
+                attrs[field] = attrs[field].strip()
+        return attrs
 
 
 class AdminRoleField(serializers.ChoiceField):

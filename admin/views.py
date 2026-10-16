@@ -145,7 +145,7 @@ def delegated_accounts(request):
             changes={'username': user.username},
         )
         user.delete()
-        messages.success(request, 'Broker account deleted.')
+        messages.success(request, 'Agent account deleted.')
         return redirect('admin_delegated_accounts')
 
     if request.method == 'POST' and request.POST.get('account_id'):
@@ -263,7 +263,7 @@ def delegated_accounts(request):
             'broker_onboarding_required': profile.broker_onboarding_required,
         },
             )
-            messages.success(request, f'Broker account created for {user.get_username()}.')
+            messages.success(request, f'Agent account created for {user.get_username()}.')
             form = DelegatedAccountCreateForm(actor=request.user)
     elif request.GET.get('account_id'):
         selected_profile = get_object_or_404(profiles, user_id=request.GET['account_id'])
