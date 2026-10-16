@@ -17,31 +17,6 @@ interface LoginLocationState {
   from?: string | { pathname?: string; search?: string; hash?: string };
 }
 
-function getSafeRedirectTarget(from: unknown): string {
-  if (typeof from === 'string') {
-    return from.startsWith('/')
-      && !from.startsWith('//')
-      && !from.includes('\\')
-      && !/[\u0000-\u001f]/.test(from)
-      ? from
-      : '/';
-  }
-  if (from && typeof from === 'object') {
-    const candidate = from as { pathname?: string; search?: string; hash?: string };
-    if (
-      candidate.pathname?.startsWith('/')
-      && !candidate.pathname.startsWith('//')
-      && !candidate.pathname.includes('\\')
-      && !/[\u0000-\u001f]/.test(candidate.pathname)
-    ) {
-      return getSafeRedirectTarget(
-        `${candidate.pathname}${candidate.search ?? ''}${candidate.hash ?? ''}`,
-      );
-    }
-  }
-  return '/';
-}
-
 export function LoginPage({ text }: LoginPageProps) {
   const { account, authError, authLoading, signIn } = useAuth();
   const location = useLocation();
@@ -58,7 +33,7 @@ export function LoginPage({ text }: LoginPageProps) {
     setError('');
     try {
       const signedInAccount = await signIn(username.trim(), password);
-      const destination = signedInAccount.broker_onboarding_required ? '/broker-onboarding' : getSafeRedirectTarget(state?.from);
+      const destination = signedInAccount.broker_onboarding_required ? '/broker-onboarding' : '/';
       navigate(destination, { replace: true });
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError));
@@ -67,7 +42,9 @@ export function LoginPage({ text }: LoginPageProps) {
     }
   };
 
-  if (!authLoading && account) return <Navigate to={getSafeRedirectTarget(state?.from)} replace />;
+  if (!authLoading && account) {
+    return <Navigate to={account.broker_onboarding_required ? '/broker-onboarding' : '/'} replace />;
+  }
 
   return (
     <main id="main-content" className="auth-page">
