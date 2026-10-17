@@ -822,6 +822,30 @@ class AccountApiTests(APITestCase):
         self.assertIn('session_token', response.data)
         self.assertIn('csrf_token', response.data)
 
+    @override_settings(CSRF_TRUSTED_ORIGINS=['http://127.0.0.1:4173'])
+    def test_login_accepts_csrf_token_from_local_preview_origin(self):
+        user = get_user_model().objects.create_user(
+            username='local-preview-customer',
+            password='Evergreen!Place42',
+        )
+        Profile.objects.create(user=user)
+        client = APIClient(enforce_csrf_checks=True)
+        csrf_response = client.get(reverse('api:csrf-token'))
+        token = csrf_response.data['csrf_token']
+
+        response = client.post(
+            reverse('api:login'),
+            {'username': user.username, 'password': 'Evergreen!Place42'},
+            format='json',
+            HTTP_ORIGIN='http://127.0.0.1:4173',
+            HTTP_REFERER='http://127.0.0.1:4173/',
+            HTTP_X_CSRFTOKEN=token,
+        )
+
+        self.assertEqual(csrf_response.status_code, 200)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('session_token', response.data)
+
         logout_response = client.post(
             reverse('api:logout'),
             {},

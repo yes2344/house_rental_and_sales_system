@@ -32,7 +32,12 @@ ALLOWED_HOSTS = env.list(
 
 CSRF_TRUSTED_ORIGINS = env.list(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
-    default=['http://127.0.0.1:5173', 'http://localhost:5173'] if DEBUG else [],
+    default=[
+        'http://127.0.0.1:5173',
+        'http://localhost:5173',
+        'http://127.0.0.1:4173',
+        'http://localhost:4173',
+    ] if DEBUG else [],
 )
 SECURE_SSL_REDIRECT = env.bool('DJANGO_SECURE_SSL_REDIRECT', default=not DEBUG)
 SECURE_HSTS_SECONDS = env.int(
