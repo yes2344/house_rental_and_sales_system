@@ -1,6 +1,7 @@
 import secrets
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import environ
 from django.core.exceptions import ImproperlyConfigured
@@ -30,6 +31,12 @@ ALLOWED_HOSTS = env.list(
     default=['localhost', '127.0.0.1', '[::1]'],
 )
 
+DEPLOYED_FRONTEND_URL = 'https://habeshapropertycenter.netlify.app'
+PUBLIC_FRONTEND_URL = env(
+    'PUBLIC_FRONTEND_URL',
+    default='http://127.0.0.1:5173' if DEBUG else DEPLOYED_FRONTEND_URL,
+)
+
 CSRF_TRUSTED_ORIGINS = env.list(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
     default=[
@@ -39,6 +46,13 @@ CSRF_TRUSTED_ORIGINS = env.list(
         'http://localhost:4173',
     ] if DEBUG else [],
 )
+for frontend_url in (DEPLOYED_FRONTEND_URL, PUBLIC_FRONTEND_URL):
+    parsed_frontend_url = urlsplit(frontend_url)
+    if parsed_frontend_url.scheme in {'http', 'https'} and parsed_frontend_url.netloc:
+        frontend_origin = f'{parsed_frontend_url.scheme}://{parsed_frontend_url.netloc}'
+        if frontend_origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(frontend_origin)
+
 SECURE_SSL_REDIRECT = env.bool('DJANGO_SECURE_SSL_REDIRECT', default=not DEBUG)
 SECURE_HSTS_SECONDS = env.int(
     'DJANGO_SECURE_HSTS_SECONDS',
@@ -221,11 +235,6 @@ EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT_SECONDS', default=10)
 BREVO_API_KEY = env('BREVO_API_KEY', default='')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Habasha Property Center <no-reply@example.com>')
-PUBLIC_FRONTEND_URL = env(
-    'PUBLIC_FRONTEND_URL',
-    default='http://127.0.0.1:5173' if DEBUG else '',
-)
-
 cache_backend = env(
     'DJANGO_CACHE_BACKEND',
     default=(

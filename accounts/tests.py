@@ -856,6 +856,27 @@ class AccountApiTests(APITestCase):
         account_after_logout = client.get(reverse('api:me'))
         self.assertIn(account_after_logout.status_code, [401, 403])
 
+    def test_login_accepts_csrf_token_from_deployed_frontend_origin(self):
+        client = APIClient(enforce_csrf_checks=True)
+        csrf_response = client.get(reverse('api:csrf-token'))
+        token = csrf_response.data['csrf_token']
+
+        response = client.post(
+            reverse('api:login'),
+            {'username': 'csrf-diagnostic-invalid-user', 'password': 'not-a-real-password'},
+            format='json',
+            HTTP_ORIGIN='https://habeshapropertycenter.netlify.app',
+            HTTP_REFERER='https://habeshapropertycenter.netlify.app/login',
+            HTTP_X_CSRFTOKEN=token,
+        )
+
+        self.assertEqual(csrf_response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data['error']['details']['non_field_errors'],
+            ['Invalid username or password.'],
+        )
+
     def test_logins_issue_isolated_tokens_and_logout_revokes_only_current_tab(self):
         user = get_user_model().objects.create_user(
             username='tab-isolated-customer',
