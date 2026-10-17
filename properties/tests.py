@@ -3,6 +3,7 @@ from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
@@ -14,10 +15,11 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
-from PIL import Image
+from PIL import Image, ImageChops
 
 from accounts.models import Profile
 from admin.models import AdminAuditEvent
+from properties.image_processing import watermark_image
 from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
 from properties.serializers import LocationSerializer
 
@@ -1938,6 +1940,25 @@ class PropertyImageApiTests(APITestCase):
             kwargs={'property_id': self.property.pk},
         )
 
+    def test_watermark_places_low_opacity_handle_in_the_center(self):
+        image_buffer = BytesIO()
+        Image.new('RGB', (600, 400), color=(80, 120, 160)).save(image_buffer, format='PNG')
+
+        with patch(
+            'properties.image_processing._branding',
+            return_value=('Habesha Home Center', None, ''),
+        ):
+            watermarked = watermark_image(ContentFile(image_buffer.getvalue()))
+
+        with Image.open(BytesIO(image_buffer.getvalue())) as original, Image.open(watermarked) as result:
+            center = (100, 80, 500, 320)
+            difference = ImageChops.difference(
+                original.convert('RGB').crop(center),
+                result.convert('RGB').crop(center),
+            )
+            self.assertIsNotNone(difference.getbbox())
+            self.assertLess(max(channel[1] for channel in difference.getextrema()), 100)
+
     def test_upload_validates_image_and_sets_first_image_primary(self):
         response = self.client.post(
             self.image_url(),
@@ -2024,6 +2045,18 @@ class PropertyImageApiTests(APITestCase):
         with Image.open(BytesIO(original_bytes)) as original, Image.open(BytesIO(public_bytes)) as public:
             self.assertEqual(public.size, original.size)
             self.assertNotEqual(public.convert('RGB').tobytes(), original.convert('RGB').tobytes())
+
+        with patch(
+            'properties.image_processing._branding',
+            return_value=('Habesha Home Center', None, '+251911222333'),
+        ):
+            call_command('watermark_property_images', '--refresh')
+        image.refresh_from_db()
+        with image.image.open('rb') as public_file:
+            phone_watermarked_bytes = public_file.read()
+        with image.original_image.open('rb') as original_file:
+            self.assertEqual(original_file.read(), original_bytes)
+        self.assertNotEqual(phone_watermarked_bytes, public_bytes)
 
         call_command('watermark_property_images')
         image.refresh_from_db()

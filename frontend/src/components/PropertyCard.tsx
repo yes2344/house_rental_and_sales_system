@@ -2,6 +2,7 @@ import { BedDouble, Bath, MapPin, Phone, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { PropertySummary } from '../api/properties';
+import { useBrokerageContact } from '../BrokerageContactContext';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
 import { formatPropertyPrice } from './propertyDisplay';
@@ -34,6 +35,7 @@ function getAreaSquareMetres(property: PropertySummary): number | null {
 }
 
 export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: PropertyCardProps) {
+  const { contact } = useBrokerageContact();
   const price = formatPropertyPrice(
     property.price,
     property.listing_type,
@@ -44,7 +46,7 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
   const statusKey = statusMessageKeys[property.status];
   const isLand = property.category === 'land';
   const areaSquareMetres = getAreaSquareMetres(property);
-  const phoneNumber = property.public_contact_phone;
+  const phoneNumber = property.public_contact_phone || contact.phone;
   const phoneDigits = phoneNumber.replace(/\D/g, '');
   const phoneHref = phoneNumber
     ? `tel:${phoneNumber.trim().startsWith('+') ? '+' : ''}${phoneDigits}`
