@@ -176,7 +176,13 @@ class AccountApiTests(APITestCase):
         self.assertEqual(
             response.data['management_permissions'],
             [
+                Profile.Permission.PROPERTY_VIEW_ALL,
+                Profile.Permission.PROPERTY_MODERATE,
+                Profile.Permission.PROPERTY_EDIT_ALL,
+                Profile.Permission.PROPERTY_DELETE_ALL,
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN,
                 Profile.Permission.SETTINGS_MANAGE,
                 Profile.Permission.BRANDING_MANAGE,
                 Profile.Permission.LOCATIONS_MANAGE_CITIES,
@@ -214,7 +220,7 @@ class AccountApiTests(APITestCase):
         )
         self.assertTrue(response.data['is_platform_owner'])
         self.assertFalse(has_management_permission(administrator, Profile.Permission.USERS_MANAGE))
-        self.assertFalse(has_management_permission(administrator, Profile.Permission.PROPERTY_VIEW_ALL))
+        self.assertTrue(has_management_permission(administrator, Profile.Permission.PROPERTY_VIEW_ALL))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.VIEWING_VIEW_ALL))
         self.assertTrue(has_management_permission(administrator, Profile.Permission.SETTINGS_MANAGE))
         self.assertTrue(has_management_permission(administrator, Profile.Permission.BRANDING_MANAGE))
@@ -226,11 +232,11 @@ class AccountApiTests(APITestCase):
         self.assertFalse(has_management_permission(administrator, Profile.Permission.LOCATIONS_MANAGE_SUBCITIES))
         self.assertEqual(
             self.client.get(reverse('api:admin-property-list')).status_code,
-            403,
+            200,
         )
         self.assertEqual(
             self.client.get(reverse('api:managed-property-list')).status_code,
-            403,
+            200,
         )
         self.assertEqual(
             self.client.get(reverse('api:managed-viewing-list')).status_code,
@@ -956,12 +962,13 @@ class ListingObjectPermissionTests(TestCase):
             administrative_location=subcity,
             price=100000,
             description='A test listing.',
+            submitted_by=self.broker,
             owner=self.owner,
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=self.broker)
         PropertyBrokerAssignment.objects.create(property=self.property, broker=self.unapproved_broker)
 
-    def test_approved_broker_can_manage_only_assigned_or_same_city_properties(self):
+    def test_approved_broker_can_manage_only_properties_they_registered(self):
         permission = IsPropertyManagerOrAdministrator()
 
         def request_for(user):
@@ -976,7 +983,7 @@ class ListingObjectPermissionTests(TestCase):
             description='Managed within the same marketplace.',
             administrative_location=self.property.administrative_location,
         )
-        self.assertTrue(
+        self.assertFalse(
             permission.has_object_permission(request_for(self.broker), None, unassigned_property)
         )
         other_city = Location.objects.create(

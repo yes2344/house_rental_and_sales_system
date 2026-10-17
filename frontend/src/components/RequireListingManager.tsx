@@ -11,10 +11,11 @@ export function RequireListingManager({ text }: RequireListingManagerProps) {
   const { account } = useAuth();
 
   const canManage = Boolean(
-    account?.role === 'broker' && account.management_permissions.some(
+    ['broker', 'administrator'].includes(account?.role ?? '') && account?.management_permissions.some(
       (permission) => permission.startsWith('properties.')
         || permission.startsWith('viewings.')
-        || permission === 'announcements.review',
+        || permission === 'announcements.review'
+        || permission === 'announcements.review_assigned',
     ),
   );
 

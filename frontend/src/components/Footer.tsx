@@ -1,10 +1,9 @@
-import { ArrowUpRight, Mail, Phone } from 'lucide-react';
+import { Mail, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
 import type { BrokerageContact } from '../api/brokerage';
 import type { MessageKey } from '../i18n';
-import { SocialMark, socialPlatformNames } from './SocialMark';
 
 interface FooterProps {
   contact: BrokerageContact;
@@ -15,8 +14,7 @@ interface FooterProps {
 export function Footer({ contact, contactError, text }: FooterProps) {
   const { account } = useAuth();
   const isAdministrator = account?.role === 'administrator';
-  const configuredSocial = contact.social_links.filter((link) => link.is_enabled && link.url);
-  const hasBrokerageContact = Boolean(contact.phone || contact.email || configuredSocial.length);
+  const hasBrokerageContact = Boolean(contact.phone || contact.email);
   const currentYear = new Date().getFullYear();
   const footerCopyright = contact.footer_copyright.trim()
     ? contact.footer_copyright.replaceAll('{year}', String(currentYear))
@@ -44,15 +42,15 @@ export function Footer({ contact, contactError, text }: FooterProps) {
         </div>
         <nav className="footer-links" aria-label={text('footerNavigation')}>
           <h2>{text('footerNavigation')}</h2>
-          <Link to="/">{text('home')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to="/#latest-listings">{text('allPropertiesNav')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to="/?listing_type=rent">{text('navRent')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to="/?listing_type=sale">{text('navBuy')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to="/about">{text('about')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to="/contact">{text('contact')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <Link to="/property-management">{text('propertyManagement')} <ArrowUpRight size={14} aria-hidden="true" /></Link>
+          <Link to="/">{text('home')}</Link>
+          <Link to="/#latest-listings">{text('allPropertiesNav')}</Link>
+          <Link to="/?listing_type=rent">{text('navRent')}</Link>
+          <Link to="/?listing_type=sale">{text('navBuy')}</Link>
+          <Link to="/about">{text('aboutUs')}</Link>
+          <Link to="/contact">{text('contactUs')}</Link>
+          <Link to="/property-management">{text('propertyManagement')}</Link>
           <Link to={account ? '/account' : '/login'}>
-            {text(account ? 'myAccount' : 'footerAccount')} <ArrowUpRight size={14} aria-hidden="true" />
+            {text(account ? 'myAccount' : 'footerAccount')}
           </Link>
         </nav>
         {(hasBrokerageContact || contactError) && (
@@ -63,23 +61,6 @@ export function Footer({ contact, contactError, text }: FooterProps) {
             )}
             {contact.email && (
               <a href={`mailto:${contact.email}`}><Mail size={15} aria-hidden="true" />{contact.email}</a>
-            )}
-            {configuredSocial.length > 0 && (
-              <div className="footer-socials" aria-label={text('followUs')}>
-                <span>{text('followUs')}</span>
-                {configuredSocial.map((link) => (
-                  <a
-                    key={link.platform}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={socialPlatformNames[link.platform]}
-                    title={socialPlatformNames[link.platform]}
-                  >
-                    <SocialMark platform={link.platform} />
-                  </a>
-                ))}
-              </div>
             )}
             {contactError && <p className="footer-contact-error" role="status">{text('brokerContactUnavailable')}</p>}
           </section>

@@ -5,6 +5,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
+from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection, transaction
 from django.test import TestCase, override_settings
@@ -961,6 +963,7 @@ class ManagedPropertyApiTests(APITestCase):
             price=400000,
             description='Owner listing.',
             owner=self.owner,
+            submitted_by=self.manager,
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=self.manager)
@@ -1224,10 +1227,10 @@ class ManagedPropertyApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(forbidden.status_code, 403)
-        self.assertEqual(administrator_published.status_code, 403)
+        self.assertEqual(administrator_published.status_code, 200)
         self.assertEqual(published.status_code, 403)
         self.property.refresh_from_db()
-        self.assertEqual(self.property.publication_status, Property.PublicationStatus.DRAFT)
+        self.assertEqual(self.property.publication_status, Property.PublicationStatus.PUBLISHED)
 
         self.property.status = Property.Status.SOLD
         self.property.save(update_fields=['status'])
@@ -1300,6 +1303,7 @@ class ManagedPropertyApiTests(APITestCase):
             rental_frequency=Property.RentalFrequency.WEEKLY,
             price=1000,
             description='Legacy rental period remains readable.',
+            submitted_by=self.manager,
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
         PropertyBrokerAssignment.objects.create(property=legacy_rental, broker=self.manager)
@@ -1412,7 +1416,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(city_only.status_code, 400)
         self.assertIn('administrative_location', city_only.data['error']['details'])
         self.assertEqual(selected_subcity.status_code, 400)
-    def test_administrator_without_publication_permission_cannot_create_listing(self):
+    def test_administrator_can_create_listing_without_a_manual_permission_list(self):
         restricted_admin = get_user_model().objects.create_user(
             username='listing-editor-without-moderation',
             is_staff=True,
@@ -1430,10 +1434,10 @@ class ManagedPropertyApiTests(APITestCase):
             format='json',
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(Property.objects.filter(title='Must not be published').exists())
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(Property.objects.filter(title='Must not be published').exists())
 
-    def test_broker_can_create_and_manage_only_assigned_property(self):
+    def test_broker_can_manage_own_listing_but_not_another_brokers_listing(self):
         broker = get_user_model().objects.create_user(
             username='crud-broker',
             email='crud-broker@example.com',
@@ -1449,22 +1453,27 @@ class ManagedPropertyApiTests(APITestCase):
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
             ],
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
         self.client.force_authenticate(user=broker)
 
-        update = self.client.patch(
-            reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
-            {'status': 'inactive'},
-            format='json',
-        )
         created = self.client.post(
             reverse('api:managed-property-list'),
             self.property_payload(title='Broker listing', contact_phone='', contact_email=''),
             format='json',
         )
+        update = self.client.patch(
+            reverse('api:managed-property-detail', kwargs={'pk': created.data['id']}),
+            {'description': 'Updated by the listing agent.'},
+            format='json',
+        )
+        other_broker_update = self.client.patch(
+            reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
+            {'status': 'inactive'},
+            format='json',
+        )
 
         self.assertEqual(update.status_code, 200)
         self.assertEqual(created.status_code, 201)
+        self.assertEqual(other_broker_update.status_code, 404)
         self.assertEqual(created.data['publication_status'], Property.PublicationStatus.PUBLISHED)
         self.assertEqual(created.data['contact_phone'], broker.profile.phone)
         self.assertEqual(created.data['contact_email'], broker.email)
@@ -1866,7 +1875,11 @@ class PropertyImageApiTests(APITestCase):
     def setUp(self):
         self.media_directory = TemporaryDirectory()
         self.addCleanup(self.media_directory.cleanup)
-        settings_override = override_settings(MEDIA_ROOT=self.media_directory.name)
+        settings_override = override_settings(
+            MEDIA_ROOT=self.media_directory.name,
+            PRIVATE_MEDIA_ROOT=str(Path(self.media_directory.name) / 'private'),
+            CLOUDINARY_URL='',
+        )
         settings_override.enable()
         self.addCleanup(settings_override.disable)
 
@@ -1907,11 +1920,12 @@ class PropertyImageApiTests(APITestCase):
             price=400000,
             description='Image test listing.',
             owner=owner,
+            submitted_by=broker,
         )
         PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
         self.client.force_authenticate(user=broker)
 
-    def make_image(self, name='property.png', size=(2, 2), compress_level=6, image_format='PNG'):
+    def make_image(self, name='property.png', size=(300, 200), compress_level=6, image_format='PNG'):
         buffer = BytesIO()
         image = Image.new('RGB', size, color='green')
         save_options = {'compress_level': compress_level} if image_format == 'PNG' else {}
@@ -1935,6 +1949,85 @@ class PropertyImageApiTests(APITestCase):
         image = PropertyImage.objects.get(pk=response.data['id'])
         self.assertTrue(image.is_primary)
         self.assertTrue(Path(image.image.path).is_file())
+        self.assertTrue(Path(image.original_image.path).is_file())
+        self.assertEqual(image.original_content_type, 'image/png')
+
+    def test_public_image_is_watermarked_and_original_is_only_available_to_owner(self):
+        uploaded = self.make_image()
+        original_bytes = uploaded.read()
+        uploaded.seek(0)
+        response = self.client.post(
+            self.image_url(),
+            {'image': uploaded},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        image = PropertyImage.objects.get(pk=response.data['id'])
+
+        with image.image.open('rb') as public_file:
+            public_bytes = public_file.read()
+        with image.original_image.open('rb') as original_file:
+            self.assertEqual(original_file.read(), original_bytes)
+        with Image.open(BytesIO(original_bytes)) as original, Image.open(BytesIO(public_bytes)) as public:
+            self.assertEqual(public.size, original.size)
+            self.assertNotEqual(public.convert('RGB').tobytes(), original.convert('RGB').tobytes())
+
+        original_url = reverse('api:property-image-original', kwargs={'pk': image.pk})
+        allowed = self.client.get(original_url)
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed['Cache-Control'], 'private, no-store')
+        self.assertEqual(b''.join(allowed.streaming_content), original_bytes)
+
+        self.client.force_authenticate(user=self.other_owner)
+        denied = self.client.get(original_url)
+        self.assertEqual(denied.status_code, 404)
+
+    def test_metadata_update_does_not_watermark_an_existing_image_again(self):
+        self.client.post(
+            self.image_url(),
+            {'image': self.make_image()},
+            format='multipart',
+        )
+        image = PropertyImage.objects.get(property=self.property)
+        with image.image.open('rb') as public_file:
+            public_before = public_file.read()
+        with image.original_image.open('rb') as original_file:
+            original_before = original_file.read()
+
+        image.caption = 'Updated caption'
+        image.save(update_fields=['caption'])
+
+        with image.image.open('rb') as public_file:
+            self.assertEqual(public_file.read(), public_before)
+        with image.original_image.open('rb') as original_file:
+            self.assertEqual(original_file.read(), original_before)
+
+    def test_existing_image_watermark_command_preserves_original_and_is_idempotent(self):
+        uploaded = self.make_image(name='legacy.png')
+        original_bytes = uploaded.read()
+        uploaded.seek(0)
+        legacy_name = PropertyImage._meta.get_field('image').storage.save(
+            'property_images/legacy.png',
+            ContentFile(original_bytes),
+        )
+        image = PropertyImage.objects.create(property=self.property, image=legacy_name)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            call_command('watermark_property_images')
+        image.refresh_from_db()
+
+        self.assertNotEqual(image.image.name, legacy_name)
+        with image.original_image.open('rb') as original_file:
+            self.assertEqual(original_file.read(), original_bytes)
+        with image.image.open('rb') as public_file:
+            public_bytes = public_file.read()
+        with Image.open(BytesIO(original_bytes)) as original, Image.open(BytesIO(public_bytes)) as public:
+            self.assertEqual(public.size, original.size)
+            self.assertNotEqual(public.convert('RGB').tobytes(), original.convert('RGB').tobytes())
+
+        call_command('watermark_property_images')
+        image.refresh_from_db()
+        self.assertEqual(image.original_filename, 'legacy.png')
 
     def test_upload_accepts_supported_image_formats_and_stores_files_under_media_root(self):
         format_extensions = (
@@ -2039,7 +2132,7 @@ class PropertyImageApiTests(APITestCase):
         self.assertFalse(PropertyImage.objects.get(pk=first.data['id']).is_primary)
         self.assertTrue(PropertyImage.objects.get(pk=second.data['id']).is_primary)
 
-    def test_approved_broker_cannot_manage_images_outside_assigned_city(self):
+    def test_approved_broker_cannot_manage_images_registered_by_another_user(self):
         other_property = Property.objects.create(
             title='Other image property',
             location='Submitted location',
@@ -2064,17 +2157,20 @@ class PropertyImageApiTests(APITestCase):
         )
         image = PropertyImage.objects.get(pk=upload.data['id'])
         stored_path = Path(image.image.path)
+        original_path = Path(image.original_image.path)
 
-        response = self.client.delete(
-            reverse(
-                'api:managed-property-image-detail',
-                kwargs={'property_id': self.property.pk, 'pk': image.pk},
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(
+                reverse(
+                    'api:managed-property-image-detail',
+                    kwargs={'property_id': self.property.pk, 'pk': image.pk},
+                )
             )
-        )
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(PropertyImage.objects.filter(pk=image.pk).exists())
         self.assertFalse(stored_path.exists())
+        self.assertFalse(original_path.exists())
 
     def test_deleting_property_removes_its_stored_images(self):
         upload = self.client.post(
@@ -2084,14 +2180,17 @@ class PropertyImageApiTests(APITestCase):
         )
         image = PropertyImage.objects.get(pk=upload.data['id'])
         stored_path = Path(image.image.path)
+        original_path = Path(image.original_image.path)
 
-        response = self.client.delete(
-            reverse('api:managed-property-detail', kwargs={'pk': self.property.pk})
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(
+                reverse('api:managed-property-detail', kwargs={'pk': self.property.pk})
+            )
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Property.objects.filter(pk=self.property.pk).exists())
         self.assertFalse(stored_path.exists())
+        self.assertFalse(original_path.exists())
 
     def test_image_limit_is_enforced(self):
         for index in range(10):

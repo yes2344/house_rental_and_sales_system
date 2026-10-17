@@ -47,6 +47,7 @@ from properties.views import (
     ManagedPropertyImageListCreateView,
     ManagedPropertyListCreateView,
     ManagedPropertyPublicationView,
+    PropertyImageOriginalView,
     PublicAmenityListView,
     PublicLocationListView,
     PublicPropertyTypeListView,
@@ -56,7 +57,9 @@ from properties.views import (
 from owner_announcements.api_views import (
     InAppNotificationListView,
     InAppNotificationReadView,
+    OwnerAnnouncementAssignmentView,
     OwnerAnnouncementDecisionView,
+    OwnerAnnouncementReviewerListView,
     OwnerAnnouncementReviewDetailView,
     OwnerAnnouncementReviewListView,
     OwnerSubmissionDetailView,
@@ -119,9 +122,19 @@ urlpatterns = [
         name='owner-submission-review-list',
     ),
     path(
+        'management/submissions/reviewers/',
+        OwnerAnnouncementReviewerListView.as_view(),
+        name='owner-submission-reviewers',
+    ),
+    path(
         'management/submissions/<int:pk>/',
         OwnerAnnouncementReviewDetailView.as_view(),
         name='owner-submission-review-detail',
+    ),
+    path(
+        'management/submissions/<int:pk>/assignment/',
+        OwnerAnnouncementAssignmentView.as_view(),
+        name='owner-submission-assignment',
     ),
     path(
         'management/submissions/<int:pk>/decision/',
@@ -172,6 +185,11 @@ urlpatterns = [
         'management/properties/<int:property_id>/images/<int:pk>/',
         ManagedPropertyImageDetailView.as_view(),
         name='managed-property-image-detail',
+    ),
+    path(
+        'management/images/<int:pk>/original/',
+        PropertyImageOriginalView.as_view(),
+        name='property-image-original',
     ),
     path('management/viewing-requests/', ManagedViewingRequestListView.as_view(), name='managed-viewing-list'),
     path(

@@ -25,6 +25,7 @@ interface BrokerEditValues {
   is_active: boolean;
   assigned_city_id: string;
   manage_public_settings: boolean;
+  review_assigned_submissions: boolean;
 }
 
 const emptyEditValues: BrokerEditValues = {
@@ -37,6 +38,7 @@ const emptyEditValues: BrokerEditValues = {
   is_active: true,
   assigned_city_id: '',
   manage_public_settings: false,
+  review_assigned_submissions: false,
 };
 
 export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPageProps) {
@@ -117,6 +119,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
       is_active: account.is_active,
       assigned_city_id: account.assigned_city_id === null ? '' : String(account.assigned_city_id),
       manage_public_settings: account.management_permissions.includes('settings.manage'),
+      review_assigned_submissions: account.management_permissions.includes('announcements.review_assigned'),
     });
     setError('');
     setSuccess('');
@@ -135,19 +138,26 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
     setSuccess('');
     setFieldErrors({});
     try {
-      const { initial_password, assigned_city_id, manage_public_settings, ...accountChanges } = editValues;
+      const {
+        initial_password,
+        assigned_city_id,
+        manage_public_settings,
+        review_assigned_submissions,
+        ...accountChanges
+      } = editValues;
       const managementPermissions = editing.management_permissions.filter(
-        (permission) => permission !== 'settings.manage',
+        (permission) => permission !== 'settings.manage'
+          && permission !== 'announcements.review_assigned',
       );
       const updated = await updateManagedBrokerAccount(editing.id, {
         ...accountChanges,
         assigned_city_id: Number(assigned_city_id),
         ...(initial_password ? { initial_password } : {}),
-        ...(isPlatformOwner ? {
-          management_permissions: manage_public_settings
-            ? [...managementPermissions, 'settings.manage']
-            : managementPermissions,
-        } : {}),
+        management_permissions: [
+          ...managementPermissions,
+          ...(review_assigned_submissions ? ['announcements.review_assigned'] : []),
+          ...(isPlatformOwner && manage_public_settings ? ['settings.manage'] : []),
+        ],
       });
       setAccounts((current) => current.map((item) => item.id === updated.id ? updated : item));
       setEditing(null);
@@ -358,6 +368,18 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
                 <small>{text('managePublicSettingsHelp')}</small>
               </label>
             )}
+            <label className="filter-label">
+              <input
+                type="checkbox"
+                checked={editValues.review_assigned_submissions}
+                onChange={(event) => setEditValues((current) => ({
+                  ...current,
+                  review_assigned_submissions: event.target.checked,
+                }))}
+              />
+              {' '}{text('reviewAssignedSubmissions')}
+              <small>{text('reviewAssignedSubmissionsHelp')}</small>
+            </label>
             <div className="location-form-actions">
               <button className="button button-primary" type="submit" disabled={saving}>
                 {saving ? text('savingLocation') : text('saveBroker')}

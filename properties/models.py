@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.core.validators import (
     FileExtensionValidator,
     MaxValueValidator,
@@ -9,7 +10,12 @@ from django.core.validators import (
 )
 from django.db import models, transaction
 from django.db.models import Q
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.utils.text import slugify
+
+from properties.image_processing import image_content_type, watermark_image
+from properties.storage import private_property_image_storage
 
 
 class Location(models.Model):
@@ -391,6 +397,14 @@ class PropertyImage(models.Model):
         upload_to='property_images/',
         validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'webp'])],
     )
+    original_image = models.ImageField(
+        upload_to='private_property_images/',
+        storage=private_property_image_storage,
+        blank=True,
+        editable=False,
+    )
+    original_filename = models.CharField(max_length=255, blank=True, editable=False)
+    original_content_type = models.CharField(max_length=100, blank=True, editable=False)
     caption = models.CharField(max_length=200, blank=True)
     is_primary = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -412,11 +426,84 @@ class PropertyImage(models.Model):
                 Property.objects.select_for_update().get(pk=self.property_id)
                 if PropertyImage.objects.filter(property_id=self.property_id).count() >= 10:
                     raise ValidationError({'image': 'A property can have at most 10 images.'})
-                return super().save(*args, **kwargs)
-        return super().save(*args, **kwargs)
+                return self._save_with_watermark(*args, **kwargs)
+        return self._save_with_watermark(*args, **kwargs)
+
+    def _save_with_watermark(self, *args, **kwargs):
+        if not self.image or self.image._committed:
+            return super().save(*args, **kwargs)
+
+        previous_files = None
+        if self.pk:
+            previous_files = type(self).objects.filter(pk=self.pk).values_list(
+                'image',
+                'original_image',
+            ).first()
+        previous_image_name, previous_original_name = previous_files or ('', '')
+        original_name = self.image.name
+        uploaded_file = self.image.file
+        uploaded_file.seek(0)
+        original_content = uploaded_file.read()
+        uploaded_file.seek(0)
+        try:
+            watermarked_content = watermark_image(ContentFile(original_content))
+            content_type = image_content_type(ContentFile(original_content))
+        except (OSError, ValueError) as exc:
+            raise ValidationError({
+                'image': 'The uploaded image could not be watermarked. Choose a valid JPEG, PNG, or WebP image.',
+            }) from exc
+
+        saved_original_name = None
+        saved_public_name = None
+        try:
+            self.original_image.save(original_name, ContentFile(original_content), save=False)
+            saved_original_name = self.original_image.name
+            self.original_filename = original_name.replace('\\', '/').rsplit('/', 1)[-1]
+            self.original_content_type = content_type
+            self.image.save(original_name, watermarked_content, save=False)
+            saved_public_name = self.image.name
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {
+                    'image',
+                    'original_image',
+                    'original_filename',
+                    'original_content_type',
+                }
+            result = super().save(*args, **kwargs)
+        except Exception:
+            if saved_public_name and saved_public_name != previous_image_name:
+                self.image.storage.delete(saved_public_name)
+            if saved_original_name and saved_original_name != previous_original_name:
+                self.original_image.storage.delete(saved_original_name)
+            raise
+
+        if previous_image_name and previous_image_name != self.image.name:
+            image_storage = self.image.storage
+            transaction.on_commit(
+                lambda: image_storage.delete(previous_image_name),
+                robust=True,
+            )
+        if previous_original_name and previous_original_name != self.original_image.name:
+            original_storage = self.original_image.storage
+            transaction.on_commit(
+                lambda: original_storage.delete(previous_original_name),
+                robust=True,
+            )
+        return result
 
     def __str__(self):
         return f'{self.property.title} image'
+
+
+@receiver(post_delete, sender=PropertyImage)
+def delete_property_image_files(sender, instance, **kwargs):
+    for image_field_name in ('image', 'original_image'):
+        image_field = getattr(instance, image_field_name)
+        if image_field and image_field.name:
+            storage = image_field.storage
+            name = image_field.name
+            transaction.on_commit(lambda storage=storage, name=name: storage.delete(name))
 
 
 class PropertyBrokerAssignment(models.Model):

@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
@@ -59,6 +60,17 @@ class OwnerSubmissionWorkflowTests(APITestCase):
             role=Profile.Role.BROKER,
             broker_approved=True,
             assigned_city=self.city,
+            management_permissions=[
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+            ],
+        )
+        self.admin = User.objects.create_user(
+            username='submission-admin',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=self.admin,
+            role=Profile.Role.ADMINISTRATOR,
         )
         self.submission_url = reverse('api:owner-submission-list')
         self.valid_payload = {
@@ -87,6 +99,17 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         self.client.force_authenticate(self.submitter)
         response = self.client.post(self.submission_url, self.valid_payload, format='json')
         self.assertEqual(response.status_code, 201, response.data)
+        return response
+
+    def assign_to_agent(self, announcement):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            reverse('api:owner-submission-assignment', args=[announcement.pk]),
+            {'assigned_reviewer_id': self.agent.pk},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.client.force_authenticate(self.agent)
         return response
 
     def test_anonymous_submission_is_rejected(self):
@@ -224,20 +247,64 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         announcement.refresh_from_db()
         self.assertEqual(announcement.status, OwnerAnnouncement.Status.PENDING_REVIEW)
 
+    def test_admin_queue_includes_every_submission_and_agent_queue_requires_assignment(self):
+        created = self.submit()
+        announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
+
+        self.client.force_authenticate(self.admin)
+        admin_queue = self.client.get(reverse('api:owner-submission-review-list'))
+        self.client.force_authenticate(self.agent)
+        unassigned_agent_queue = self.client.get(reverse('api:owner-submission-review-list'))
+        unassigned_detail = self.client.get(
+            reverse('api:owner-submission-review-detail', args=[announcement.pk]),
+        )
+
+        self.assertEqual(admin_queue.status_code, 200)
+        self.assertEqual(admin_queue.data['count'], 1)
+        self.assertEqual(unassigned_agent_queue.status_code, 200)
+        self.assertEqual(unassigned_agent_queue.data['count'], 0)
+        self.assertEqual(unassigned_detail.status_code, 404)
+
+        self.assign_to_agent(announcement)
+        assigned_agent_queue = self.client.get(reverse('api:owner-submission-review-list'))
+        self.client.force_authenticate(self.admin)
+        admin_queue_after_assignment = self.client.get(
+            reverse('api:owner-submission-review-list'),
+        )
+
+        self.assertEqual(assigned_agent_queue.data['count'], 1)
+        self.assertEqual(admin_queue_after_assignment.data['count'], 1)
+
+    def test_agent_without_explicit_review_permission_cannot_access_review_queue(self):
+        unprivileged_agent = User.objects.create_user(username='unprivileged-agent')
+        Profile.objects.create(
+            user=unprivileged_agent,
+            role=Profile.Role.BROKER,
+            broker_approved=True,
+            assigned_city=self.city,
+        )
+        self.client.force_authenticate(unprivileged_agent)
+
+        response = self.client.get(reverse('api:owner-submission-review-list'))
+
+        self.assertEqual(response.status_code, 403)
+
     def test_submitter_can_upload_images_but_another_user_cannot_access_them(self):
         created = self.submit()
-        image_buffer = BytesIO()
-        Image.new('RGB', (1, 1), color='white').save(image_buffer, format='PNG')
         image_url = reverse('api:owner-submission-images', args=[created.data['id']])
 
-        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+        with TemporaryDirectory() as media_root, override_settings(
+            MEDIA_ROOT=media_root,
+            PRIVATE_MEDIA_ROOT=str(Path(media_root) / 'private'),
+            CLOUDINARY_URL='',
+        ):
             self.client.force_authenticate(self.submitter)
             uploaded = self.client.post(
                 image_url,
                 {
                     'image': SimpleUploadedFile(
                         'front.png',
-                        image_buffer.getvalue(),
+                        self.make_submission_image(),
                         content_type='image/png',
                     ),
                 },
@@ -249,10 +316,15 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         self.assertEqual(uploaded.status_code, 201, uploaded.data)
         self.assertEqual(forbidden.status_code, 404)
 
+    def make_submission_image(self):
+        image_buffer = BytesIO()
+        Image.new('RGB', (300, 200), color='white').save(image_buffer, format='PNG')
+        return image_buffer.getvalue()
+
     def test_agent_can_request_corrections_and_submitter_can_resubmit(self):
         created = self.submit()
         announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
-        self.client.force_authenticate(self.agent)
+        self.assign_to_agent(announcement)
         decision = self.client.post(
             reverse('api:owner-submission-review-decision', args=[announcement.pk]),
             {'action': 'request_corrections', 'feedback': 'Please update the property description.'},
@@ -285,7 +357,13 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         profile.role = Profile.Role.BROKER
         profile.broker_approved = True
         profile.assigned_city = self.city
+        profile.management_permissions = [
+            Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+        ]
         profile.save()
+        announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
+        announcement.assigned_reviewer = self.submitter
+        announcement.save(update_fields=['assigned_reviewer'])
         self.client.force_authenticate(self.submitter)
 
         response = self.client.post(
@@ -303,7 +381,7 @@ class OwnerSubmissionWorkflowTests(APITestCase):
     def test_agent_approval_requires_a_valid_agreement_and_publishes_safely(self):
         created = self.submit()
         announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
-        self.client.force_authenticate(self.agent)
+        self.assign_to_agent(announcement)
         decision_url = reverse('api:owner-submission-review-decision', args=[announcement.pk])
         missing_agreement = self.client.post(decision_url, {'action': 'approve'}, format='json')
         self.assertEqual(missing_agreement.status_code, 400)
@@ -343,7 +421,7 @@ class OwnerSubmissionWorkflowTests(APITestCase):
     def test_agent_rejection_requires_explanation_and_keeps_property_hidden(self):
         created = self.submit()
         announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
-        self.client.force_authenticate(self.agent)
+        self.assign_to_agent(announcement)
         decision_url = reverse('api:owner-submission-review-decision', args=[announcement.pk])
         missing_reason = self.client.post(decision_url, {'action': 'reject'}, format='json')
         rejected = self.client.post(
@@ -361,7 +439,7 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         self.assertEqual(announcement.status, OwnerAnnouncement.Status.REJECTED)
         self.assertEqual(public_detail.status_code, 404)
 
-    def test_review_is_city_scoped_for_agents(self):
+    def test_agent_review_scope_follows_assignment_not_city(self):
         foreign_city = Location.objects.create(
             name='Foreign Submission City',
             slug='foreign-submission-city',
@@ -375,23 +453,25 @@ class OwnerSubmissionWorkflowTests(APITestCase):
             format='json',
         )
         self.assertEqual(foreign.status_code, 201, foreign.data)
-        self.client.force_authenticate(self.agent)
-
-        response = self.client.get(reverse('api:owner-submission-review-list'))
         announcement = OwnerAnnouncement.objects.get(property_id=foreign.data['id'])
+        self.assign_to_agent(announcement)
+        response = self.client.get(reverse('api:owner-submission-review-list'))
         foreign_detail = self.client.get(
             reverse('api:owner-submission-review-detail', args=[announcement.pk]),
         )
-        foreign_decision = self.client.post(
-            reverse('api:owner-submission-review-decision', args=[announcement.pk]),
-            {'action': 'approve'},
-            format='json',
+        local_submission = self.submit()
+        local_announcement = OwnerAnnouncement.objects.get(
+            property_id=local_submission.data['id'],
+        )
+        self.client.force_authenticate(self.agent)
+        unassigned_detail = self.client.get(
+            reverse('api:owner-submission-review-detail', args=[local_announcement.pk]),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['count'], 0)
-        self.assertEqual(foreign_detail.status_code, 404)
-        self.assertEqual(foreign_decision.status_code, 404)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(foreign_detail.status_code, 200)
+        self.assertEqual(unassigned_detail.status_code, 404)
 
     def test_historical_owner_announcements_are_retained_but_not_public(self):
         legacy_property = Property.objects.create(

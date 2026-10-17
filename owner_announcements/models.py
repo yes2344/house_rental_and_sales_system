@@ -51,6 +51,13 @@ class OwnerAnnouncement(models.Model):
         null=True,
         blank=True,
     )
+    assigned_reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='assigned_owner_announcements',
+        null=True,
+        blank=True,
+    )
     renewal_requested_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -60,6 +67,7 @@ class OwnerAnnouncement(models.Model):
         indexes = [
             models.Index(fields=['status', '-submitted_at'], name='owner_announce_status_idx'),
             models.Index(fields=['submitter', '-submitted_at'], name='owner_announce_owner_idx'),
+            models.Index(fields=['assigned_reviewer', 'status'], name='owner_announce_reviewer_idx'),
         ]
         constraints = [
             models.CheckConstraint(
@@ -131,6 +139,8 @@ class OwnerAnnouncementAgreement(models.Model):
 class OwnerAnnouncementEvent(models.Model):
     class Type(models.TextChoices):
         SUBMITTED = 'submitted', 'Submitted'
+        ASSIGNED = 'assigned', 'Assigned for review'
+        UNASSIGNED = 'unassigned', 'Review assignment removed'
         CORRECTIONS_REQUESTED = 'corrections_requested', 'Corrections requested'
         APPROVED = 'approved', 'Approved'
         REJECTED = 'rejected', 'Rejected'

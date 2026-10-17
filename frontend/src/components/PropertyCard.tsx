@@ -1,7 +1,7 @@
 import { BedDouble, Bath, MapPin, Phone, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import type { PropertySummary, PropertyType } from '../api/properties';
+import type { PropertySummary } from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
 import { formatPropertyPrice } from './propertyDisplay';
@@ -14,19 +14,6 @@ interface PropertyCardProps {
   text: (key: MessageKey) => string;
   imageLoading?: 'eager' | 'lazy';
 }
-
-const propertyTypeMessageKeys: Record<PropertyType, MessageKey> = {
-  house: 'house',
-  villa: 'villa',
-  apartment: 'apartment',
-  condominium: 'condominium',
-  land: 'land',
-  office: 'office',
-  shop: 'shop',
-  warehouse: 'warehouse',
-  commercial: 'commercial',
-  other: 'otherPropertyType',
-};
 
 const statusMessageKeys: Record<PropertySummary['status'], MessageKey> = {
   available: 'available',
@@ -62,7 +49,6 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
   const phoneHref = phoneNumber
     ? `tel:${phoneNumber.trim().startsWith('+') ? '+' : ''}${phoneDigits}`
     : '';
-  const propertyTypeLabel = text(propertyTypeMessageKeys[property.category]);
   const location = formatPropertyLocation(property, locale);
 
   return (
@@ -101,7 +87,6 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
                 <span>{phoneNumber}</span>
               </a>
             )}
-            <span className="listing-image-property-type">{propertyTypeLabel}</span>
           </div>
         </div>
         <FavoriteButton propertyId={property.id} text={text} />

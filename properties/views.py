@@ -1,10 +1,11 @@
 from django.db import transaction
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, generics
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.permissions import (
@@ -15,7 +16,12 @@ from accounts.permissions import (
 )
 from accounts.models import Profile
 from admin.audit import record_admin_action
-from properties.access import editable_properties, managed_properties, public_properties
+from properties.access import (
+    can_access_property_image_original,
+    editable_properties,
+    managed_properties,
+    public_properties,
+)
 from properties.access import broker_city_location_ids
 from properties.filters import PublicPropertyFilter, PublicPropertyOrderingFilter
 from properties.location_search import matching_location_ids
@@ -395,8 +401,6 @@ class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     @transaction.atomic
     def perform_destroy(self, instance):
-        for image in instance.images.all():
-            image.image.delete(save=False)
         instance.delete()
 
 
@@ -511,5 +515,32 @@ class ManagedPropertyImageDetailView(generics.RetrieveUpdateDestroyAPIView):
             Property.objects.select_for_update(),
             pk=instance.property_id,
         )
-        instance.image.delete(save=False)
         instance.delete()
+
+
+class PropertyImageOriginalView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = PropertyImage.objects.none()
+
+    def get(self, request, *args, **kwargs):
+        image = get_object_or_404(
+            PropertyImage.objects.select_related(
+                'property',
+                'property__owner_announcement',
+            ),
+            pk=kwargs['pk'],
+        )
+        if not can_access_property_image_original(request.user, image.property):
+            raise Http404
+        if not image.original_image or not image.original_image.storage.exists(image.original_image.name):
+            raise Http404
+
+        response = FileResponse(
+            image.original_image.open('rb'),
+            content_type=image.original_content_type or 'application/octet-stream',
+            as_attachment=False,
+            filename=image.original_filename or 'property-image',
+        )
+        response['Cache-Control'] = 'private, no-store'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response

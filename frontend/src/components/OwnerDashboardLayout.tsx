@@ -11,15 +11,17 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   const { account } = useAuth();
   const permissions = account?.management_permissions ?? [];
   const isAuthorizedBroker = account?.role === 'broker';
-  const canReviewSubmissions = isAuthorizedBroker && permissions.includes('announcements.review');
-  const canViewProperties = isAuthorizedBroker && permissions.some((permission) => [
+  const canReviewSubmissions = permissions.some((permission) => [
+    'announcements.review',
+    'announcements.review_assigned',
+  ].includes(permission));
+  const canViewProperties = permissions.some((permission) => [
       'properties.view_all',
       'properties.moderate',
       'properties.edit_all',
       'properties.manage_assigned',
     ].includes(permission));
-  const canViewRequests = isAuthorizedBroker
-    && permissions.some((permission) => permission.startsWith('viewings.'));
+  const canViewRequests = permissions.some((permission) => permission.startsWith('viewings.'));
   const canManageSubcities = isAuthorizedBroker && permissions.includes('locations.manage_subcities');
   const canManageBrokers = account?.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account?.role === 'administrator' && permissions.includes('locations.manage_cities');

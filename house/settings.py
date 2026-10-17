@@ -16,6 +16,7 @@ if env_file.is_file():
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+PRIVATE_MEDIA_ROOT = BASE_DIR / 'private-media'
 
 DEBUG = env.bool('DJANGO_DEBUG', default=False)
 SECRET_KEY = env('DJANGO_SECRET_KEY', default='')
@@ -152,11 +153,12 @@ CSRF_COOKIE_SECURE = not DEBUG
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+CLOUDINARY_URL = env('CLOUDINARY_URL', default='')
 STORAGES = {
     'default': {
         'BACKEND': (
             'cloudinary_storage.storage.MediaCloudinaryStorage'
-            if env('CLOUDINARY_URL', default='')
+            if CLOUDINARY_URL
             else 'django.core.files.storage.FileSystemStorage'
         ),
     },

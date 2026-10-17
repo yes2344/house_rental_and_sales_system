@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Check, ChevronDown, FileText, MapPin, X } from 'lucide-react';
 
+import { useAuth } from '../AuthContext';
 import { getErrorMessage } from '../api/client';
 import {
+  assignSubmissionReviewer,
   decideSubmission,
   getSubmissionReviews,
+  getSubmissionReviewers,
   type OwnerSubmissionReview,
   type OwnerSubmissionReviewFilters,
   type OwnerSubmissionStatus,
+  type SubmissionReviewer,
 } from '../api/ownerSubmissions';
 import { formatPropertyPrice } from '../components/propertyDisplay';
 import type { Locale, MessageKey } from '../i18n';
@@ -49,8 +53,15 @@ function ethiopianCurrentDate() {
 }
 
 export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps) {
+  const { account } = useAuth();
+  const canAssignReviews = Boolean(account?.management_permissions.includes('announcements.assign'));
   const [statusFilter, setStatusFilter] = useState<OwnerSubmissionStatus | ''>('pending_review');
   const [reviews, setReviews] = useState<OwnerSubmissionReview[]>([]);
+  const [reviewers, setReviewers] = useState<SubmissionReviewer[]>([]);
+  const [reviewerOptionsError, setReviewerOptionsError] = useState('');
+  const [assignmentValues, setAssignmentValues] = useState<Record<number, string>>({});
+  const [assignmentErrors, setAssignmentErrors] = useState<Record<number, string>>({});
+  const [assigningId, setAssigningId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
   const [hasNext, setHasNext] = useState(false);
@@ -63,6 +74,19 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
   const [agreementTerms, setAgreementTerms] = useState<Record<number, string>>({});
   const [agreementStartDates, setAgreementStartDates] = useState<Record<number, string>>({});
   const [agreementDurations, setAgreementDurations] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    if (!canAssignReviews) return undefined;
+    const controller = new AbortController();
+    void getSubmissionReviewers(controller.signal)
+      .then(setReviewers)
+      .catch((requestError: unknown) => {
+        if (!controller.signal.aborted) {
+          setReviewerOptionsError(getErrorMessage(requestError));
+        }
+      });
+    return () => controller.abort();
+  }, [canAssignReviews]);
 
   const loadReviews = (filters: OwnerSubmissionReviewFilters, append = false) => {
     if (append) setLoadingMore(true);
@@ -108,6 +132,24 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
       setDecisionErrors((current) => ({ ...current, [review.id]: getErrorMessage(requestError) }));
     } finally {
       setActingId(null);
+    }
+  };
+
+  const assignReviewer = async (review: OwnerSubmissionReview) => {
+    const selectedReviewer = assignmentValues[review.id]
+      ?? (review.assigned_reviewer_id === null ? '' : String(review.assigned_reviewer_id));
+    setAssigningId(review.id);
+    setAssignmentErrors((current) => ({ ...current, [review.id]: '' }));
+    try {
+      await assignSubmissionReviewer(
+        review.id,
+        selectedReviewer ? Number(selectedReviewer) : null,
+      );
+      loadReviews({ status: statusFilter || undefined, page: 1 });
+    } catch (requestError: unknown) {
+      setAssignmentErrors((current) => ({ ...current, [review.id]: getErrorMessage(requestError) }));
+    } finally {
+      setAssigningId(null);
     }
   };
 
@@ -162,6 +204,11 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
                     </div>
                     <strong>{formatPropertyPrice(property.price, property.listing_type, property.rental_frequency, locale, text)}</strong>
                   </header>
+                  {review.assigned_reviewer_name && (
+                    <p className="submission-review-assignee">
+                      <strong>{text('assignSubmissionReviewer')}:</strong> {review.assigned_reviewer_name}
+                    </p>
+                  )}
                   <details className="submission-review-details">
                     <summary>{text('submissionReviewDetails')}<ChevronDown size={15} aria-hidden="true" /></summary>
                     <div className="submission-review-detail-grid">
@@ -186,16 +233,58 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
                     <ol className="submission-event-list">
                       {review.events.map((event, index) => (
                         <li key={`${event.created_at}-${index}`}>
-                          {text(statusMessages[event.to_status as OwnerSubmissionStatus] ?? 'submissionPending')}
+                          {event.event_type === 'assigned'
+                            ? text('reviewAssignedEvent')
+                            : event.event_type === 'unassigned'
+                              ? text('reviewUnassignedEvent')
+                              : text(statusMessages[event.to_status as OwnerSubmissionStatus] ?? 'submissionPending')}
                           <time dateTime={event.created_at}>{new Intl.DateTimeFormat(
                             locale === 'am' ? 'am-ET' : 'en-ET',
                             { dateStyle: 'medium', timeStyle: 'short' },
                           ).format(new Date(event.created_at))}</time>
+                          {typeof event.details.assigned_reviewer_name === 'string'
+                            && <p>{event.details.assigned_reviewer_name}</p>}
                           {typeof event.details.feedback === 'string' && <p>{event.details.feedback}</p>}
                         </li>
                       ))}
                     </ol>
                   </details>
+                  {canAssignReviews && canDecide && (
+                    <div className="submission-review-assignment">
+                      <label className="manager-field">
+                        <span>{text('assignSubmissionReviewer')}</span>
+                        <select
+                          value={assignmentValues[review.id]
+                            ?? (review.assigned_reviewer_id === null ? '' : String(review.assigned_reviewer_id))}
+                          onChange={(event) => setAssignmentValues((current) => ({
+                            ...current,
+                            [review.id]: event.target.value,
+                          }))}
+                        >
+                          <option value="">{text('submissionReviewerUnassigned')}</option>
+                          {reviewers.map((reviewer) => (
+                            <option key={reviewer.id} value={reviewer.id}>{reviewer.display_name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {reviewerOptionsError && (
+                        <p className="manager-inline-error" role="alert">
+                          {text('reviewerOptionsError')} {reviewerOptionsError}
+                        </p>
+                      )}
+                      {assignmentErrors[review.id] && (
+                        <p className="manager-inline-error" role="alert">{assignmentErrors[review.id]}</p>
+                      )}
+                      <button
+                        className="button button-outline"
+                        type="button"
+                        disabled={assigningId === review.id || Boolean(reviewerOptionsError)}
+                        onClick={() => void assignReviewer(review)}
+                      >
+                        {assigningId === review.id ? text('savingSubmission') : text('saveReviewerAssignment')}
+                      </button>
+                    </div>
+                  )}
                   {canDecide && (
                     <div className="submission-review-actions">
                       <label className="manager-field">

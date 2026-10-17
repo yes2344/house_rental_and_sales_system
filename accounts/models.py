@@ -25,6 +25,8 @@ class Profile(models.Model):
         VIEWING_MANAGE_ASSIGNED = 'viewings.manage_assigned', 'Manage assigned viewing requests'
         USERS_MANAGE = 'users.manage', 'Manage ordinary user accounts'
         OWNER_ANNOUNCEMENTS_REVIEW = 'announcements.review', 'Review owner property submissions'
+        OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED = 'announcements.review_assigned', 'Review assigned owner property submissions'
+        OWNER_ANNOUNCEMENTS_ASSIGN = 'announcements.assign', 'Assign owner property submissions'
         REPORTS_REVIEW = 'reports.review', 'Review listing reports'
         STATISTICS_VIEW = 'statistics.view', 'View management statistics'
         AUDIT_VIEW = 'audit.view', 'View audit records'

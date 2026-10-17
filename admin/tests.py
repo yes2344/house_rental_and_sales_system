@@ -102,7 +102,13 @@ class AdminApiTests(APITestCase):
         self.assertEqual(
             me.data['management_permissions'],
             [
+                Profile.Permission.PROPERTY_VIEW_ALL,
+                Profile.Permission.PROPERTY_MODERATE,
+                Profile.Permission.PROPERTY_EDIT_ALL,
+                Profile.Permission.PROPERTY_DELETE_ALL,
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN,
                 Profile.Permission.SETTINGS_MANAGE,
                 Profile.Permission.BRANDING_MANAGE,
                 Profile.Permission.LOCATIONS_MANAGE_CITIES,
@@ -111,7 +117,7 @@ class AdminApiTests(APITestCase):
         )
         self.assertEqual([account['id'] for account in broker_accounts.data['results']], [broker.pk])
         self.assertEqual(users.status_code, 403)
-        self.assertEqual(listings.status_code, 403)
+        self.assertEqual(listings.status_code, 200)
         self.assertEqual(
             self.client.get(reverse('api:managed-location-list')).status_code,
             200,
@@ -147,6 +153,40 @@ class AdminApiTests(APITestCase):
         self.assertEqual(customer_update.status_code, 403)
         self.assertEqual(broker_user_update.status_code, 403)
         self.assertEqual(broker_update.status_code, 200)
+
+    def test_platform_owner_can_grant_and_revoke_assigned_submission_review_permission(self):
+        broker = self.create_broker('submission-review-permission-agent')
+        account_url = reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk})
+        self.client.force_authenticate(user=self.admin_user)
+
+        granted = self.client.patch(
+            account_url,
+            {
+                'management_permissions': [
+                    *sorted(BROKER_WORK_PERMISSIONS),
+                    Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+                ],
+            },
+            format='json',
+        )
+        broker.profile.refresh_from_db()
+        self.assertEqual(granted.status_code, 200, granted.data)
+        self.assertIn(
+            Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+            broker.profile.management_permissions,
+        )
+
+        revoked = self.client.patch(
+            account_url,
+            {'management_permissions': sorted(BROKER_WORK_PERMISSIONS)},
+            format='json',
+        )
+        broker.profile.refresh_from_db()
+        self.assertEqual(revoked.status_code, 200, revoked.data)
+        self.assertNotIn(
+            Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+            broker.profile.management_permissions,
+        )
 
     def test_brokerage_contact_is_public_but_brokers_cannot_manage_platform_settings(self):
         public = self.client.get(reverse('api:brokerage-contact'))
@@ -714,7 +754,7 @@ class AdminApiTests(APITestCase):
         )
         self.assertEqual(self_deactivation.status_code, 403)
 
-    def test_staff_flag_alone_does_not_grant_admin_api_access(self):
+    def test_staff_flag_without_admin_role_does_not_grant_admin_api_access(self):
         delegated_without_permissions = User.objects.create_user(
             username='staff-without-permissions',
             password='SecurePass123!value',
@@ -722,7 +762,7 @@ class AdminApiTests(APITestCase):
         )
         Profile.objects.create(
             user=delegated_without_permissions,
-            role=Profile.Role.ADMINISTRATOR,
+            role=Profile.Role.CUSTOMER,
         )
         self.client.force_authenticate(user=delegated_without_permissions)
 
@@ -883,7 +923,7 @@ class AdminApiTests(APITestCase):
             400,
         )
 
-    def test_delegated_administrators_cannot_manage_listings_even_if_legacy_permissions_exist(self):
+    def test_administrators_can_manage_listings_regardless_of_legacy_permissions(self):
         delegated = User.objects.create_user(
             username='limited-reviewer',
             password='SecurePass123!value',
@@ -897,60 +937,16 @@ class AdminApiTests(APITestCase):
         self.client.force_authenticate(user=delegated)
 
         can_view = self.client.get(reverse('api:admin-property-list'))
-        cannot_moderate = self.client.patch(
-            reverse('api:admin-property-detail', kwargs={'pk': self.property.pk}),
-            {'publication_status': Property.PublicationStatus.PUBLISHED},
-            format='json',
-        )
-
-        self.assertEqual(can_view.status_code, 403)
-        self.assertEqual(cannot_moderate.status_code, 403)
-        self.client.force_authenticate(user=self.admin_user)
-        update_permissions = self.client.patch(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': delegated.pk}),
-            {
-                'management_permissions': [
-                    Profile.Permission.PROPERTY_VIEW_ALL,
-                    Profile.Permission.PROPERTY_MODERATE,
-                ],
-            },
-            format='json',
-        )
-        self.assertEqual(update_permissions.status_code, 404)
-        update_permissions = self.client.patch(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': delegated.pk}),
-            {'management_permissions': [Profile.Permission.USERS_MANAGE]},
-            format='json',
-        )
-        self.assertEqual(update_permissions.status_code, 404)
-        self.assertFalse(
-            AdminAuditEvent.objects.filter(action='delegated_account_updated').exists()
-        )
-        delegated.profile.refresh_from_db()
-        self.assertEqual(
-            delegated.profile.management_permissions,
-            [Profile.Permission.PROPERTY_VIEW_ALL],
-        )
-        self.client.force_authenticate(user=delegated)
         can_moderate = self.client.patch(
             reverse('api:admin-property-detail', kwargs={'pk': self.property.pk}),
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
         )
-        self.assertEqual(can_moderate.status_code, 403)
 
-        self.client.force_authenticate(user=self.admin_user)
-        revoked = self.client.patch(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': delegated.pk}),
-            {'management_permissions': []},
-            format='json',
-        )
-        self.assertEqual(revoked.status_code, 404)
-        self.client.force_authenticate(user=delegated)
-        denied_after_permission_update = self.client.get(reverse('api:admin-property-list'))
-        self.assertEqual(denied_after_permission_update.status_code, 403)
+        self.assertEqual(can_view.status_code, 200)
+        self.assertEqual(can_moderate.status_code, 200)
 
-    def test_delegated_administrator_can_manage_only_broker_accounts(self):
+    def test_delegated_administrator_can_manage_brokers_and_admin_listings(self):
         delegated_admin = User.objects.create_user(
             username='broker-account-admin',
             password='SecurePass123!value',
@@ -997,7 +993,13 @@ class AdminApiTests(APITestCase):
         self.assertEqual(
             current_account.data['management_permissions'],
             [
+                Profile.Permission.PROPERTY_VIEW_ALL,
+                Profile.Permission.PROPERTY_MODERATE,
+                Profile.Permission.PROPERTY_EDIT_ALL,
+                Profile.Permission.PROPERTY_DELETE_ALL,
+                Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN,
                 Profile.Permission.BRANDING_MANAGE,
                 Profile.Permission.LOCATIONS_MANAGE_CITIES,
                 Profile.Permission.STAFF_MANAGE,
@@ -1016,9 +1018,9 @@ class AdminApiTests(APITestCase):
         self.assertFalse(created_broker.profile.broker_approved)
         self.assertEqual(cannot_create_admin.status_code, 400)
 
-        self.assertEqual(self.client.get(reverse('api:managed-property-list')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('api:managed-property-list')).status_code, 200)
         self.assertEqual(self.client.get(reverse('api:managed-viewing-list')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('api:admin-property-list')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('api:admin-property-list')).status_code, 200)
         self.assertEqual(
             self.client.patch(
                 reverse('api:brokerage-contact'),

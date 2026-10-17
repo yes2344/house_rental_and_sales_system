@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -22,6 +23,21 @@ class OwnerAnnouncementEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = OwnerAnnouncementEvent
         fields = ['event_type', 'from_status', 'to_status', 'details', 'actor_name', 'created_at']
+
+
+class OwnerAnnouncementReviewerSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = get_user_model()
+        fields = ['id', 'username', 'display_name']
+
+    def get_display_name(self, obj):
+        return ' '.join(part for part in (obj.first_name, obj.last_name) if part) or obj.username
+
+
+class OwnerAnnouncementAssignmentSerializer(serializers.Serializer):
+    assigned_reviewer_id = serializers.IntegerField(required=True, allow_null=True)
 
 
 class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
@@ -227,6 +243,8 @@ class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
 class OwnerAnnouncementReviewSerializer(serializers.ModelSerializer):
     property = OwnerPropertySubmissionSerializer(read_only=True)
     events = OwnerAnnouncementEventSerializer(many=True, read_only=True)
+    assigned_reviewer_id = serializers.IntegerField(read_only=True, allow_null=True)
+    assigned_reviewer_name = serializers.SerializerMethodField()
 
     class Meta:
         model = OwnerAnnouncement
@@ -241,6 +259,15 @@ class OwnerAnnouncementReviewSerializer(serializers.ModelSerializer):
             'submitted_at',
             'reviewed_at',
             'reviewed_by_id',
+            'assigned_reviewer_id',
+            'assigned_reviewer_name',
             'events',
         ]
         read_only_fields = fields
+
+    def get_assigned_reviewer_name(self, obj):
+        if obj.assigned_reviewer is None:
+            return None
+        return ' '.join(
+            part for part in (obj.assigned_reviewer.first_name, obj.assigned_reviewer.last_name) if part
+        ) or obj.assigned_reviewer.username

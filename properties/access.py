@@ -47,23 +47,55 @@ def public_properties():
 
 def managed_properties(user):
     broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
+    if any(
+        has_management_permission(user, permission)
+        for permission in (
+            Profile.Permission.PROPERTY_VIEW_ALL,
+            Profile.Permission.PROPERTY_MODERATE,
+            Profile.Permission.PROPERTY_EDIT_ALL,
+            Profile.Permission.PROPERTY_DELETE_ALL,
+        )
+    ):
+        return broker_managed
     if (
         has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
     ):
-        return broker_managed.filter(
-            administrative_location_id__in=broker_city_location_ids(user),
-        ).distinct()
+        return broker_managed.filter(submitted_by=user)
     return Property.objects.none()
 
 
 def editable_properties(user):
     broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
+    if has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL):
+        return broker_managed
     if (
         has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
     ):
-        return broker_managed.filter(
-            administrative_location_id__in=broker_city_location_ids(user),
-        ).distinct()
+        return broker_managed.filter(submitted_by=user)
     return Property.objects.none()
+
+
+def can_access_property_image_original(user, property_obj):
+    if not user or not user.is_authenticated or not user.is_active:
+        return False
+    if any(
+        has_management_permission(user, permission)
+        for permission in (
+            Profile.Permission.PROPERTY_VIEW_ALL,
+            Profile.Permission.PROPERTY_EDIT_ALL,
+        )
+    ):
+        return True
+    if (
+        property_obj.submitted_by_id == user.pk
+        and has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
+        and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
+    ):
+        return True
+    return bool(
+        property_obj.service_type == Property.ServiceType.OWNER_ANNOUNCED
+        and getattr(property_obj, 'owner_announcement', None)
+        and property_obj.owner_announcement.submitter_id == user.pk
+    )

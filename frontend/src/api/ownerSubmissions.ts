@@ -54,7 +54,15 @@ export interface OwnerSubmissionReview {
   submitted_at: string;
   reviewed_at: string | null;
   reviewed_by_id: number | null;
+  assigned_reviewer_id: number | null;
+  assigned_reviewer_name: string | null;
   events: OwnerSubmission['submission_events'];
+}
+
+export interface SubmissionReviewer {
+  id: number;
+  username: string;
+  display_name: string;
 }
 
 export interface OwnerSubmissionReviewFilters {
@@ -106,6 +114,22 @@ export async function getSubmissionReviews(
   const response = await apiClient.get<PaginatedResponse<OwnerSubmissionReview>>(
     '/management/submissions/',
     { params: filters, signal },
+  );
+  return response.data;
+}
+
+export async function getSubmissionReviewers(signal?: AbortSignal): Promise<SubmissionReviewer[]> {
+  const response = await apiClient.get<SubmissionReviewer[]>('/management/submissions/reviewers/', { signal });
+  return response.data;
+}
+
+export async function assignSubmissionReviewer(
+  id: number,
+  assignedReviewerId: number | null,
+): Promise<OwnerSubmissionReview> {
+  const response = await apiClient.post<OwnerSubmissionReview>(
+    `/management/submissions/${id}/assignment/`,
+    { assigned_reviewer_id: assignedReviewerId },
   );
   return response.data;
 }

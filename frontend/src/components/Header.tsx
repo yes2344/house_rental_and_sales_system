@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Mail, Menu, Phone, UserRound, X } from 'lucide-react';
+import { ChevronDown, LogOut, Mail, Menu, Phone, UserRound, X } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
@@ -12,7 +12,6 @@ import {
   type PropertyTypeOption,
 } from '../api/properties';
 import type { Locale, MessageKey } from '../i18n';
-import { SocialMark, socialPlatformNames } from './SocialMark';
 
 interface HeaderProps {
   locale: Locale;
@@ -47,8 +46,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const { account, authLoading, signOut } = useAuth();
   const { contact } = useBrokerageContact();
   const uniquePropertyTypes = getUniquePropertyTypeOptions(propertyTypes);
-  const publicSocialLinks = contact.social_links.filter((link) => link.is_enabled && link.url);
-  const hasBrokerageContact = Boolean(contact.phone || contact.email || publicSocialLinks.length);
+  const hasBrokerageContact = Boolean(contact.phone || contact.email);
   const canAccessDashboard = Boolean(account && ['broker', 'administrator'].includes(account.role ?? ''));
   const canManageListings = Boolean(
     account?.role === 'broker'
@@ -201,15 +199,28 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             >
               {menuOpen ? <X size={21} /> : <Menu size={21} />}
             </button>
-            <Link
-              className="mobile-account-link"
-              to={accountDestination}
-              state={account ? undefined : { from: '/account' }}
-              aria-label={text(account ? 'myAccount' : 'signIn')}
-              onClick={closeNavigation}
-            >
-              <UserRound size={21} aria-hidden="true" />
-            </Link>
+            {account ? (
+              <button
+                className="mobile-account-link header-logout-icon"
+                type="button"
+                aria-label={text(loggingOut ? 'signingOut' : 'signOut')}
+                title={text(loggingOut ? 'signingOut' : 'signOut')}
+                disabled={loggingOut}
+                onClick={logout}
+              >
+                <LogOut size={21} aria-hidden="true" />
+              </button>
+            ) : (
+              <Link
+                className="mobile-account-link"
+                to={accountDestination}
+                state={{ from: '/account' }}
+                aria-label={text('signIn')}
+                onClick={closeNavigation}
+              >
+                <UserRound size={21} aria-hidden="true" />
+              </Link>
+            )}
           </div>
 
           <nav
@@ -222,8 +233,8 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
             <Link to="/#latest-listings" onClick={closeNavigation}>{text('allPropertiesNav')}</Link>
             {listingMenu('rent')}
             {listingMenu('buy')}
-            <NavLink to="/about" onClick={closeNavigation}>{text('about')}</NavLink>
-            <NavLink to="/contact" onClick={closeNavigation}>{text('contact')}</NavLink>
+            <NavLink to="/about" onClick={closeNavigation}>{text('aboutUs')}</NavLink>
+            <NavLink to="/contact" onClick={closeNavigation}>{text('contactUs')}</NavLink>
             <NavLink to="/property-management" onClick={closeNavigation}>{text('propertyManagement')}</NavLink>
             {account?.role !== 'administrator' && (
               <Link
@@ -245,12 +256,6 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                     <span><small>{text('contactByPhone')}</small><strong>{contact.phone}</strong></span>
                   </a>
                 )}
-                {publicSocialLinks.map((link) => (
-                  <a key={link.platform} href={link.url} target="_blank" rel="noreferrer" onClick={closeNavigation}>
-                    <SocialMark platform={link.platform} />
-                    <span><small>{socialPlatformNames[link.platform]}</small><strong>{link.url}</strong></span>
-                  </a>
-                ))}
                 {contact.email && (
                   <a href={`mailto:${contact.email}`} onClick={closeNavigation}>
                     <Mail size={16} aria-hidden="true" />
@@ -288,8 +293,15 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                     {text('yourViewingRequests')}
                   </Link>
                 )}
-                <button className="header-sign-in header-logout" type="button" disabled={loggingOut} onClick={logout}>
-                  {loggingOut ? text('signingOut') : text('signOut')}
+                <button
+                  className="header-sign-in header-logout header-logout-icon"
+                  type="button"
+                  aria-label={text(loggingOut ? 'signingOut' : 'signOut')}
+                  title={text(loggingOut ? 'signingOut' : 'signOut')}
+                  disabled={loggingOut}
+                  onClick={logout}
+                >
+                  <LogOut size={20} aria-hidden="true" />
                 </button>
               </>
             ) : (

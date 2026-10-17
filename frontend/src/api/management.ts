@@ -180,6 +180,7 @@ export interface ManagedPropertyPayload {
 export interface ManagedImage {
   id: number;
   image: string;
+  original_url: string | null;
   caption: string;
   is_primary: boolean;
   created_at: string;

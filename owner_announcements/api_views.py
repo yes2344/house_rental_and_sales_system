@@ -1,6 +1,7 @@
 import calendar
 from datetime import date
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -20,7 +21,9 @@ from owner_announcements.models import (
     OwnerAnnouncementEvent,
 )
 from owner_announcements.serializers import (
+    OwnerAnnouncementAssignmentSerializer,
     InAppNotificationSerializer,
+    OwnerAnnouncementReviewerSerializer,
     OwnerAnnouncementReviewSerializer,
     OwnerPropertySubmissionSerializer,
 )
@@ -129,13 +132,17 @@ def _review_queryset_for_user(user):
     ):
         return queryset
     if Profile.objects.filter(user=user, role=Profile.Role.BROKER).exists():
-        return queryset.filter(property__administrative_location_id__in=broker_city_location_ids(user))
+        if has_management_permission(user, Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED):
+            return queryset.filter(assigned_reviewer=user)
     return queryset.none()
 
 
 class OwnerAnnouncementReviewListView(generics.ListAPIView):
     permission_classes = [HasManagementPermission]
-    required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW
+    required_management_permission = (
+        Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+        Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+    )
     serializer_class = OwnerAnnouncementReviewSerializer
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['submitted_at', 'updated_at']
@@ -153,7 +160,10 @@ class OwnerAnnouncementReviewListView(generics.ListAPIView):
 
 class OwnerAnnouncementReviewDetailView(generics.RetrieveAPIView):
     permission_classes = [HasManagementPermission]
-    required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW
+    required_management_permission = (
+        Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+        Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+    )
     serializer_class = OwnerAnnouncementReviewSerializer
     queryset = OwnerAnnouncement.objects.none()
 
@@ -161,9 +171,121 @@ class OwnerAnnouncementReviewDetailView(generics.RetrieveAPIView):
         return _review_queryset_for_user(self.request.user)
 
 
+class OwnerAnnouncementReviewerListView(generics.ListAPIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN
+    serializer_class = OwnerAnnouncementReviewerSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        candidates = get_user_model().objects.filter(
+            is_active=True,
+            profile__role=Profile.Role.BROKER,
+            profile__broker_approved=True,
+        ).select_related('profile').order_by('username')
+        return [
+            user
+            for user in candidates
+            if has_management_permission(
+                user,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+            )
+        ]
+
+
+class OwnerAnnouncementAssignmentView(APIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN
+
+    @transaction.atomic
+    def post(self, request, pk):
+        announcement = get_object_or_404(
+            OwnerAnnouncement.objects.select_for_update().select_related('assigned_reviewer'),
+            pk=pk,
+        )
+        if announcement.status not in (
+            OwnerAnnouncement.Status.PENDING_REVIEW,
+            OwnerAnnouncement.Status.CORRECTIONS_REQUESTED,
+        ):
+            raise ValidationError({'status': 'Only submissions awaiting review can be assigned.'})
+
+        serializer = OwnerAnnouncementAssignmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reviewer_id = serializer.validated_data['assigned_reviewer_id']
+        reviewer = None
+        if reviewer_id is not None:
+            reviewer = get_object_or_404(
+                get_user_model().objects.select_related('profile').filter(
+                    is_active=True,
+                    profile__role=Profile.Role.BROKER,
+                    profile__broker_approved=True,
+                ),
+                pk=reviewer_id,
+            )
+            if reviewer.pk == announcement.submitter_id:
+                raise ValidationError({
+                    'assigned_reviewer_id': 'A submitter cannot review their own property submission.',
+                })
+            if not has_management_permission(
+                reviewer,
+                Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+            ):
+                raise ValidationError({
+                    'assigned_reviewer_id': 'Choose an active agent with explicit submission-review permission.',
+                })
+
+        previous_reviewer = announcement.assigned_reviewer
+        if previous_reviewer == reviewer:
+            return Response(OwnerAnnouncementReviewSerializer(
+                announcement,
+                context={'request': request},
+            ).data)
+
+        announcement.assigned_reviewer = reviewer
+        announcement.save(update_fields=['assigned_reviewer', 'updated_at'])
+        OwnerAnnouncementEvent.objects.create(
+            announcement=announcement,
+            actor=request.user,
+            event_type=(
+                OwnerAnnouncementEvent.Type.ASSIGNED
+                if reviewer
+                else OwnerAnnouncementEvent.Type.UNASSIGNED
+            ),
+            details={
+                'previous_reviewer_id': previous_reviewer.pk if previous_reviewer else None,
+                'assigned_reviewer_id': reviewer.pk if reviewer else None,
+                'assigned_reviewer_name': (
+                    ' '.join(part for part in (reviewer.first_name, reviewer.last_name) if part)
+                    or reviewer.username
+                    if reviewer
+                    else None
+                ),
+            },
+        )
+        record_admin_action(
+            request.user,
+            action='owner_submission_reviewer_assigned',
+            object_type='owner_announcement',
+            object_id=announcement.pk,
+            changes={
+                'assigned_reviewer_id': {
+                    'from': previous_reviewer.pk if previous_reviewer else None,
+                    'to': reviewer.pk if reviewer else None,
+                },
+            },
+        )
+        return Response(OwnerAnnouncementReviewSerializer(
+            announcement,
+            context={'request': request},
+        ).data)
+
+
 class OwnerAnnouncementDecisionView(APIView):
     permission_classes = [HasManagementPermission]
-    required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW
+    required_management_permission = (
+        Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
+        Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
+    )
 
     @transaction.atomic
     def post(self, request, pk):

@@ -16,7 +16,12 @@ from accounts.models import (
     TabSessionToken,
     UserPreferences,
 )
-from accounts.permissions import broker_work_permissions, effective_management_permissions, is_platform_owner
+from accounts.permissions import (
+    broker_grantable_permissions,
+    broker_work_permissions,
+    effective_management_permissions,
+    is_platform_owner,
+)
 from favorites.models import Favorite
 from properties.models import Location, Property
 from viewings.models import ViewingRequest
@@ -352,7 +357,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         owner_is_actor = is_platform_owner(self.context['request'].user)
         if owner_only.intersection(permissions) and not owner_is_actor:
             raise serializers.ValidationError('These permissions are reserved for the platform owner.')
-        permitted = set(broker_work_permissions())
+        permitted = set(broker_work_permissions()) | set(broker_grantable_permissions())
         if owner_is_actor:
             permitted.add(Profile.Permission.SETTINGS_MANAGE)
         unsupported = set(permissions) - permitted
@@ -397,7 +402,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'management_permissions': 'These permissions are reserved for the platform owner.'}
             )
-        permitted = set(broker_work_permissions())
+        permitted = set(broker_work_permissions()) | set(broker_grantable_permissions())
         if owner_is_actor:
             permitted.add(Profile.Permission.SETTINGS_MANAGE)
         if set(permissions) - permitted:

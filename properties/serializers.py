@@ -1,12 +1,14 @@
 from copy import copy
 from decimal import Decimal
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.urls import reverse
 from django.utils.text import slugify
 from django.db import transaction
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import Profile
+from properties.access import broker_city_location_ids, can_access_property_image_original
 from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
 from properties.search_terms import normalize_search_text
 
@@ -670,11 +672,24 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
 
 class PropertyImageManagementSerializer(serializers.ModelSerializer):
     MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+    original_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PropertyImage
-        fields = ['id', 'image', 'caption', 'is_primary', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'image', 'original_url', 'caption', 'is_primary', 'created_at']
+        read_only_fields = ['id', 'original_url', 'created_at']
+
+    def get_original_url(self, obj):
+        request = self.context.get('request')
+        if (
+            not obj.original_image
+            or request is None
+            or not can_access_property_image_original(request.user, obj.property)
+        ):
+            return None
+        return request.build_absolute_uri(
+            reverse('api:property-image-original', kwargs={'pk': obj.pk}),
+        )
 
     def validate_image(self, value):
         if value.size > self.MAX_IMAGE_SIZE_BYTES:

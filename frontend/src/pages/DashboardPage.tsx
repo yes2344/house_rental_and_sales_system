@@ -26,9 +26,12 @@ export function DashboardPage({ text }: DashboardPageProps) {
   const permissions = account.management_permissions;
   const isAdministrator = account.role === 'administrator';
   const isBroker = account.role === 'broker';
-  const canManageListings = isBroker && permissions.some((permission) => permission.startsWith('properties.'));
-  const canReviewSubmissions = isBroker && permissions.includes('announcements.review');
-  const canManageRequests = isBroker && permissions.some((permission) => permission.startsWith('viewings.'));
+  const canManageListings = permissions.some((permission) => permission.startsWith('properties.'));
+  const canReviewSubmissions = permissions.some((permission) => [
+    'announcements.review',
+    'announcements.review_assigned',
+  ].includes(permission));
+  const canManageRequests = permissions.some((permission) => permission.startsWith('viewings.'));
   const canManageSubcities = isBroker && permissions.includes('locations.manage_subcities');
   const canManageBrokers = account.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account.role === 'administrator' && permissions.includes('locations.manage_cities');
