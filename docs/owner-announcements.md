@@ -23,7 +23,7 @@ Rejections and correction requests require an explanation. An agent cannot revie
 
 New submissions cannot set publication status, service type, owner, submitter, or public contact fields. They remain hidden from public search and detail endpoints until an authorized agent approves them. Public access additionally requires an active agreement whose date range includes the current `Africa/Addis_Ababa` date and an available property status.
 
-Submitter contact details are private and are not included in public property responses. Public owner-announced listings use the configured Habasha Property Center contact channels. The existing property serializer validates the configured location hierarchy, including requiring a sub-city/Kifle Ketema beneath a city administration.
+Submitter contact details are private and are not included in public property responses. Public owner-announced listings use the configured Habesha Home Center contact channels. The existing property serializer validates the configured location hierarchy, including requiring a sub-city/Kifle Ketema beneath a city administration.
 
 Historical owner-announcement records and property data remain intact. Records that do not satisfy the current approval and active-agreement rules are not made public automatically. No destructive migration or data operation is part of this workflow.
 

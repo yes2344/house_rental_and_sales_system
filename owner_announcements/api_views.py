@@ -200,7 +200,7 @@ class OwnerAnnouncementAssignmentView(APIView):
     @transaction.atomic
     def post(self, request, pk):
         announcement = get_object_or_404(
-            OwnerAnnouncement.objects.select_for_update().select_related('assigned_reviewer'),
+            OwnerAnnouncement.objects.select_for_update(of=('self',)).select_related('assigned_reviewer'),
             pk=pk,
         )
         if announcement.status not in (
@@ -290,7 +290,7 @@ class OwnerAnnouncementDecisionView(APIView):
     @transaction.atomic
     def post(self, request, pk):
         announcement = get_object_or_404(
-            _review_queryset_for_user(request.user).select_for_update(),
+            _review_queryset_for_user(request.user).select_for_update(of=('self',)),
             pk=pk,
         )
         if announcement.submitter_id == request.user.pk:

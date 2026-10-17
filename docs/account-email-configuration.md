@@ -12,7 +12,7 @@ Render's free web services block outbound traffic on SMTP ports 25, 465, and 587
 
 ```dotenv
 PUBLIC_FRONTEND_URL=https://your-frontend.example
-DEFAULT_FROM_EMAIL=Habasha Property Center <verified-sender@example.com>
+DEFAULT_FROM_EMAIL=Habesha Home Center <verified-sender@example.com>
 EMAIL_BACKEND=accounts.email_backend.BrevoEmailBackend
 BREVO_API_KEY=
 EMAIL_TIMEOUT_SECONDS=10
