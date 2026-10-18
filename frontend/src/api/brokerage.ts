@@ -29,7 +29,7 @@ export interface BrokerageContact {
 }
 
 export const emptyBrokerageContact: BrokerageContact = {
-  site_name: 'Infinit House',
+  site_name: 'Infinity House',
   footer_copyright: '',
   site_logo: '',
   homepage_hero_image: '',

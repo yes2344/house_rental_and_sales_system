@@ -267,7 +267,7 @@ EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT_SECONDS', default=10)
 BREVO_API_KEY = env('BREVO_API_KEY', default='')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Infinit House <no-reply@example.com>')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Infinity House <no-reply@example.com>')
 if not DEBUG and EMAIL_BACKEND == 'accounts.email_backend.BrevoEmailBackend':
     if not BREVO_API_KEY.strip():
         raise ImproperlyConfigured('BREVO_API_KEY must be set when using the Brevo email backend.')
@@ -299,7 +299,7 @@ CACHES = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Infinit House API',
+    'TITLE': 'Infinity House API',
     'DESCRIPTION': 'Versioned API for verified property listings and viewing requests.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,

@@ -70,7 +70,7 @@ export function BrokerageContactProvider({ children }: { children: ReactNode }) 
   }, []);
 
   useEffect(() => {
-    document.title = contact.site_name || 'Infinit House';
+    document.title = contact.site_name || 'Infinity House';
   }, [contact.site_name]);
 
   const save = useCallback(async (updates: Partial<BrokerageContact>) => {

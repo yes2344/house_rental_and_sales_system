@@ -3,8 +3,8 @@ import re
 from django.db import migrations, models
 
 
-SITE_NAME = 'Infinit House'
-PREVIOUS_BRAND = re.compile(r'\bInfinity\s+House\b', re.IGNORECASE)
+SITE_NAME = 'Infinity House'
+PREVIOUS_BRAND = re.compile(r'\bInfinit\s+House\b', re.IGNORECASE)
 
 
 def rename_brand(apps, schema_editor):
@@ -54,12 +54,12 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AlterModelOptions(
             name='brokeragesettings',
-            options={'verbose_name_plural': 'Infinit House contact settings'},
+            options={'verbose_name_plural': 'Infinity House contact settings'},
         ),
         migrations.AlterField(
             model_name='brokeragesettings',
             name='site_name',
-            field=models.CharField(default='Infinit House', max_length=100),
+            field=models.CharField(default='Infinity House', max_length=100),
         ),
         migrations.RunPython(rename_brand, migrations.RunPython.noop),
     ]

@@ -18,7 +18,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
   const currentYear = new Date().getFullYear();
   const footerCopyright = contact.footer_copyright.trim()
     ? contact.footer_copyright.replaceAll('{year}', String(currentYear))
-    : `© ${currentYear} ${contact.site_name || 'Infinit House'}`;
+    : `© ${currentYear} ${contact.site_name || 'Infinity House'}`;
 
   return (
     <footer className="site-footer">
@@ -36,7 +36,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
                 </svg>
               </span>
             )}
-            <span className="brand-copy"><strong>{contact.site_name || 'Infinit House'}</strong></span>
+            <span className="brand-copy"><strong>{contact.site_name || 'Infinity House'}</strong></span>
           </Link>
           <p>{text('footerNote')}</p>
         </div>

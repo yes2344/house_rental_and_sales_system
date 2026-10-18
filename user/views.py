@@ -30,9 +30,15 @@ def _public_properties():
 
 
 def _public_context(**context):
+    brokerage_contact = BrokerageSettings.objects.filter(pk=1).first()
+    if (
+        brokerage_contact
+        and brokerage_contact.business_name.strip().casefold() == 'infinit house'
+    ):
+        brokerage_contact.business_name = 'Infinity House'
     return {
         **context,
-        'brokerage_contact': BrokerageSettings.objects.filter(pk=1).first(),
+        'brokerage_contact': brokerage_contact,
         'brokerage_social_links': SocialMediaLink.objects.filter(
             brokerage_id=1,
             is_enabled=True,

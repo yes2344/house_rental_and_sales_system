@@ -9,8 +9,10 @@ def _branding():
 
     settings = BrokerageSettings.objects.filter(pk=1).first()
     if settings is None:
-        return 'Infinit House', None, ''
-    name = settings.site_name.strip() or 'Infinit House'
+        return 'Infinity House', None, ''
+    name = settings.site_name.strip() or 'Infinity House'
+    if name.casefold() == 'infinit house':
+        name = 'Infinity House'
     if not settings.site_logo:
         return name, None, settings.phone.strip()
     with settings.site_logo.open('rb') as logo_file:

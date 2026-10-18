@@ -1990,7 +1990,7 @@ class PropertyImageApiTests(APITestCase):
 
         with patch(
             'properties.image_processing._branding',
-            return_value=('Infinit House', None, ''),
+            return_value=('Infinity House', None, ''),
         ):
             watermarked = watermark_image(ContentFile(image_buffer.getvalue()))
 
@@ -2101,7 +2101,7 @@ class PropertyImageApiTests(APITestCase):
 
         with patch(
             'properties.image_processing._branding',
-            return_value=('Infinit House', None, '+251911222333'),
+            return_value=('Infinity House', None, '+251911222333'),
         ):
             call_command('watermark_property_images', '--refresh')
         image.refresh_from_db()

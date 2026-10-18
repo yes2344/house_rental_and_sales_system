@@ -356,7 +356,7 @@ class AccountApiTests(APITestCase):
     @override_settings(
         EMAIL_BACKEND='accounts.email_backend.BrevoEmailBackend',
         BREVO_API_KEY='test-brevo-key',
-        DEFAULT_FROM_EMAIL='Infinit House <verified@example.com>',
+        DEFAULT_FROM_EMAIL='Infinity House <verified@example.com>',
         EMAIL_TIMEOUT=7,
         PUBLIC_FRONTEND_URL='https://frontend.example',
     )
@@ -383,7 +383,7 @@ class AccountApiTests(APITestCase):
         self.assertEqual(request.get_header('Api-key'), 'test-brevo-key')
         self.assertEqual(payload['sender'], {
             'email': 'verified@example.com',
-            'name': 'Infinit House',
+            'name': 'Infinity House',
         })
         self.assertEqual(payload['to'], [{'email': 'brevo-customer@example.com'}])
         self.assertIn('https://frontend.example/verify-email?', payload['textContent'])

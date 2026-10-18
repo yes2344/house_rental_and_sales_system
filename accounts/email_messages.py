@@ -59,10 +59,10 @@ def send_verification_email(user, token, next_path='/'):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     link = _frontend_link('/verify-email', {'uid': uid, 'token': token, 'next': next_path})
     _deliver(
-        'Verify your Infinit House account',
+        'Verify your Infinity House account',
         (
             'Hello,\n\n'
-            'Verify your email address to activate your Infinit House account:\n'
+            'Verify your email address to activate your Infinity House account:\n'
             f'{link}\n\n'
             'This link expires after '
             f'{settings.EMAIL_VERIFICATION_TIMEOUT.total_seconds() / 3600:g} hour(s). '
@@ -77,9 +77,9 @@ def send_password_reset_email(user):
     token = default_token_generator.make_token(user)
     link = _frontend_link('/reset-password', {'uid': uid, 'token': token})
     _deliver(
-        'Reset your Infinit House password',
+        'Reset your Infinity House password',
         (
-            'A password reset was requested for your Infinit House account.\n\n'
+            'A password reset was requested for your Infinity House account.\n\n'
             f'Choose a new password using this link:\n{link}\n\n'
             'If you did not request this change, you can ignore this message.'
         ),
