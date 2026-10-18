@@ -6,14 +6,14 @@ import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import { useAuth } from '../AuthContext';
 import type { MessageKey } from '../i18n';
 
-interface BrokerOnboardingPageProps {
+interface AgentOnboardingPageProps {
   text: (key: MessageKey) => string;
 }
 
-export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
-  const { account, changeBrokerInitialPassword, completeBrokerInitialProfile } = useAuth();
+export function AgentOnboardingPage({ text }: AgentOnboardingPageProps) {
+  const { account, changeAgentInitialPassword, completeAgentInitialProfile } = useAuth();
   const [step, setStep] = useState<'password' | 'profile'>(
-    account?.broker_password_changed ? 'profile' : 'password',
+    account?.agent_password_changed ? 'profile' : 'password',
   );
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -27,8 +27,8 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
   const [submitting, setSubmitting] = useState(false);
 
   if (!account) return <Navigate to="/login" replace />;
-  if (account.role !== 'broker' || !account.broker_onboarding_required) {
-    return <Navigate to={account.role === 'broker' || account.role === 'administrator' ? '/dashboard' : '/'} replace />;
+  if (account.role !== 'agent' || !account.agent_onboarding_required) {
+    return <Navigate to={account.role === 'agent' || account.role === 'administrator' ? '/dashboard' : '/'} replace />;
   }
 
   const changePassword = async (event: FormEvent<HTMLFormElement>) => {
@@ -41,7 +41,7 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
     }
     setSubmitting(true);
     try {
-      await changeBrokerInitialPassword({
+      await changeAgentInitialPassword({
         ...(username.trim() ? { username: username.trim() } : {}),
         new_password: password,
       });
@@ -62,7 +62,7 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
     setFieldErrors({});
     setSubmitting(true);
     try {
-      await completeBrokerInitialProfile({
+      await completeAgentInitialProfile({
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         email: email.trim(),
@@ -81,16 +81,16 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
       <section className="auth-card">
         <span className="auth-icon"><KeyRound size={22} aria-hidden="true" /></span>
         <p className="eyebrow eyebrow-muted">{text('accountEyebrow')}</p>
-        <h1>{text('brokerFirstLoginTitle')}</h1>
+        <h1>{text('agentFirstLoginTitle')}</h1>
         {step === 'password' ? (
           <>
-            <h2>{text('brokerPasswordStepTitle')}</h2>
-            <p className="auth-intro">{text('brokerPasswordStepIntro')}</p>
+            <h2>{text('agentPasswordStepTitle')}</h2>
+            <p className="auth-intro">{text('agentPasswordStepIntro')}</p>
             {error && <p className="auth-form-error" role="alert">{error}</p>}
             <form className="auth-form" onSubmit={(event) => void changePassword(event)}>
-              <label htmlFor="broker-new-username">{text('optionalBrokerUsername')}
+              <label htmlFor="agent-new-username">{text('optionalAgentUsername')}
                 <input
-                  id="broker-new-username"
+                  id="agent-new-username"
                   autoComplete="username"
                   maxLength={150}
                   value={username}
@@ -98,9 +98,9 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
                 />
                 {fieldErrors.username && <small role="alert">{fieldErrors.username}</small>}
               </label>
-              <label htmlFor="broker-new-password">{text('newPassword')}
+              <label htmlFor="agent-new-password">{text('newPassword')}
                 <input
-                  id="broker-new-password"
+                  id="agent-new-password"
                   type="password"
                   autoComplete="new-password"
                   minLength={8}
@@ -110,9 +110,9 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
                 />
                 {fieldErrors.new_password && <small role="alert">{fieldErrors.new_password}</small>}
               </label>
-              <label htmlFor="broker-password-confirmation">{text('confirmPassword')}
+              <label htmlFor="agent-password-confirmation">{text('confirmPassword')}
                 <input
-                  id="broker-password-confirmation"
+                  id="agent-password-confirmation"
                   type="password"
                   autoComplete="new-password"
                   minLength={8}
@@ -123,20 +123,20 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
               </label>
               <p className="auth-helper">{text('passwordHint')}</p>
               <button className="button button-primary" type="submit" disabled={submitting}>
-                {submitting ? text('brokerSetupSaving') : text('continueToBrokerProfile')}
+                {submitting ? text('agentSetupSaving') : text('continueToAgentProfile')}
                 <ArrowRight size={16} aria-hidden="true" />
               </button>
             </form>
           </>
         ) : (
           <>
-            <h2>{text('brokerProfileStepTitle')}</h2>
-            <p className="auth-intro">{text('brokerProfileStepIntro')}</p>
+            <h2>{text('agentProfileStepTitle')}</h2>
+            <p className="auth-intro">{text('agentProfileStepIntro')}</p>
             {error && <p className="auth-form-error" role="alert">{error}</p>}
             <form className="auth-form" onSubmit={(event) => void completeProfile(event)}>
-              <label htmlFor="broker-first-name">{text('brokerFirstName')}
+              <label htmlFor="agent-first-name">{text('agentFirstName')}
                 <input
-                  id="broker-first-name"
+                  id="agent-first-name"
                   autoComplete="given-name"
                   maxLength={150}
                   required
@@ -145,9 +145,9 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
                 />
                 {fieldErrors.first_name && <small role="alert">{fieldErrors.first_name}</small>}
               </label>
-              <label htmlFor="broker-last-name">{text('brokerLastName')}
+              <label htmlFor="agent-last-name">{text('agentLastName')}
                 <input
-                  id="broker-last-name"
+                  id="agent-last-name"
                   autoComplete="family-name"
                   maxLength={150}
                   required
@@ -156,9 +156,9 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
                 />
                 {fieldErrors.last_name && <small role="alert">{fieldErrors.last_name}</small>}
               </label>
-              <label htmlFor="broker-email">{text('brokerEmail')}
+              <label htmlFor="agent-email">{text('agentEmail')}
                 <input
-                  id="broker-email"
+                  id="agent-email"
                   type="email"
                   autoComplete="email"
                   maxLength={254}
@@ -168,9 +168,9 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
                 />
                 {fieldErrors.email && <small role="alert">{fieldErrors.email}</small>}
               </label>
-              <label htmlFor="broker-phone">{text('brokerPhone')}
+              <label htmlFor="agent-phone">{text('agentPhone')}
                 <input
-                  id="broker-phone"
+                  id="agent-phone"
                   type="tel"
                   autoComplete="tel"
                   maxLength={50}
@@ -181,7 +181,7 @@ export function BrokerOnboardingPage({ text }: BrokerOnboardingPageProps) {
                 {fieldErrors.phone && <small role="alert">{fieldErrors.phone}</small>}
               </label>
               <button className="button button-primary" type="submit" disabled={submitting}>
-                {submitting ? text('brokerSetupSaving') : text('completeBrokerSetup')}
+                {submitting ? text('agentSetupSaving') : text('completeAgentSetup')}
                 <ArrowRight size={16} aria-hidden="true" />
               </button>
             </form>

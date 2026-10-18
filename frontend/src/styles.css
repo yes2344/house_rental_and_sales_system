@@ -987,6 +987,13 @@ img { display: block; max-width: 100%; }
 .location-list-empty { padding: 20px; color: var(--muted); font-size: 16.500px; line-height: 1.6; text-align: center; }
 .location-management-note { margin: 12px 0 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
 .manager-filter-bar { display: flex; align-items: end; gap: 11px; margin-bottom: 16px; padding: 14px; border: 1px solid var(--line); background: var(--paper); }
+.manager-bulk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 13px; padding: 10px 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink-soft); font-size: 15px; }
+.manager-bulk-select { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); font-weight: 700; }
+.manager-bulk-actions .button { margin-left: auto; }
+.manager-bulk-actions input[type='checkbox'],
+.manager-table input[type='checkbox'],
+.manager-listing-select input[type='checkbox'],
+.submission-select input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--green-800); cursor: pointer; }
 .manager-search, .manager-filter, .manager-field { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: var(--ink-soft); font-size: 15px; font-weight: 700; }
 .manager-search { flex: 1 1 240px; }
 .manager-filter { flex: 0 1 195px; }
@@ -1002,7 +1009,15 @@ img { display: block; max-width: 100%; }
 .manager-table tr:last-child td { border-bottom: 0; }
 .manager-table tbody tr.is-selected { background: #f0f4ed; }
 .manager-listing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.manager-listing-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); background: var(--paper); box-shadow: var(--shadow-card); }
+.manager-listing-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--line); background: var(--paper); box-shadow: var(--shadow-card); }
+.manager-listing-select,
+.submission-select { position: absolute; z-index: 4; top: 10px; left: 10px; display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid rgb(20 30 25 / 18%); border-radius: 4px; background: rgb(255 255 255 / 94%); }
+.manager-listing-select input[type='checkbox'],
+.submission-select input[type='checkbox'] { margin: 0; }
+.submission-review-card { position: relative; }
+.submission-review-select { top: 12px; left: 12px; }
+.manager-listing-select input[type='checkbox']:disabled,
+.submission-select input[type='checkbox']:disabled { cursor: not-allowed; }
 .manager-listing-image { position: relative; overflow: hidden; aspect-ratio: 1.7; background: #e9eee5; }
 .manager-listing-image > .listing-type { z-index: 3; }
 .manager-listing-content { display: flex; min-height: 195px; flex-direction: column; align-items: flex-start; padding: 14px; }
@@ -1391,50 +1406,50 @@ img { display: block; max-width: 100%; }
   }
 }
 
-.broker-announcements-page { padding-bottom: 64px; }
-.broker-announcement-page-heading { margin-bottom: 24px; }
-.broker-announcement-queues {
+.agent-announcements-page { padding-bottom: 64px; }
+.agent-announcement-page-heading { margin-bottom: 24px; }
+.agent-announcement-queues {
   display: flex; gap: 10px; margin: 22px 0; padding: 2px 2px 10px;
   overflow-x: auto; scrollbar-width: thin;
 }
-.broker-announcement-queue {
+.agent-announcement-queue {
   min-width: 145px; display: flex; align-items: center; justify-content: space-between; gap: 18px;
   padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--paper); color: var(--ink-soft); text-align: left; cursor: pointer;
 }
-.broker-announcement-queue strong {
+.agent-announcement-queue strong {
   min-width: 27px; height: 27px; display: grid; place-items: center; border-radius: 50%;
   background: var(--cream); color: var(--green-900); font-size: 18px;
 }
-.broker-announcement-queue.is-active { border-color: var(--green-800); color: var(--green-950); box-shadow: inset 0 -2px var(--green-800); }
-.broker-announcement-queue.is-active strong { color: white; background: var(--green-800); }
-.broker-announcement-toolbar {
+.agent-announcement-queue.is-active { border-color: var(--green-800); color: var(--green-950); box-shadow: inset 0 -2px var(--green-800); }
+.agent-announcement-queue.is-active strong { color: white; background: var(--green-800); }
+.agent-announcement-toolbar {
   display: grid; grid-template-columns: minmax(220px, 2fr) minmax(130px, 1fr) repeat(4, minmax(135px, 1fr));
   gap: 10px; margin: 22px 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px;
   background: var(--paper);
 }
-.broker-announcement-toolbar label { min-width: 0; }
-.broker-announcement-toolbar input,
-.broker-announcement-toolbar select {
+.agent-announcement-toolbar label { min-width: 0; }
+.agent-announcement-toolbar input,
+.agent-announcement-toolbar select {
   width: 100%; min-height: 43px; padding: 0 11px; border: 1px solid var(--line);
   border-radius: 7px; background: var(--paper); color: var(--ink); font-size: 19.500px;
 }
-.broker-announcement-search { position: relative; }
-.broker-announcement-search > svg { position: absolute; top: 13px; left: 12px; color: var(--muted); }
-.broker-announcement-search input { padding-left: 38px; }
-.broker-announcement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.broker-announcement-card {
+.agent-announcement-search { position: relative; }
+.agent-announcement-search > svg { position: absolute; top: 13px; left: 12px; color: var(--muted); }
+.agent-announcement-search input { padding-left: 38px; }
+.agent-announcement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.agent-announcement-card {
   min-width: 0; display: grid; grid-template-columns: minmax(150px, 36%) minmax(0, 1fr);
   overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--paper);
   box-shadow: 0 8px 24px rgb(26 51 39 / 4%);
 }
-.broker-announcement-card-media { position: relative; min-height: 235px; overflow: hidden; background: var(--cream); }
-.broker-announcement-card-media .property-slideshow { position: absolute; inset: 0; }
-.broker-announcement-card-media .listing-type { position: absolute; z-index: 2; top: 12px; left: 12px; }
-.broker-announcement-card-content { min-width: 0; display: flex; flex-direction: column; gap: 11px; padding: 17px; }
-.broker-announcement-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.broker-announcement-card-heading h2 { margin: 7px 0 0; font-family: Manrope, sans-serif; font-size: 25.500px; line-height: 1.3; }
-.broker-announcement-card-heading .listing-price { flex: 0 0 auto; color: var(--green-900); font-size: 19.500px; text-align: right; }
+.agent-announcement-card-media { position: relative; min-height: 235px; overflow: hidden; background: var(--cream); }
+.agent-announcement-card-media .property-slideshow { position: absolute; inset: 0; }
+.agent-announcement-card-media .listing-type { position: absolute; z-index: 2; top: 12px; left: 12px; }
+.agent-announcement-card-content { min-width: 0; display: flex; flex-direction: column; gap: 11px; padding: 17px; }
+.agent-announcement-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.agent-announcement-card-heading h2 { margin: 7px 0 0; font-family: Manrope, sans-serif; font-size: 25.500px; line-height: 1.3; }
+.agent-announcement-card-heading .listing-price { flex: 0 0 auto; color: var(--green-900); font-size: 19.500px; text-align: right; }
 .announcement-status-badge {
   display: inline-flex; width: fit-content; padding: 4px 8px; border-radius: 999px;
   background: #edf0eb; color: var(--ink-soft); font-size: 15px; font-weight: 700;
@@ -1443,83 +1458,83 @@ img { display: block; max-width: 100%; }
 .status-pending_review, .status-corrections_requested { background: #fff3da; color: #78520a; }
 .status-approved { background: #e4f2e8; color: #21613b; }
 .status-expired, .status-rejected, .status-suspended { background: #f8e8e4; color: #8b3328; }
-.broker-announcement-card-meta { display: flex; flex-wrap: wrap; gap: 7px 13px; color: var(--muted); font-size: 16.500px; text-transform: capitalize; }
-.broker-announcement-location { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--ink-soft); font-size: 18px; line-height: 1.45; }
-.broker-announcement-location svg { flex: 0 0 auto; margin-top: 1px; color: var(--green-800); }
-.broker-announcement-owner { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 16.500px; }
-.broker-announcement-owner strong { color: var(--ink-soft); }
-.broker-announcement-agreement { display: flex; flex-direction: column; gap: 5px; color: var(--ink-soft); font-size: 16.500px; }
-.broker-announcement-agreement span { display: flex; align-items: center; gap: 5px; }
+.agent-announcement-card-meta { display: flex; flex-wrap: wrap; gap: 7px 13px; color: var(--muted); font-size: 16.500px; text-transform: capitalize; }
+.agent-announcement-location { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: var(--ink-soft); font-size: 18px; line-height: 1.45; }
+.agent-announcement-location svg { flex: 0 0 auto; margin-top: 1px; color: var(--green-800); }
+.agent-announcement-owner { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 16.500px; }
+.agent-announcement-owner strong { color: var(--ink-soft); }
+.agent-announcement-agreement { display: flex; flex-direction: column; gap: 5px; color: var(--ink-soft); font-size: 16.500px; }
+.agent-announcement-agreement span { display: flex; align-items: center; gap: 5px; }
 .agreement-expiry-warning { color: #9a4c16 !important; font-weight: 700; }
-.broker-announcement-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: auto; padding-top: 3px; }
-.broker-announcement-card-actions .button { min-height: 37px; padding: 8px 11px; font-size: 18px; }
-.broker-announcement-empty, .broker-announcement-loading {
+.agent-announcement-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: auto; padding-top: 3px; }
+.agent-announcement-card-actions .button { min-height: 37px; padding: 8px 11px; font-size: 18px; }
+.agent-announcement-empty, .agent-announcement-loading {
   padding: 42px 22px; border: 1px dashed var(--line); border-radius: 12px;
   color: var(--muted); text-align: center;
 }
-.broker-announcement-empty h2 { margin: 0 0 8px; color: var(--ink); font-size: 27px; }
-.broker-announcement-empty p { margin: 0; }
-.broker-announcement-pagination { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 22px; color: var(--muted); font-size: 18px; }
-.broker-announcement-pagination > div { display: flex; align-items: center; gap: 12px; }
-.broker-announcement-pagination .button { min-height: 37px; padding: 7px 10px; font-size: 18px; }
-.broker-announcement-pagination svg { vertical-align: middle; }
-.broker-notification-strip { display: grid; gap: 8px; margin: 12px 0; }
-.broker-notification-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 13px; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 8px; background: var(--paper); }
-.broker-notification-item p { margin: 0; color: var(--ink-soft); font-size: 18px; }
-.broker-notification-item .button { min-height: 34px; padding: 6px 9px; font-size: 16.500px; }
-.broker-announcement-dialog-backdrop {
+.agent-announcement-empty h2 { margin: 0 0 8px; color: var(--ink); font-size: 27px; }
+.agent-announcement-empty p { margin: 0; }
+.agent-announcement-pagination { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 22px; color: var(--muted); font-size: 18px; }
+.agent-announcement-pagination > div { display: flex; align-items: center; gap: 12px; }
+.agent-announcement-pagination .button { min-height: 37px; padding: 7px 10px; font-size: 18px; }
+.agent-announcement-pagination svg { vertical-align: middle; }
+.agent-notification-strip { display: grid; gap: 8px; margin: 12px 0; }
+.agent-notification-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 13px; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: 8px; background: var(--paper); }
+.agent-notification-item p { margin: 0; color: var(--ink-soft); font-size: 18px; }
+.agent-notification-item .button { min-height: 34px; padding: 6px 9px; font-size: 16.500px; }
+.agent-announcement-dialog-backdrop {
   position: fixed; z-index: 90; inset: 0; display: grid; place-items: center; padding: 20px;
   overflow-y: auto; background: rgb(13 28 22 / 60%);
 }
-.broker-announcement-dialog {
+.agent-announcement-dialog {
   width: min(900px, 100%); max-height: min(92vh, 1000px); display: flex; flex-direction: column;
   overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--paper);
   box-shadow: 0 25px 80px rgb(0 0 0 / 25%);
 }
-.broker-announcement-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
-.broker-announcement-dialog-header h2 { margin: 7px 0 0; font-family: Manrope, sans-serif; font-size: 33px; }
-.broker-announcement-dialog-header .icon-button { flex: 0 0 auto; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: transparent; cursor: pointer; }
-.broker-announcement-dialog-body { padding: 22px 24px 28px; overflow-y: auto; }
-.broker-announcement-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-.broker-announcement-detail-grid h3, .broker-agreement-detail h3, .broker-decision-panel h3 { margin: 0 0 12px; font-family: Manrope, sans-serif; font-size: 22.500px; }
-.broker-announcement-detail-grid p, .broker-agreement-detail p { display: flex; gap: 6px; margin: 7px 0; color: var(--ink-soft); font-size: 19.500px; line-height: 1.55; }
-.broker-announcement-detail-grid p svg { flex: 0 0 auto; }
-.broker-announcement-detail-grid .announcement-detail-description { display: block; white-space: pre-wrap; }
-.broker-agreement-detail, .broker-decision-panel { margin-top: 23px; padding: 17px; border: 1px solid var(--line); border-radius: 10px; background: var(--cream); }
-.broker-decision-panel { background: var(--paper); }
-.broker-agreement-form { max-width: 680px; }
-.broker-agreement-form > p { color: var(--ink-soft); font-size: 19.500px; }
-.broker-agreement-form .checkbox-field { margin: 10px 0; }
-.broker-decision-secondary { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 17px; }
-.broker-decision-secondary label { flex-basis: 100%; }
+.agent-announcement-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
+.agent-announcement-dialog-header h2 { margin: 7px 0 0; font-family: Manrope, sans-serif; font-size: 33px; }
+.agent-announcement-dialog-header .icon-button { flex: 0 0 auto; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: transparent; cursor: pointer; }
+.agent-announcement-dialog-body { padding: 22px 24px 28px; overflow-y: auto; }
+.agent-announcement-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.agent-announcement-detail-grid h3, .agent-agreement-detail h3, .agent-decision-panel h3 { margin: 0 0 12px; font-family: Manrope, sans-serif; font-size: 22.500px; }
+.agent-announcement-detail-grid p, .agent-agreement-detail p { display: flex; gap: 6px; margin: 7px 0; color: var(--ink-soft); font-size: 19.500px; line-height: 1.55; }
+.agent-announcement-detail-grid p svg { flex: 0 0 auto; }
+.agent-announcement-detail-grid .announcement-detail-description { display: block; white-space: pre-wrap; }
+.agent-agreement-detail, .agent-decision-panel { margin-top: 23px; padding: 17px; border: 1px solid var(--line); border-radius: 10px; background: var(--cream); }
+.agent-decision-panel { background: var(--paper); }
+.agent-agreement-form { max-width: 680px; }
+.agent-agreement-form > p { color: var(--ink-soft); font-size: 19.500px; }
+.agent-agreement-form .checkbox-field { margin: 10px 0; }
+.agent-decision-secondary { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; margin-top: 17px; }
+.agent-decision-secondary label { flex-basis: 100%; }
 .button-danger { color: #9a342a; border-color: #e7c3bc; }
-.broker-announcement-dialog-backdrop > p { padding: 24px; border-radius: 10px; background: var(--paper); }
+.agent-announcement-dialog-backdrop > p { padding: 24px; border-radius: 10px; background: var(--paper); }
 
 @media (max-width: 1180px) {
-  .broker-announcement-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .broker-announcement-search { grid-column: span 2; }
+  .agent-announcement-toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .agent-announcement-search { grid-column: span 2; }
 }
 @media (max-width: 980px) {
-  .broker-announcement-grid { grid-template-columns: 1fr; }
-  .broker-announcement-card { grid-template-columns: minmax(170px, 30%) minmax(0, 1fr); }
-  .broker-announcement-card-media { min-height: 220px; }
+  .agent-announcement-grid { grid-template-columns: 1fr; }
+  .agent-announcement-card { grid-template-columns: minmax(170px, 30%) minmax(0, 1fr); }
+  .agent-announcement-card-media { min-height: 220px; }
 }
 @media (max-width: 640px) {
-  .broker-announcement-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
-  .broker-announcement-search { grid-column: 1 / -1; }
-  .broker-announcement-card { grid-template-columns: 1fr; }
-  .broker-announcement-card-media { min-height: 0; aspect-ratio: 16 / 9; }
-  .broker-announcement-card-content { padding: 14px; }
-  .broker-announcement-card-heading { flex-direction: column; }
-  .broker-announcement-card-heading .listing-price { text-align: left; }
-  .broker-announcement-pagination { align-items: flex-start; flex-direction: column; }
-  .broker-announcement-pagination > div { width: 100%; justify-content: space-between; }
-  .broker-notification-item { align-items: flex-start; flex-direction: column; }
-  .broker-announcement-dialog-backdrop { align-items: end; padding: 0; }
-  .broker-announcement-dialog { width: 100%; max-height: 94dvh; border-radius: 14px 14px 0 0; }
-  .broker-announcement-dialog-header, .broker-announcement-dialog-body { padding-right: 16px; padding-left: 16px; }
-  .broker-announcement-detail-grid { grid-template-columns: 1fr; gap: 18px; }
-  .broker-decision-secondary { align-items: stretch; flex-direction: column; }
+  .agent-announcement-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }
+  .agent-announcement-search { grid-column: 1 / -1; }
+  .agent-announcement-card { grid-template-columns: 1fr; }
+  .agent-announcement-card-media { min-height: 0; aspect-ratio: 16 / 9; }
+  .agent-announcement-card-content { padding: 14px; }
+  .agent-announcement-card-heading { flex-direction: column; }
+  .agent-announcement-card-heading .listing-price { text-align: left; }
+  .agent-announcement-pagination { align-items: flex-start; flex-direction: column; }
+  .agent-announcement-pagination > div { width: 100%; justify-content: space-between; }
+  .agent-notification-item { align-items: flex-start; flex-direction: column; }
+  .agent-announcement-dialog-backdrop { align-items: end; padding: 0; }
+  .agent-announcement-dialog { width: 100%; max-height: 94dvh; border-radius: 14px 14px 0 0; }
+  .agent-announcement-dialog-header, .agent-announcement-dialog-body { padding-right: 16px; padding-left: 16px; }
+  .agent-announcement-detail-grid { grid-template-columns: 1fr; gap: 18px; }
+  .agent-decision-secondary { align-items: stretch; flex-direction: column; }
 }
 
 .customer-section-heading {
@@ -1534,6 +1549,7 @@ img { display: block; max-width: 100%; }
 .customer-section-heading p { margin-top: 5px; color: var(--muted); font-size: 15px; }
 .submission-list, .submission-review-list { display: grid; gap: 13px; }
 .submission-card {
+  position: relative;
   display: grid;
   grid-template-columns: 190px minmax(0, 1fr);
   overflow: hidden;
@@ -1831,10 +1847,10 @@ img { display: block; max-width: 100%; }
   .settings-account-actions > span,
   .settings-footer p,
   .announcement-status-badge,
-  .broker-announcement-card-meta,
-  .broker-announcement-owner,
-  .broker-announcement-agreement,
-  .broker-notification-item .button,
+  .agent-announcement-card-meta,
+  .agent-announcement-owner,
+  .agent-announcement-agreement,
+  .agent-notification-item .button,
   .customer-section-heading p,
   .submission-card-heading p,
   .submission-feedback,

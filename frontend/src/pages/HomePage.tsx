@@ -624,7 +624,7 @@ export function HomePage({ locale, text }: HomePageProps) {
       </section>
 
       {contact.social_links.some((link) => link.is_enabled && link.url) && (
-        <section className="homepage-social-section" aria-label={text('brokerSocialLinks')}>
+        <section className="homepage-social-section" aria-label={text('agentSocialLinks')}>
           <div className="container homepage-social-inner">
             <div className="footer-socials">
               {contact.social_links.filter((link) => link.is_enabled && link.url).map((link) => (

@@ -5,10 +5,10 @@ import { BrokerageContactProvider } from './BrokerageContactContext';
 import { HomepageContentProvider } from './HomepageContentContext';
 import { PageLayout } from './components/PageLayout';
 import { RequireAuth } from './components/RequireAuth';
-import { RequireBrokerAccountManager } from './components/RequireBrokerAccountManager';
+import { RequireAgentAccountManager } from './components/RequireAgentAccountManager';
 import { RequireMarketplaceAccess } from './components/RequireMarketplaceAccess';
 import { RequireLocationManager } from './components/RequireLocationManager';
-import { RequireNonBroker } from './components/RequireNonBroker';
+import { RequireNonAgent } from './components/RequireNonAgent';
 import { RequireListingManager } from './components/RequireListingManager';
 import { RequireDashboardAccess } from './components/RequireDashboardAccess';
 import { RequireBrandingManager } from './components/RequireBrandingManager';
@@ -94,11 +94,11 @@ const SiteBrandingPage = lazy(() =>
 const LocationManagementPage = lazy(() =>
   import('./pages/LocationManagementPage').then(({ LocationManagementPage }) => ({ default: LocationManagementPage })),
 );
-const BrokerAccountManagementPage = lazy(() =>
-  import('./pages/BrokerAccountManagementPage').then(({ BrokerAccountManagementPage }) => ({ default: BrokerAccountManagementPage })),
+const AgentAccountManagementPage = lazy(() =>
+  import('./pages/AgentAccountManagementPage').then(({ AgentAccountManagementPage }) => ({ default: AgentAccountManagementPage })),
 );
-const BrokerOnboardingPage = lazy(() =>
-  import('./pages/BrokerOnboardingPage').then(({ BrokerOnboardingPage }) => ({ default: BrokerOnboardingPage })),
+const AgentOnboardingPage = lazy(() =>
+  import('./pages/AgentOnboardingPage').then(({ AgentOnboardingPage }) => ({ default: AgentOnboardingPage })),
 );
 const SettingsPage = lazy(() =>
   import('./pages/SettingsPage').then(({ SettingsPage }) => ({ default: SettingsPage })),
@@ -165,9 +165,9 @@ export default function App() {
               <Route path="register" element={<RegisterPage text={text} />} />
               <Route path="settings" element={<SettingsPage text={text} />} />
               <Route element={<RequireAuth text={text} />}>
-                <Route path="broker-onboarding" element={<BrokerOnboardingPage text={text} />} />
+                <Route path="agent-onboarding" element={<AgentOnboardingPage text={text} />} />
                 <Route element={<RequireMarketplaceAccess text={text} />}>
-                  <Route element={<RequireNonBroker />}>
+                  <Route element={<RequireNonAgent />}>
                     <Route path="submissions/new" element={<PropertySubmissionPage locale={locale} text={text} />} />
                     <Route path="submissions/:id/edit" element={<PropertySubmissionPage locale={locale} text={text} />} />
                     <Route path="my-submissions" element={<MyPropertySubmissionsPage locale={locale} text={text} />} />
@@ -178,15 +178,15 @@ export default function App() {
                 </Route>
                 <Route path="admin" element={<Navigate to="/dashboard" replace />} />
                 <Route element={<RequireMarketplaceAccess text={text} />}>
-                  <Route element={<RequireNonBroker />}>
+                  <Route element={<RequireNonAgent />}>
                     <Route path="viewing-requests/new" element={<ViewingRequestPage locale={locale} text={text} />} />
                     <Route path="viewing-requests" element={<CustomerViewingRequestsPage locale={locale} text={text} />} />
                     <Route path="favorites" element={<FavoritesPage locale={locale} text={text} />} />
                   </Route>
                   <Route path="account" element={<AccountPage locale={locale} text={text} />} />
                 </Route>
-                <Route element={<RequireBrokerAccountManager text={text} />}>
-                  <Route path="management/brokers" element={<BrokerAccountManagementPage text={text} />} />
+                <Route element={<RequireAgentAccountManager text={text} />}>
+                  <Route path="management/agents" element={<AgentAccountManagementPage text={text} />} />
                 </Route>
                 <Route element={<RequireListingManager text={text} />}>
                   <Route element={<OwnerDashboardLayout text={text} />}>

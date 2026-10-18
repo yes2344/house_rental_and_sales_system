@@ -5,7 +5,7 @@ import {
   setTabSessionToken,
 } from './client';
 
-export type AccountRole = 'customer' | 'owner' | 'broker' | 'administrator' | null;
+export type AccountRole = 'customer' | 'owner' | 'agent' | 'administrator' | null;
 
 export interface Account {
   id: number;
@@ -17,8 +17,8 @@ export interface Account {
   phone: string;
   management_permissions: string[];
   is_platform_owner: boolean;
-  broker_onboarding_required: boolean;
-  broker_password_changed: boolean;
+  agent_onboarding_required: boolean;
+  agent_password_changed: boolean;
   assigned_city_id: number | null;
   assigned_city_name: string | null;
   assigned_city_name_am: string | null;
@@ -53,12 +53,12 @@ export interface AccountUpdatePayload {
   phone: string;
 }
 
-export interface BrokerInitialPasswordPayload {
+export interface AgentInitialPasswordPayload {
   username?: string;
   new_password: string;
 }
 
-export interface BrokerProfilePayload {
+export interface AgentProfilePayload {
   first_name: string;
   last_name: string;
   email: string;
@@ -149,15 +149,15 @@ export async function updateAccount(payload: AccountUpdatePayload): Promise<Acco
   return response.data;
 }
 
-export async function changeBrokerInitialPassword(
-  payload: BrokerInitialPasswordPayload,
+export async function changeAgentInitialPassword(
+  payload: AgentInitialPasswordPayload,
 ): Promise<Account> {
-  const response = await apiClient.post<Account>('/auth/broker-onboarding/password/', payload);
+  const response = await apiClient.post<Account>('/auth/agent-onboarding/password/', payload);
   return response.data;
 }
 
-export async function completeBrokerInitialProfile(payload: BrokerProfilePayload): Promise<Account> {
-  const response = await apiClient.post<Account>('/auth/broker-onboarding/profile/', payload);
+export async function completeAgentInitialProfile(payload: AgentProfilePayload): Promise<Account> {
+  const response = await apiClient.post<Account>('/auth/agent-onboarding/profile/', payload);
   return response.data;
 }
 

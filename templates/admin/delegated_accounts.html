@@ -78,7 +78,7 @@
                   <td>{{ profile.assigned_city.name|default:"Not assigned" }}</td>
                   <td>{{ profile.get_role_display }}</td>
                   <td>{% if profile.user.is_active %}Active{% else %}Inactive{% endif %}</td>
-                  <td>{% if profile.broker_onboarding_required %}Profile setup required{% else %}Profile complete{% endif %}</td>
+                  <td>{% if profile.agent_onboarding_required %}Profile setup required{% else %}Profile complete{% endif %}</td>
                   <td>
                     <a href="?account_id={{ profile.user_id }}">Edit</a>
                     <form method="post" style="display:inline" onsubmit="return confirm('Permanently delete this agent account?');">

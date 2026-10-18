@@ -4,7 +4,7 @@ from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError
 
 from accounts.models import Profile
-from accounts.permissions import broker_work_permissions
+from accounts.permissions import agent_work_permissions
 from properties.models import Location
 
 
@@ -46,8 +46,8 @@ class DelegatedAccountCreateForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        cleaned_data['role'] = Profile.Role.BROKER
-        cleaned_data['management_permissions'] = broker_work_permissions()
+        cleaned_data['role'] = Profile.Role.AGENT
+        cleaned_data['management_permissions'] = agent_work_permissions()
         permissions = set(cleaned_data['management_permissions'])
         if OWNER_ONLY_PERMISSIONS.intersection(permissions):
             self.add_error(
@@ -123,6 +123,6 @@ class DelegatedAccountUpdateForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        cleaned_data['role'] = Profile.Role.BROKER
-        cleaned_data['management_permissions'] = broker_work_permissions()
+        cleaned_data['role'] = Profile.Role.AGENT
+        cleaned_data['management_permissions'] = agent_work_permissions()
         return cleaned_data

@@ -4,15 +4,18 @@ from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, generics
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from accounts.permissions import (
     HasManagementPermission,
     IsAuthenticatedPropertyManagerOrAdministrator,
     IsLocationManager,
     IsListingManager,
+    has_management_permission,
+    has_listing_role,
 )
 from accounts.models import Profile
 from admin.audit import record_admin_action
@@ -22,7 +25,7 @@ from properties.access import (
     managed_properties,
     public_properties,
 )
-from properties.access import broker_city_location_ids
+from properties.access import agent_city_location_ids
 from properties.filters import PublicPropertyFilter, PublicPropertyOrderingFilter
 from properties.location_search import matching_location_ids
 from properties.models import Amenity, Location, Property, PropertyImage
@@ -35,10 +38,30 @@ from properties.serializers import (
     PublicPropertyListSerializer,
     LocationSerializer,
     PropertyTypeOptionSerializer,
+    BulkDeleteIdsSerializer,
 )
 
 
 PUBLIC_STATUSES = [Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE]
+
+
+class IsManagedPropertyDeleter(IsAuthenticated):
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        user = request.user
+        can_delete_all = any(
+            has_management_permission(user, permission)
+            for permission in (
+                Profile.Permission.PROPERTY_DELETE_ALL,
+                Profile.Permission.PROPERTY_EDIT_ALL,
+            )
+        )
+        can_delete_own = (
+            has_listing_role(user, Profile.Role.AGENT, agent_approved=True)
+            and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
+        )
+        return can_delete_all or can_delete_own
 
 
 class PublicAmenityListView(generics.ListAPIView):
@@ -125,8 +148,8 @@ class ManagedLocationListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         queryset = Location.objects.all()
         profile = Profile.objects.filter(user=self.request.user).select_related('assigned_city').first()
-        if not self.request.user.is_superuser and profile and profile.role == Profile.Role.BROKER:
-            queryset = queryset.filter(pk__in=broker_city_location_ids(self.request.user))
+        if not self.request.user.is_superuser and profile and profile.role == Profile.Role.AGENT:
+            queryset = queryset.filter(pk__in=agent_city_location_ids(self.request.user))
         if self.request.query_params.get('all') == '1':
             return queryset.select_related(
                 'parent',
@@ -164,8 +187,8 @@ class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         queryset = Location.objects.all()
         profile = Profile.objects.filter(user=self.request.user).select_related('assigned_city').first()
-        if not self.request.user.is_superuser and profile and profile.role == Profile.Role.BROKER:
-            queryset = queryset.filter(pk__in=broker_city_location_ids(self.request.user))
+        if not self.request.user.is_superuser and profile and profile.role == Profile.Role.AGENT:
+            queryset = queryset.filter(pk__in=agent_city_location_ids(self.request.user))
             queryset = queryset.filter(location_type=Location.Type.SUBCITY)
         elif self.request.user.is_superuser or (
             profile and profile.role == Profile.Role.ADMINISTRATOR
@@ -252,7 +275,7 @@ class PublicPropertyListView(generics.ListAPIView):
             .prefetch_related(
                 'images',
                 'amenities',
-                'broker_assignments__broker__profile',
+                'agent_assignments__agent__profile',
             )
             .select_related(
                 'administrative_location',
@@ -291,7 +314,7 @@ class PublicPropertyDetailView(generics.RetrieveAPIView):
     queryset = public_properties().select_related('submitted_by').prefetch_related(
         'images',
         'amenities',
-        'broker_assignments__broker__profile',
+        'agent_assignments__agent__profile',
     ).select_related(
         'administrative_location',
         'administrative_location__parent',
@@ -340,6 +363,40 @@ class ManagedPropertyListCreateView(generics.ListCreateAPIView):
             object_id=property_obj.pk,
             changes={'publication_status': property_obj.publication_status},
         )
+
+
+class ManagedPropertyBulkDeleteView(APIView):
+    permission_classes = [IsManagedPropertyDeleter]
+    serializer_class = BulkDeleteIdsSerializer
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data['ids']
+        properties = list(
+            managed_properties(request.user)
+            .select_for_update()
+            .filter(pk__in=ids)
+            .order_by('pk')
+        )
+        if {property_obj.pk for property_obj in properties} != set(ids):
+            raise NotFound('One or more selected listings are unavailable.')
+
+        for property_obj in properties:
+            record_admin_action(
+                request.user,
+                action='property_deleted',
+                object_type='property',
+                object_id=property_obj.pk,
+                changes={
+                    'title': property_obj.title,
+                    'service_type': property_obj.service_type,
+                },
+            )
+            property_obj.delete()
+
+        return Response({'deleted_count': len(properties)})
 
 
 class ManagedPropertyDetailView(generics.RetrieveUpdateDestroyAPIView):

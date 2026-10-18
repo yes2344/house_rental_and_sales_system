@@ -47,9 +47,9 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
   const { contact } = useBrokerageContact();
   const uniquePropertyTypes = getUniquePropertyTypeOptions(propertyTypes);
   const hasBrokerageContact = Boolean(contact.phone || contact.email);
-  const canAccessDashboard = Boolean(account && ['broker', 'administrator'].includes(account.role ?? ''));
+  const canAccessDashboard = Boolean(account && ['agent', 'administrator'].includes(account.role ?? ''));
   const canManageListings = Boolean(
-    account?.role === 'broker'
+    account?.role === 'agent'
     && account.management_permissions.some((permission) => [
       'properties.view_all',
       'properties.moderate',
@@ -57,7 +57,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
       'properties.manage_assigned',
     ].includes(permission)),
   );
-  const addPropertyTarget = account?.role === 'broker'
+  const addPropertyTarget = account?.role === 'agent'
     ? canManageListings ? '/management/listings/new' : '/submissions/new'
     : account?.role === 'administrator'
       ? '/dashboard'
@@ -248,8 +248,8 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
               </Link>
             )}
             {hasBrokerageContact && (
-              <section className="mobile-menu-contact" aria-label={text('brokerContactTitle')}>
-                <h2>{text('brokerContactTitle')}</h2>
+              <section className="mobile-menu-contact" aria-label={text('agentContactTitle')}>
+                <h2>{text('agentContactTitle')}</h2>
                 {contact.phone && (
                   <a href={`tel:${contact.phone}`} onClick={closeNavigation}>
                     <Phone size={16} aria-hidden="true" />
@@ -285,10 +285,10 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                 {!isAdministrator && (
                   <Link className="header-sign-in" to="/account" onClick={closeNavigation}>{text('myAccount')}</Link>
                 )}
-                {account.role !== 'broker' && account.role !== 'administrator' && (
+                {account.role !== 'agent' && account.role !== 'administrator' && (
                   <Link className="header-sign-in" to="/my-submissions" onClick={closeNavigation}>{text('mySubmissions')}</Link>
                 )}
-                {account.role !== 'broker' && account.role !== 'administrator' && (
+                {account.role !== 'agent' && account.role !== 'administrator' && (
                   <Link className="header-sign-in" to="/viewing-requests" onClick={closeNavigation}>
                     {text('yourViewingRequests')}
                   </Link>

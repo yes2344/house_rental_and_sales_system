@@ -53,7 +53,7 @@ setting or feature.
 - Initial isolated baseline `manage.py test` with
   `DATABASE_URL=sqlite:///:memory:` (not the required production database
   engine) — 141 tests ran; 138 passed and 3 failed on stale expectations: a
-  removed legacy admin viewing route, a test treating an approved broker's old
+  removed legacy admin viewing route, a test treating an approved agent's old
   stored permissions as effective, and expecting 403 where the scoped endpoint
   intentionally returns 404 for an out-of-scope owner-announced property. The
   intended access behavior was verified in code and the affected expectations
@@ -71,7 +71,7 @@ staging or production environment.
 | Security and privacy | All authentication, CSRF, authorization, upload, and guest-token regression tests pass; no unresolved high/critical findings in a dependency/security scan; production TLS/proxy settings are verified against the actual ingress. |
 | Reliability and data integrity | Full backend tests and migration-drift check pass; critical write workflows remain transactional; recovery objectives are documented and exercised. |
 | Performance | Initial JavaScript is at most 120 kB gzip; largest route chunk is at most 300 kB raw; under 50 concurrent browse users with representative data, API p95 is below 500 ms and error rate below 1%. |
-| Usability and accessibility | Core browse, listing, viewing-request, and broker workflows pass keyboard-only checks; automated scan finds zero critical/serious WCAG 2.2 AA violations; layouts are manually checked at 360 px, 768 px, and 1280 px widths. |
+| Usability and accessibility | Core browse, listing, viewing-request, and agent workflows pass keyboard-only checks; automated scan finds zero critical/serious WCAG 2.2 AA violations; layouts are manually checked at 360 px, 768 px, and 1280 px widths. |
 | Maintainability | TypeScript production build and Django checks pass; migration drift is zero; generated OpenAPI schema has no unresolved introspection warnings. |
 | Testing | Full backend suite passes from an isolated database; critical backend workflow coverage is at least 80%; frontend critical-route behavior has repeatable automated tests. |
 | Scalability | PostgreSQL staging load test sustains the agreed 50-concurrent-user profile without query growth per result row, p95 above 500 ms, or error rate above 1%. |
@@ -79,7 +79,7 @@ staging or production environment.
 | Observability | Production emits structured request-correlated errors and exposes monitored latency/error-rate dashboards with actionable alerts and an on-call owner. |
 | Backup and recovery | Encrypted daily database and media backups meet RPO ≤ 24 hours; a quarterly restore drill meets RTO ≤ 4 hours. |
 | SEO | Public routes provide correct route-specific title, description, canonical URL, crawlable content, and validated structured data where applicable. |
-| Localization | All user-visible public and broker workflows have reviewed English and Amharic strings; Ethiopic text, dates, numbers, and ETB formatting pass UI checks. |
+| Localization | All user-visible public and agent workflows have reviewed English and Amharic strings; Ethiopic text, dates, numbers, and ETB formatting pass UI checks. |
 
 ## Improvement performed in this audit
 

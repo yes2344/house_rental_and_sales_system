@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.models import Profile, TabSessionToken
-from accounts.permissions import can_manage_broker_accounts
+from accounts.permissions import can_manage_agent_accounts
 from admin.staff_forms import DelegatedAccountCreateForm, DelegatedAccountUpdateForm
 from admin.audit import record_admin_action
 from user.forms import PropertyForm
@@ -14,12 +14,12 @@ from user.models import Property, PropertyImage
 
 
 def owner_required(view_func):
-    def redirect_to_broker_management(request, *args, **kwargs):
+    def redirect_to_agent_management(request, *args, **kwargs):
         if request.user.is_authenticated and request.user.is_active and request.user.is_superuser:
             return redirect('admin_delegated_accounts')
         return redirect('/admin/login/')
 
-    return redirect_to_broker_management
+    return redirect_to_agent_management
 
 
 @require_POST
@@ -41,7 +41,7 @@ def dashboard(request):
 @owner_required
 def property_list(request):
     properties = Property.objects.filter(
-        service_type=Property.ServiceType.BROKER_MANAGED,
+        service_type=Property.ServiceType.AGENT_MANAGED,
     ).order_by('-created_at')
     return render(request, 'admin/property_list.html', {'properties': properties})
 
@@ -52,7 +52,7 @@ def property_form(request, pk=None):
     property_obj = get_object_or_404(
         Property,
         id=pk,
-        service_type=Property.ServiceType.BROKER_MANAGED,
+        service_type=Property.ServiceType.AGENT_MANAGED,
     ) if pk else None
     if request.method == 'POST':
         form = PropertyForm(request.POST, request.FILES, instance=property_obj)
@@ -123,11 +123,11 @@ def delete_property(request, pk):
 
 
 def delegated_accounts(request):
-    if not can_manage_broker_accounts(request.user):
+    if not can_manage_agent_accounts(request.user):
         return redirect('/')
 
     profiles = Profile.objects.filter(
-        role=Profile.Role.BROKER,
+        role=Profile.Role.AGENT,
         user__is_staff=False,
         user__is_superuser=False,
     )
@@ -139,7 +139,7 @@ def delegated_accounts(request):
         user = selected_profile.user
         record_admin_action(
             request.user,
-            action='broker_account_deleted',
+            action='agent_account_deleted',
             object_type='user',
             object_id=user.pk,
             changes={'username': user.username},
@@ -162,8 +162,8 @@ def delegated_accounts(request):
                 'last_name': user.last_name,
                 'phone': selected_profile.phone,
                 'is_active': user.is_active,
-                'broker_onboarding_required': selected_profile.broker_onboarding_required,
-                'broker_password_changed': selected_profile.broker_password_changed,
+                'agent_onboarding_required': selected_profile.agent_onboarding_required,
+                'agent_password_changed': selected_profile.agent_password_changed,
             }
             user.username = form.cleaned_data['username']
             selected_profile.assigned_city = form.cleaned_data['assigned_city']
@@ -175,16 +175,16 @@ def delegated_accounts(request):
             reset_password = form.cleaned_data['initial_password']
             if reset_password:
                 user.set_password(reset_password)
-                selected_profile.broker_approved = False
-                selected_profile.broker_onboarding_required = True
-                selected_profile.broker_password_changed = False
+                selected_profile.agent_approved = False
+                selected_profile.agent_onboarding_required = True
+                selected_profile.agent_password_changed = False
             selected_profile.phone = form.cleaned_data['phone']
             selected_profile.save(update_fields=[
                 'phone',
                 'assigned_city',
-                'broker_approved',
-                'broker_onboarding_required',
-                'broker_password_changed',
+                'agent_approved',
+                'agent_onboarding_required',
+                'agent_password_changed',
                 'updated_at',
             ])
             user.save(update_fields=[
@@ -209,8 +209,8 @@ def delegated_accounts(request):
                 'last_name': user.last_name,
                 'phone': selected_profile.phone,
                 'is_active': user.is_active,
-                'broker_onboarding_required': selected_profile.broker_onboarding_required,
-                'broker_password_changed': selected_profile.broker_password_changed,
+                'agent_onboarding_required': selected_profile.agent_onboarding_required,
+                'agent_password_changed': selected_profile.agent_password_changed,
             }
             changes = {
                 key: {'from': before[key], 'to': value}
@@ -220,7 +220,7 @@ def delegated_accounts(request):
             if changes:
                 record_admin_action(
                     request.user,
-                    action='broker_account_updated',
+                    action='agent_account_updated',
                     object_type='user',
                     object_id=user.pk,
                     changes=changes,
@@ -245,14 +245,14 @@ def delegated_accounts(request):
         user=user,
         role=role,
         assigned_city=form.cleaned_data['assigned_city'],
-        broker_approved=False,
-        broker_onboarding_required=True,
-        broker_password_changed=False,
+        agent_approved=False,
+        agent_onboarding_required=True,
+        agent_password_changed=False,
         management_permissions=form.cleaned_data['management_permissions'],
             )
             record_admin_action(
                 request.user,
-        action='broker_account_created',
+        action='agent_account_created',
                 object_type='user',
                 object_id=user.pk,
                 changes={
@@ -260,7 +260,7 @@ def delegated_accounts(request):
                     'assigned_city_id': profile.assigned_city_id,
                     'management_permissions': profile.management_permissions,
                     'is_active': user.is_active,
-            'broker_onboarding_required': profile.broker_onboarding_required,
+            'agent_onboarding_required': profile.agent_onboarding_required,
         },
             )
             messages.success(request, f'Agent account created for {user.get_username()}.')

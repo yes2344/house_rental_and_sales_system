@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, ArrowRight, Plus, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Plus, Search, Trash2 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
@@ -9,6 +9,7 @@ import { formatPropertyLocation } from '../components/locationDisplay';
 import { PropertySlideshow } from '../components/PropertySlideshow';
 import {
   getManagedProperties,
+  deleteManagedProperties,
   updateManagedPropertyPublication,
   type ManagedProperty,
   type ManagedPropertyFilters,
@@ -43,9 +44,14 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
   const permissions = account?.management_permissions ?? [];
   const canCreate = Boolean(
     (permissions.includes('properties.edit_all') && permissions.includes('properties.moderate'))
-    || (account?.role === 'broker' && permissions.includes('properties.manage_assigned')),
+    || (account?.role === 'agent' && permissions.includes('properties.manage_assigned')),
   );
   const canModerate = permissions.includes('properties.moderate');
+  const canBulkDelete = Boolean(
+    (account?.role === 'agent' && permissions.includes('properties.manage_assigned'))
+    || (account?.role === 'administrator'
+      && (permissions.includes('properties.delete_all') || permissions.includes('properties.edit_all'))),
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState(searchParams.get('status') ?? '');
@@ -55,6 +61,8 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [publicationBusyId, setPublicationBusyId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const pageValue = Number(searchParams.get('page') ?? 1);
   const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
@@ -80,7 +88,10 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
     setLoading(true);
     setError('');
     void getManagedProperties(filters, controller.signal)
-      .then(setResult)
+      .then((nextResult) => {
+        setResult(nextResult);
+        setSelectedIds(new Set());
+      })
       .catch((requestError: unknown) => {
         if (controller.signal.aborted) return;
         setResult(null);
@@ -131,6 +142,46 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
       setActionError(`${text('publicationUpdateError')} ${getErrorMessage(requestError)}`);
     } finally {
       setPublicationBusyId(null);
+    }
+  };
+
+  const visibleIds = result?.results.map((property) => property.id) ?? [];
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(visibleIds));
+  };
+
+  const deleteSelected = async () => {
+    const ids = visibleIds.filter((id) => selectedIds.has(id));
+    if (!ids.length || !window.confirm(text('confirmDeleteSelectedListings').replace('{count}', String(ids.length)))) return;
+    setBulkDeleting(true);
+    setActionError('');
+    try {
+      const deletedCount = await deleteManagedProperties(ids);
+      setSelectedIds(new Set());
+      if (result) {
+        setResult({
+          ...result,
+          count: Math.max(0, result.count - deletedCount),
+          results: result.results.filter((property) => !ids.includes(property.id)),
+        });
+      }
+      if (result && result.results.length === ids.length && page > 1) changePage(page - 1);
+      else setReloadKey((key) => key + 1);
+    } catch (requestError: unknown) {
+      setActionError(`${text('bulkDeleteError')} ${getErrorMessage(requestError)}`);
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -194,10 +245,44 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
       ) : result?.results.length ? (
         <>
           {actionError && <p className="manager-inline-error" role="alert">{actionError}</p>}
-          {account?.role === 'broker' ? (
+          {canBulkDelete && (
+            <div className="manager-bulk-actions">
+              <label className="manager-bulk-select">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisible}
+                  aria-label={text('selectAllListings')}
+                />
+                <span>{text('selectAllListings')}</span>
+              </label>
+              <span>{text('selectedListings').replace('{count}', String(selectedIds.size))}</span>
+              <button
+                className="button button-danger button-small"
+                type="button"
+                disabled={!selectedIds.size || bulkDeleting}
+                onClick={() => void deleteSelected()}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                {bulkDeleting ? text('deletingSelectedListings') : text('deleteSelectedListings')}
+              </button>
+            </div>
+          )}
+          {account?.role === 'agent' ? (
             <div className="manager-listing-grid">
               {result.results.map((property) => (
                 <article className="manager-listing-card" key={property.id}>
+                  {canBulkDelete && (
+                    <label className="manager-listing-select">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(property.id)}
+                        onChange={() => toggleSelected(property.id)}
+                        aria-label={`${text('selectListing')}: ${property.title}`}
+                      />
+                      <span className="visually-hidden">{text('selectListing')}: {property.title}</span>
+                    </label>
+                  )}
                   <div className="manager-listing-image">
                     <PropertySlideshow
                       images={property.images ?? []}
@@ -254,6 +339,16 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
             <table className="manager-table">
               <thead>
                 <tr>
+                  {canBulkDelete && (
+                    <th scope="col">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleAllVisible}
+                        aria-label={text('selectAllListings')}
+                      />
+                    </th>
+                  )}
                   <th scope="col">{text('listingTitle')}</th>
                   <th scope="col">{text('listingTypeLabel')}</th>
                   <th scope="col">{text('priceLabel')}</th>
@@ -265,6 +360,16 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
               <tbody>
                 {result.results.map((property) => (
                   <tr key={property.id}>
+                    {canBulkDelete && (
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(property.id)}
+                          onChange={() => toggleSelected(property.id)}
+                          aria-label={`${text('selectListing')}: ${property.title}`}
+                        />
+                      </td>
+                    )}
                     <td>
                       <strong>{property.title}</strong>
                       <span className="manager-row-secondary">{formatPropertyLocation(property, locale)}</span>

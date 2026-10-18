@@ -14,7 +14,7 @@ from admin.models import (
     SocialMediaLink,
 )
 from properties.access import public_properties
-from properties.models import ListingReport, Property, PropertyBrokerAssignment
+from properties.models import ListingReport, Property, PropertyAgentAssignment
 
 
 User = get_user_model()
@@ -296,18 +296,18 @@ class AdminRoleField(serializers.ChoiceField):
         return profile.role if profile else None
 
 
-class AdminBrokerApprovalField(serializers.BooleanField):
+class AdminAgentApprovalField(serializers.BooleanField):
     def get_attribute(self, instance):
         return instance
 
     def to_representation(self, instance):
         profile = getattr(instance, 'profile', None)
-        return bool(profile and profile.broker_approved)
+        return bool(profile and profile.agent_approved)
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
     role = AdminRoleField(choices=Profile.Role.choices, read_only=True)
-    broker_approved = AdminBrokerApprovalField(read_only=True)
+    agent_approved = AdminAgentApprovalField(read_only=True)
     management_permissions = EffectiveManagementPermissionsField(
         child=serializers.ChoiceField(choices=Profile.Permission.choices),
         source='profile.management_permissions',
@@ -326,14 +326,14 @@ class AdminUserSerializer(serializers.ModelSerializer):
             'is_staff',
             'is_superuser',
             'role',
-            'broker_approved',
+            'agent_approved',
             'management_permissions',
             'date_joined',
         ]
         read_only_fields = ['id', 'username', 'is_staff', 'is_superuser', 'date_joined']
 
     def to_internal_value(self, data):
-        privileged_fields = {'is_staff', 'is_superuser', 'role', 'broker_approved', 'management_permissions'} & data.keys()
+        privileged_fields = {'is_staff', 'is_superuser', 'role', 'agent_approved', 'management_permissions'} & data.keys()
         if privileged_fields:
             raise serializers.ValidationError(
                 {field: 'Roles and permissions are managed through the owner-only delegated-account interface.' for field in privileged_fields}
@@ -512,19 +512,19 @@ class AdminAuditEventSerializer(serializers.ModelSerializer):
         ]
 
 
-class AdminBrokerAssignmentSerializer(serializers.ModelSerializer):
-    broker_id = serializers.PrimaryKeyRelatedField(
-        source='broker',
+class AdminAgentAssignmentSerializer(serializers.ModelSerializer):
+    agent_id = serializers.PrimaryKeyRelatedField(
+        source='agent',
         queryset=User.objects.filter(
-            profile__role=Profile.Role.BROKER,
-            profile__broker_approved=True,
+            profile__role=Profile.Role.AGENT,
+            profile__agent_approved=True,
         ),
         required=True,
     )
-    broker_username = serializers.CharField(source='broker.username', read_only=True)
+    agent_username = serializers.CharField(source='agent.username', read_only=True)
     granted_by_username = serializers.CharField(source='granted_by.username', read_only=True, allow_null=True)
 
     class Meta:
-        model = PropertyBrokerAssignment
-        fields = ['id', 'broker_id', 'broker_username', 'granted_by_username', 'granted_at']
-        read_only_fields = ['id', 'broker_username', 'granted_by_username', 'granted_at']
+        model = PropertyAgentAssignment
+        fields = ['id', 'agent_id', 'agent_username', 'granted_by_username', 'granted_at']
+        read_only_fields = ['id', 'agent_username', 'granted_by_username', 'granted_at']

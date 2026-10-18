@@ -41,7 +41,7 @@ class OwnerAnnouncement(models.Model):
         choices=Status.choices,
         default=Status.PENDING_REVIEW,
     )
-    broker_feedback = models.TextField(blank=True)
+    agent_feedback = models.TextField(blank=True)
     submitted_at = models.DateTimeField(default=timezone.now)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(

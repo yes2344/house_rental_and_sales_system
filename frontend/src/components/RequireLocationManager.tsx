@@ -11,7 +11,7 @@ export function RequireLocationManager({ text }: RequireLocationManagerProps) {
   const { account } = useAuth();
   const canManage = Boolean(
     account?.management_permissions.includes('locations.manage_cities')
-    || (account?.role === 'broker' && account.management_permissions.includes('locations.manage_subcities')),
+    || (account?.role === 'agent' && account.management_permissions.includes('locations.manage_subcities')),
   );
 
   if (canManage) return <Outlet />;

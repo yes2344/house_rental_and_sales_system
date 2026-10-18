@@ -140,7 +140,7 @@ class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
         return obj.owner_announcement.status
 
     def get_review_feedback(self, obj):
-        return obj.owner_announcement.broker_feedback
+        return obj.owner_announcement.agent_feedback
 
     def get_submission_events(self, obj):
         events = obj.owner_announcement.events.select_related('actor').all()
@@ -217,7 +217,7 @@ class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
         if amenities is not None:
             instance.amenities.set(amenities)
         announcement.status = OwnerAnnouncement.Status.PENDING_REVIEW
-        announcement.broker_feedback = ''
+        announcement.agent_feedback = ''
         announcement.reviewed_at = None
         announcement.reviewed_by = None
         announcement.save(update_fields=[
@@ -225,7 +225,7 @@ class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
             'owner_contact_phone',
             'owner_contact_email',
             'status',
-            'broker_feedback',
+            'agent_feedback',
             'reviewed_at',
             'reviewed_by',
             'updated_at',
@@ -255,7 +255,7 @@ class OwnerAnnouncementReviewSerializer(serializers.ModelSerializer):
             'owner_contact_phone',
             'owner_contact_email',
             'status',
-            'broker_feedback',
+            'agent_feedback',
             'submitted_at',
             'reviewed_at',
             'reviewed_by_id',

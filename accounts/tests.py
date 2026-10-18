@@ -16,23 +16,23 @@ from rest_framework.test import APIClient, APITestCase
 
 from accounts.models import EmailVerificationToken, Profile, TabSessionToken, UserPreferences
 from accounts.permissions import (
-    BROKER_WORK_PERMISSIONS,
+    AGENT_WORK_PERMISSIONS,
     IsPropertyManagerOrAdministrator,
     IsViewingRequestManager,
     effective_management_permissions,
     has_management_permission,
 )
 from favorites.models import Favorite
-from properties.models import Location, Property, PropertyBrokerAssignment
+from properties.models import Location, Property, PropertyAgentAssignment
 from viewings.models import ViewingRequest
 
 
 class ProfileConstraintTests(TestCase):
-    def test_broker_approval_is_rejected_for_non_broker(self):
+    def test_agent_approval_is_rejected_for_non_agent(self):
         user = get_user_model().objects.create_user(username='property-owner')
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Profile.objects.create(user=user, role=Profile.Role.OWNER, broker_approved=True)
+                Profile.objects.create(user=user, role=Profile.Role.OWNER, agent_approved=True)
 
 
 class AccountApiTests(APITestCase):
@@ -53,30 +53,30 @@ class AccountApiTests(APITestCase):
             parent=country,
         )
 
-    def test_provisioned_broker_must_change_password_then_complete_profile_before_access(self):
+    def test_provisioned_agent_must_change_password_then_complete_profile_before_access(self):
         city = self.create_assigned_city()
-        broker = get_user_model().objects.create_user(
-            username='provisioned-broker',
-            password='Temp!BrokerLogin9281',
+        agent = get_user_model().objects.create_user(
+            username='provisioned-agent',
+            password='Temp!AgentLogin9281',
         )
         profile = Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
+            user=agent,
+            role=Profile.Role.AGENT,
             assigned_city=city,
-            broker_approved=False,
-            broker_onboarding_required=True,
-            broker_password_changed=False,
-            management_permissions=list(BROKER_WORK_PERMISSIONS),
+            agent_approved=False,
+            agent_onboarding_required=True,
+            agent_password_changed=False,
+            management_permissions=list(AGENT_WORK_PERMISSIONS),
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
 
         before_setup = self.client.get(reverse('api:managed-property-list'))
         profile_before_password = self.client.post(
-            reverse('api:broker-onboarding-profile'),
+            reverse('api:agent-onboarding-profile'),
             {
-                'first_name': 'Broker',
+                'first_name': 'Agent',
                 'last_name': 'Example',
-                'email': 'broker@example.com',
+                'email': 'agent@example.com',
                 'phone': '+251911111111',
             },
             format='json',
@@ -85,71 +85,71 @@ class AccountApiTests(APITestCase):
         self.assertEqual(profile_before_password.status_code, 400)
 
         password_changed = self.client.post(
-            reverse('api:broker-onboarding-password'),
+            reverse('api:agent-onboarding-password'),
             {
-                'username': 'provisioned-broker-new',
-                'new_password': 'Changed!BrokerPassword8294',
+                'username': 'provisioned-agent-new',
+                'new_password': 'Changed!AgentPassword8294',
             },
             format='json',
         )
-        broker.refresh_from_db()
+        agent.refresh_from_db()
         profile.refresh_from_db()
         self.assertEqual(password_changed.status_code, 200)
-        self.assertEqual(broker.username, 'provisioned-broker-new')
-        self.assertTrue(broker.check_password('Changed!BrokerPassword8294'))
-        self.assertTrue(profile.broker_onboarding_required)
-        self.assertTrue(profile.broker_password_changed)
-        self.assertFalse(profile.broker_approved)
+        self.assertEqual(agent.username, 'provisioned-agent-new')
+        self.assertTrue(agent.check_password('Changed!AgentPassword8294'))
+        self.assertTrue(profile.agent_onboarding_required)
+        self.assertTrue(profile.agent_password_changed)
+        self.assertFalse(profile.agent_approved)
         self.assertEqual(password_changed.data['management_permissions'], [])
 
         profile_completed = self.client.post(
-            reverse('api:broker-onboarding-profile'),
+            reverse('api:agent-onboarding-profile'),
             {
-                'first_name': 'Broker',
+                'first_name': 'Agent',
                 'last_name': 'Example',
-                'email': 'broker@example.com',
+                'email': 'agent@example.com',
                 'phone': '+251911111111',
             },
             format='json',
         )
-        broker.refresh_from_db()
+        agent.refresh_from_db()
         profile.refresh_from_db()
         self.assertEqual(profile_completed.status_code, 200)
-        self.assertEqual(profile_completed.data['broker_onboarding_required'], False)
-        self.assertFalse(profile.broker_onboarding_required)
-        self.assertTrue(profile.broker_approved)
+        self.assertEqual(profile_completed.data['agent_onboarding_required'], False)
+        self.assertFalse(profile.agent_onboarding_required)
+        self.assertTrue(profile.agent_approved)
         self.assertEqual(profile.phone, '+251911111111')
-        self.assertEqual(broker.email, 'broker@example.com')
-        self.assertEqual(set(effective_management_permissions(broker)), BROKER_WORK_PERMISSIONS)
+        self.assertEqual(agent.email, 'agent@example.com')
+        self.assertEqual(set(effective_management_permissions(agent)), AGENT_WORK_PERMISSIONS)
         self.assertEqual(self.client.get(reverse('api:managed-property-list')).status_code, 200)
 
-    def test_provisioned_broker_can_keep_username_and_duplicate_email_is_rejected(self):
+    def test_provisioned_agent_can_keep_username_and_duplicate_email_is_rejected(self):
         city = self.create_assigned_city()
-        broker = get_user_model().objects.create_user(
-            username='onboarding-broker',
-            password='Temp!BrokerLogin9281',
+        agent = get_user_model().objects.create_user(
+            username='onboarding-agent',
+            password='Temp!AgentLogin9281',
         )
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
+            user=agent,
+            role=Profile.Role.AGENT,
             assigned_city=city,
-            broker_onboarding_required=True,
-            broker_password_changed=False,
+            agent_onboarding_required=True,
+            agent_password_changed=False,
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
         password_changed = self.client.post(
-            reverse('api:broker-onboarding-password'),
-            {'new_password': 'Changed!BrokerPassword8294'},
+            reverse('api:agent-onboarding-password'),
+            {'new_password': 'Changed!AgentPassword8294'},
             format='json',
         )
         self.assertEqual(password_changed.status_code, 200)
-        self.assertEqual(password_changed.data['username'], 'onboarding-broker')
+        self.assertEqual(password_changed.data['username'], 'onboarding-agent')
 
         get_user_model().objects.create_user(username='other-account', email='taken@example.com')
         duplicate_email = self.client.post(
-            reverse('api:broker-onboarding-profile'),
+            reverse('api:agent-onboarding-profile'),
             {
-                'first_name': 'Broker',
+                'first_name': 'Agent',
                 'last_name': 'Example',
                 'email': 'taken@example.com',
                 'phone': '+251911111111',
@@ -157,7 +157,7 @@ class AccountApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(duplicate_email.status_code, 400)
-        self.assertTrue(broker.profile.broker_onboarding_required)
+        self.assertTrue(agent.profile.agent_onboarding_required)
 
     def test_django_superuser_can_sign_in_through_the_shared_account_endpoint(self):
         administrator = get_user_model().objects.create_superuser(
@@ -199,12 +199,12 @@ class AccountApiTests(APITestCase):
         self.client.force_authenticate(user=administrator)
 
         response = self.client.get(reverse('api:me'))
-        broker_admin = get_user_model().objects.create_user(
+        agent_admin = get_user_model().objects.create_user(
             username='delegated-admin',
             is_staff=True,
         )
         Profile.objects.create(
-            user=broker_admin,
+            user=agent_admin,
             role=Profile.Role.ADMINISTRATOR,
         )
 
@@ -216,7 +216,7 @@ class AccountApiTests(APITestCase):
                 for permission in response.data['management_permissions']
                 if permission != Profile.Permission.SETTINGS_MANAGE
             ],
-            effective_management_permissions(broker_admin),
+            effective_management_permissions(agent_admin),
         )
         self.assertTrue(response.data['is_platform_owner'])
         self.assertFalse(has_management_permission(administrator, Profile.Permission.USERS_MANAGE))
@@ -226,7 +226,7 @@ class AccountApiTests(APITestCase):
         self.assertTrue(has_management_permission(administrator, Profile.Permission.BRANDING_MANAGE))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.AUDIT_VIEW))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.REPORTS_REVIEW))
-        self.assertFalse(has_management_permission(administrator, Profile.Permission.BROKERS_ASSIGN))
+        self.assertFalse(has_management_permission(administrator, Profile.Permission.AGENTS_ASSIGN))
         self.assertTrue(has_management_permission(administrator, Profile.Permission.STAFF_MANAGE))
         self.assertTrue(has_management_permission(administrator, Profile.Permission.LOCATIONS_MANAGE_CITIES))
         self.assertFalse(has_management_permission(administrator, Profile.Permission.LOCATIONS_MANAGE_SUBCITIES))
@@ -247,39 +247,39 @@ class AccountApiTests(APITestCase):
             200,
         )
 
-    def test_approved_broker_role_has_all_marketplace_permissions_except_account_control(self):
-        broker = get_user_model().objects.create_user(username='full-access-broker')
+    def test_approved_agent_role_has_all_marketplace_permissions_except_account_control(self):
+        agent = get_user_model().objects.create_user(username='full-access-agent')
         profile = Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
         )
 
-        self.assertEqual(set(effective_management_permissions(broker)), BROKER_WORK_PERMISSIONS)
-        self.assertNotIn(Profile.Permission.USERS_MANAGE, effective_management_permissions(broker))
-        self.assertNotIn(Profile.Permission.STAFF_MANAGE, effective_management_permissions(broker))
-        self.assertNotIn(Profile.Permission.AUDIT_VIEW, effective_management_permissions(broker))
-        self.assertIn(Profile.Permission.LOCATIONS_MANAGE_SUBCITIES, effective_management_permissions(broker))
-        self.assertNotIn(Profile.Permission.LOCATIONS_MANAGE_CITIES, effective_management_permissions(broker))
-        self.assertNotIn(Profile.Permission.REPORTS_REVIEW, effective_management_permissions(broker))
-        self.assertNotIn(Profile.Permission.BROKERS_ASSIGN, effective_management_permissions(broker))
+        self.assertEqual(set(effective_management_permissions(agent)), AGENT_WORK_PERMISSIONS)
+        self.assertNotIn(Profile.Permission.USERS_MANAGE, effective_management_permissions(agent))
+        self.assertNotIn(Profile.Permission.STAFF_MANAGE, effective_management_permissions(agent))
+        self.assertNotIn(Profile.Permission.AUDIT_VIEW, effective_management_permissions(agent))
+        self.assertIn(Profile.Permission.LOCATIONS_MANAGE_SUBCITIES, effective_management_permissions(agent))
+        self.assertNotIn(Profile.Permission.LOCATIONS_MANAGE_CITIES, effective_management_permissions(agent))
+        self.assertNotIn(Profile.Permission.REPORTS_REVIEW, effective_management_permissions(agent))
+        self.assertNotIn(Profile.Permission.AGENTS_ASSIGN, effective_management_permissions(agent))
         self.assertNotIn(Profile.Permission.USERS_MANAGE, profile.management_permissions)
 
     def test_agent_settings_permission_is_effective_only_when_explicitly_granted(self):
-        broker = get_user_model().objects.create_user(username='settings-permission-agent')
+        agent = get_user_model().objects.create_user(username='settings-permission-agent')
         profile = Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             management_permissions=[Profile.Permission.SETTINGS_MANAGE],
         )
 
-        self.assertTrue(has_management_permission(broker, Profile.Permission.SETTINGS_MANAGE))
-        self.assertIn(Profile.Permission.SETTINGS_MANAGE, effective_management_permissions(broker))
-        profile.broker_approved = False
-        profile.save(update_fields=['broker_approved'])
-        self.assertFalse(has_management_permission(broker, Profile.Permission.SETTINGS_MANAGE))
+        self.assertTrue(has_management_permission(agent, Profile.Permission.SETTINGS_MANAGE))
+        self.assertIn(Profile.Permission.SETTINGS_MANAGE, effective_management_permissions(agent))
+        profile.agent_approved = False
+        profile.save(update_fields=['agent_approved'])
+        self.assertFalse(has_management_permission(agent, Profile.Permission.SETTINGS_MANAGE))
 
     @override_settings(
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
@@ -293,8 +293,8 @@ class AccountApiTests(APITestCase):
                 'email': 'customer@example.com',
                 'password': 'Evergreen!Place42',
                 'phone': '+251900000000',
-                'role': 'broker',
-                'broker_approved': True,
+                'role': 'agent',
+                'agent_approved': True,
             },
             format='json',
         )
@@ -304,7 +304,7 @@ class AccountApiTests(APITestCase):
         self.assertTrue(user.check_password('Evergreen!Place42'))
         self.assertFalse(user.is_active)
         self.assertEqual(user.profile.role, Profile.Role.CUSTOMER)
-        self.assertFalse(user.profile.broker_approved)
+        self.assertFalse(user.profile.agent_approved)
         self.assertEqual(response.data['role'], Profile.Role.CUSTOMER)
         self.assertEqual(len(mail.outbox), 1)
 
@@ -565,7 +565,7 @@ class AccountApiTests(APITestCase):
             is_active=False,
         )
         Profile.objects.create(user=customer, role=Profile.Role.CUSTOMER)
-        Profile.objects.create(user=agent, role=Profile.Role.BROKER)
+        Profile.objects.create(user=agent, role=Profile.Role.AGENT)
 
         for email in (customer.email, agent.email):
             response = self.client.post(
@@ -944,7 +944,7 @@ class AccountApiTests(APITestCase):
 
         response = self.client.patch(
             reverse('api:me'),
-            {'phone': '+251911111111', 'role': 'broker'},
+            {'phone': '+251911111111', 'role': 'agent'},
             format='json',
         )
 
@@ -967,7 +967,7 @@ class ListingObjectPermissionTests(TestCase):
         Profile.objects.create(user=self.owner, role=Profile.Role.OWNER)
         self.other_customer = user_model.objects.create_user(username='other-customer')
         Profile.objects.create(user=self.other_customer, role=Profile.Role.CUSTOMER)
-        self.broker = user_model.objects.create_user(username='approved-broker')
+        self.agent = user_model.objects.create_user(username='approved-agent')
         country = Location.objects.create(
             name='Object Permission Country',
             slug='object-permission-country',
@@ -986,20 +986,20 @@ class ListingObjectPermissionTests(TestCase):
             parent=city,
         )
         Profile.objects.create(
-            user=self.broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=self.agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=city,
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
             ],
         )
-        self.unapproved_broker = user_model.objects.create_user(username='unapproved-broker')
+        self.unapproved_agent = user_model.objects.create_user(username='unapproved-agent')
         Profile.objects.create(
-            user=self.unapproved_broker,
-            role=Profile.Role.BROKER,
-            broker_approved=False,
+            user=self.unapproved_agent,
+            role=Profile.Role.AGENT,
+            agent_approved=False,
         )
         self.property = Property.objects.create(
             title='Permission Test Property',
@@ -1007,20 +1007,20 @@ class ListingObjectPermissionTests(TestCase):
             administrative_location=subcity,
             price=100000,
             description='A test listing.',
-            submitted_by=self.broker,
+            submitted_by=self.agent,
             owner=self.owner,
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=self.broker)
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=self.unapproved_broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=self.agent)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=self.unapproved_agent)
 
-    def test_approved_broker_can_manage_only_properties_they_registered(self):
+    def test_approved_agent_can_manage_only_properties_they_registered(self):
         permission = IsPropertyManagerOrAdministrator()
 
         def request_for(user):
             return type('Request', (), {'user': user})()
 
         self.assertFalse(permission.has_object_permission(request_for(self.owner), None, self.property))
-        self.assertTrue(permission.has_object_permission(request_for(self.broker), None, self.property))
+        self.assertTrue(permission.has_object_permission(request_for(self.agent), None, self.property))
         unassigned_property = Property.objects.create(
             title='Unassigned marketplace property',
             location='Another area',
@@ -1029,7 +1029,7 @@ class ListingObjectPermissionTests(TestCase):
             administrative_location=self.property.administrative_location,
         )
         self.assertFalse(
-            permission.has_object_permission(request_for(self.broker), None, unassigned_property)
+            permission.has_object_permission(request_for(self.agent), None, unassigned_property)
         )
         other_city = Location.objects.create(
             name='Object Permission Other City',
@@ -1047,14 +1047,14 @@ class ListingObjectPermissionTests(TestCase):
             title='Cross city property',
             location='Another city',
             price=140000,
-            description='Not managed by this city broker.',
+            description='Not managed by this city agent.',
             administrative_location=other_subcity,
         )
         self.assertFalse(
-            permission.has_object_permission(request_for(self.broker), None, cross_city_property)
+            permission.has_object_permission(request_for(self.agent), None, cross_city_property)
         )
         self.assertFalse(
-            permission.has_object_permission(request_for(self.unapproved_broker), None, self.property)
+            permission.has_object_permission(request_for(self.unapproved_agent), None, self.property)
         )
         self.assertFalse(
             permission.has_object_permission(request_for(self.other_customer), None, self.property)
@@ -1114,29 +1114,29 @@ class AccountActivityApiTests(APITestCase):
         self.assertNotIn('email', response.data['viewing_requests'][0])
         self.assertNotIn('phone', response.data['viewing_requests'][0])
 
-    def test_broker_activity_does_not_include_customer_viewing_requests(self):
-        broker = get_user_model().objects.create_user(username='activity-broker')
+    def test_agent_activity_does_not_include_customer_viewing_requests(self):
+        agent = get_user_model().objects.create_user(username='activity-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
         )
         property_obj = Property.objects.create(
-            title='Broker activity property',
-            slug='broker-activity-property',
+            title='Agent activity property',
+            slug='agent-activity-property',
             location='Submitted location',
             price=100000,
             description='A test listing.',
         )
         ViewingRequest.objects.create(
             property=property_obj,
-            requester=broker,
-            full_name='Broker Account',
-            email='broker@example.com',
+            requester=agent,
+            full_name='Agent Account',
+            email='agent@example.com',
             phone='+251900000000',
             preferred_date='2026-11-01',
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
 
         response = self.client.get(reverse('api:activity'))
 

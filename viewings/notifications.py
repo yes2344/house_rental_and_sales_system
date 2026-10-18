@@ -11,8 +11,8 @@ def notify_viewing_request_event(viewing_request, event, *, to_requester):
         recipients.extend(
             profile.user
             for profile in Profile.objects.filter(
-                role=Profile.Role.BROKER,
-                broker_approved=True,
+                role=Profile.Role.AGENT,
+                agent_approved=True,
                 user__is_active=True,
             ).select_related('user')
         )

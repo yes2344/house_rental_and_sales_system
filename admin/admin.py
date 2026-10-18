@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from accounts.models import Profile
 from admin.models import AdminAuditEvent
-from properties.models import ListingReport, Property, PropertyBrokerAssignment
+from properties.models import ListingReport, Property, PropertyAgentAssignment
 
 
 class ReadOnlyAdmin(admin.ModelAdmin):
@@ -28,10 +28,10 @@ class PropertyAdmin(ReadOnlyAdmin):
         return [field.name for field in self.model._meta.fields if field.name not in excluded]
 
 
-@admin.register(PropertyBrokerAssignment)
-class PropertyBrokerAssignmentAdmin(ReadOnlyAdmin):
-    list_display = ('property', 'broker', 'granted_by', 'granted_at')
-    search_fields = ('property__title', 'broker__username')
+@admin.register(PropertyAgentAssignment)
+class PropertyAgentAssignmentAdmin(ReadOnlyAdmin):
+    list_display = ('property', 'agent', 'granted_by', 'granted_at')
+    search_fields = ('property__title', 'agent__username')
 
 
 @admin.register(ListingReport)
@@ -43,8 +43,8 @@ class ListingReportAdmin(ReadOnlyAdmin):
 
 @admin.register(Profile)
 class ProfileAdmin(ReadOnlyAdmin):
-    list_display = ('user', 'role', 'broker_approved', 'created_at')
-    list_filter = ('role', 'broker_approved')
+    list_display = ('user', 'role', 'agent_approved', 'created_at')
+    list_filter = ('role', 'agent_approved')
     search_fields = ('user__username', 'user__email')
 
 

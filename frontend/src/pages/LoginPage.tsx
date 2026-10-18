@@ -33,7 +33,7 @@ export function LoginPage({ text }: LoginPageProps) {
     setError('');
     try {
       const signedInAccount = await signIn(username.trim(), password);
-      const destination = signedInAccount.broker_onboarding_required ? '/broker-onboarding' : '/';
+      const destination = signedInAccount.agent_onboarding_required ? '/agent-onboarding' : '/';
       navigate(destination, { replace: true });
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError));
@@ -43,7 +43,7 @@ export function LoginPage({ text }: LoginPageProps) {
   };
 
   if (!authLoading && account) {
-    return <Navigate to={account.broker_onboarding_required ? '/broker-onboarding' : '/'} replace />;
+    return <Navigate to={account.agent_onboarding_required ? '/agent-onboarding' : '/'} replace />;
   }
 
   return (

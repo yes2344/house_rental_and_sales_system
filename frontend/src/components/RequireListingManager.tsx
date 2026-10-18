@@ -11,7 +11,7 @@ export function RequireListingManager({ text }: RequireListingManagerProps) {
   const { account } = useAuth();
 
   const canManage = Boolean(
-    ['broker', 'administrator'].includes(account?.role ?? '') && account?.management_permissions.some(
+    ['agent', 'administrator'].includes(account?.role ?? '') && account?.management_permissions.some(
       (permission) => permission.startsWith('properties.')
         || permission.startsWith('viewings.')
         || permission === 'announcements.review'

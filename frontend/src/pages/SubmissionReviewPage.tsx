@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Check, ChevronDown, FileText, MapPin, X } from 'lucide-react';
+import { Check, ChevronDown, FileText, MapPin, Trash2, X } from 'lucide-react';
 
 import { useAuth } from '../AuthContext';
 import { getErrorMessage } from '../api/client';
 import {
   assignSubmissionReviewer,
+  deleteManagedSubmissions,
   decideSubmission,
   getSubmissionReviews,
   getSubmissionReviewers,
@@ -55,6 +56,7 @@ function ethiopianCurrentDate() {
 export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps) {
   const { account } = useAuth();
   const canAssignReviews = Boolean(account?.management_permissions.includes('announcements.assign'));
+  const canBulkDelete = account?.role === 'administrator';
   const [statusFilter, setStatusFilter] = useState<OwnerSubmissionStatus | ''>('pending_review');
   const [reviews, setReviews] = useState<OwnerSubmissionReview[]>([]);
   const [reviewers, setReviewers] = useState<SubmissionReviewer[]>([]);
@@ -74,6 +76,9 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
   const [agreementTerms, setAgreementTerms] = useState<Record<number, string>>({});
   const [agreementStartDates, setAgreementStartDates] = useState<Record<number, string>>({});
   const [agreementDurations, setAgreementDurations] = useState<Record<number, string>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState('');
 
   useEffect(() => {
     if (!canAssignReviews) return undefined;
@@ -95,6 +100,7 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
     void getSubmissionReviews(filters)
       .then((response) => {
         setReviews((current) => append ? [...current, ...response.results] : response.results);
+        if (!append) setSelectedIds(new Set());
         setCount(response.count);
         setHasNext(Boolean(response.next));
         setPage(filters.page ?? 1);
@@ -158,6 +164,44 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
     loadReviews({ status: statusFilter || undefined, page: page + 1 }, true);
   };
 
+  const allVisibleSelected = reviews.length > 0
+    && reviews.every((review) => selectedIds.has(review.id));
+
+  const toggleAllVisible = () => {
+    setSelectedIds(allVisibleSelected
+      ? new Set()
+      : new Set(reviews.map((review) => review.id)));
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const deleteSelected = async () => {
+    const ids = reviews
+      .filter((review) => selectedIds.has(review.id))
+      .map((review) => review.id);
+    if (!ids.length || !window.confirm(
+      text('confirmDeleteManagedSubmissions').replace('{count}', String(ids.length)),
+    )) return;
+    setBulkDeleting(true);
+    setBulkDeleteError('');
+    try {
+      await deleteManagedSubmissions(ids);
+      setSelectedIds(new Set());
+      loadReviews({ status: statusFilter || undefined, page: 1 });
+    } catch (requestError: unknown) {
+      setBulkDeleteError(`${text('bulkSubmissionDeleteError')} ${getErrorMessage(requestError)}`);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <main className="manager-page" id="main-content">
       <section className="manager-heading">
@@ -178,6 +222,7 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
           </label>
           <p>{count} {text('submissionCount')}</p>
         </div>
+        {bulkDeleteError && <p className="manager-inline-error" role="alert">{bulkDeleteError}</p>}
         {loading ? (
           <div className="listing-state" role="status"><span className="loading-spinner" />{text('loadingSubmission')}</div>
         ) : error ? (
@@ -188,12 +233,48 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
             <h2>{text('noSubmissionsForReview')}</h2>
           </div>
         ) : (
+          <>
+          {canBulkDelete && (
+            <div className="manager-bulk-actions">
+              <label className="manager-bulk-select">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisible}
+                  aria-label={text('selectAllReviews')}
+                />
+                <span>{text('selectAllReviews')}</span>
+              </label>
+              <span>{text('selectedSubmissions').replace('{count}', String(selectedIds.size))}</span>
+              <button
+                className="button button-danger button-small"
+                type="button"
+                disabled={!selectedIds.size || bulkDeleting}
+                onClick={() => void deleteSelected()}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                {bulkDeleting ? text('deletingSelectedSubmissions') : text('deleteSelectedSubmissions')}
+              </button>
+            </div>
+          )}
           <div className="submission-review-list">
             {reviews.map((review) => {
               const property = review.property;
               const canDecide = review.status === 'pending_review' || review.status === 'corrections_requested';
               return (
                 <article className="submission-review-card" key={review.id}>
+                  {canBulkDelete && (
+                    <label className="submission-select submission-review-select">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(review.id)}
+                        disabled={bulkDeleting}
+                        onChange={() => toggleSelected(review.id)}
+                        aria-label={`${text('selectReview')}: ${property.title}`}
+                      />
+                      <span className="visually-hidden">{text('selectReview')}: {property.title}</span>
+                    </label>
+                  )}
                   <header className="submission-review-heading">
                     <div>
                       <span className={`submission-status submission-status-${review.status}`}>
@@ -340,13 +421,14 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
                       </div>
                     </div>
                   )}
-                  {!canDecide && review.broker_feedback && (
-                    <p className="submission-feedback"><strong>{text('submissionReviewFeedback')}:</strong> {review.broker_feedback}</p>
+                  {!canDecide && review.agent_feedback && (
+                    <p className="submission-feedback"><strong>{text('submissionReviewFeedback')}:</strong> {review.agent_feedback}</p>
                   )}
                 </article>
               );
             })}
           </div>
+          </>
         )}
         {hasNext && !loading && !error && (
           <div className="show-more-listings">

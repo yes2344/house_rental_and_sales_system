@@ -76,7 +76,7 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
   const [noteSaved, setNoteSaved] = useState(false);
   const canEdit = Boolean(
     account?.is_platform_owner
-    || (account?.role === 'broker' && account.management_permissions.includes('settings.manage')),
+    || (account?.role === 'agent' && account.management_permissions.includes('settings.manage')),
   );
 
   useEffect(() => {

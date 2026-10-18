@@ -32,7 +32,7 @@ const statusMessage: Record<string, MessageKey> = {
 const roleMessage: Record<string, MessageKey> = {
   customer: 'roleCustomer',
   owner: 'roleOwner',
-  broker: 'roleBroker',
+  agent: 'roleAgent',
   administrator: 'roleAdministrator',
 };
 
@@ -64,7 +64,7 @@ export function AccountPage({ locale, text }: AccountPageProps) {
   }, [account]);
 
   useEffect(() => {
-    if (!account || account.role === 'broker') {
+    if (!account || account.role === 'agent') {
       setActivity(null);
       setActivityLoading(false);
       setActivityError('');
@@ -211,7 +211,7 @@ export function AccountPage({ locale, text }: AccountPageProps) {
           </form>
         </section>
 
-        {account.role !== 'broker' && <section className="customer-panel">
+        {account.role !== 'agent' && <section className="customer-panel">
           <div className="customer-panel-heading">
             <div><h2>{text('viewingActivity')}</h2><p>{text('viewingActivityIntro')}</p></div>
             <div className="customer-panel-links">

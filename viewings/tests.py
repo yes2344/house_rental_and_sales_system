@@ -12,7 +12,7 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.models import Profile
 from owner_announcements.models import InAppNotification
-from properties.models import Location, Property, PropertyBrokerAssignment
+from properties.models import Location, Property, PropertyAgentAssignment
 from viewings.models import ViewingRequest, ViewingRequestEvent
 from viewings.notifications import notify_viewing_request_event
 
@@ -191,22 +191,22 @@ class PublicViewingRequestApiTests(APITestCase):
             self.customer.pk,
         )
 
-    def test_broker_cannot_submit_or_open_customer_viewing_requests(self):
-        broker = get_user_model().objects.create_user(username='broker-cannot-request')
+    def test_agent_cannot_submit_or_open_customer_viewing_requests(self):
+        agent = get_user_model().objects.create_user(username='agent-cannot-request')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
 
         create_response = self.client.post(
             reverse('api:viewing-request-create'),
             {
                 'property_id': self.property.pk,
-                'full_name': 'Broker Account',
-                'email': 'broker@example.com',
+                'full_name': 'Agent Account',
+                'email': 'agent@example.com',
                 'phone': '+251900000000',
                 'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
             },
@@ -216,7 +216,7 @@ class PublicViewingRequestApiTests(APITestCase):
 
         self.assertEqual(create_response.status_code, 403)
         self.assertEqual(list_response.status_code, 403)
-        self.assertFalse(ViewingRequest.objects.filter(requester=broker).exists())
+        self.assertFalse(ViewingRequest.objects.filter(requester=agent).exists())
 
     def test_different_customers_can_request_the_same_property_and_only_see_their_own(self):
         payload = {
@@ -268,15 +268,15 @@ class PublicViewingRequestApiTests(APITestCase):
             [second_request_id],
         )
 
-    def test_submitting_request_notifies_approved_brokers(self):
-        broker = get_user_model().objects.create_user(username='request-notification-broker')
+    def test_submitting_request_notifies_approved_agents(self):
+        agent = get_user_model().objects.create_user(username='request-notification-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=agent)
 
         response = self.client.post(
             reverse('api:viewing-request-create'),
@@ -291,7 +291,7 @@ class PublicViewingRequestApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        notification = InAppNotification.objects.get(recipient=broker)
+        notification = InAppNotification.objects.get(recipient=agent)
         self.assertEqual(notification.notification_type, 'viewing_request_updated')
         self.assertIn(str(response.data['id']), notification.idempotency_key)
         event = ViewingRequestEvent.objects.get(viewing_request_id=response.data['id'])
@@ -300,7 +300,7 @@ class PublicViewingRequestApiTests(APITestCase):
             event,
             to_requester=False,
         )
-        self.assertEqual(InAppNotification.objects.filter(recipient=broker).count(), 1)
+        self.assertEqual(InAppNotification.objects.filter(recipient=agent).count(), 1)
 
     def test_active_duplicate_request_is_conflict_and_database_constraint_is_race_safe(self):
         payload = {
@@ -571,15 +571,15 @@ class PublicViewingRequestApiTests(APITestCase):
         request = ViewingRequest.objects.get(pk=created.data['id'])
         owner = get_user_model().objects.create_user(username='proposal-owner')
         Profile.objects.create(user=owner, role=Profile.Role.OWNER)
-        manager = get_user_model().objects.create_user(username='proposal-broker')
+        manager = get_user_model().objects.create_user(username='proposal-agent')
         Profile.objects.create(
             user=manager,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
-        PropertyBrokerAssignment.objects.create(property=request.property, broker=manager)
+        PropertyAgentAssignment.objects.create(property=request.property, agent=manager)
         request.property.owner = owner
         request.property.save(update_fields=['owner'])
         self.client.force_authenticate(user=manager)
@@ -634,16 +634,16 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertTrue(InAppNotification.objects.filter(recipient=self.customer).exists())
         self.assertTrue(InAppNotification.objects.filter(recipient=manager).exists())
 
-    def test_broker_can_revise_proposal_and_customer_sees_the_updated_schedule_and_history(self):
-        broker = get_user_model().objects.create_user(username='revising-proposal-broker')
+    def test_agent_can_revise_proposal_and_customer_sees_the_updated_schedule_and_history(self):
+        agent = get_user_model().objects.create_user(username='revising-proposal-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=agent)
         request = ViewingRequest.objects.create(
             property=self.property,
             requester=self.customer,
@@ -652,7 +652,7 @@ class PublicViewingRequestApiTests(APITestCase):
             phone='+251900000000',
             preferred_date=timezone.localdate() + timedelta(days=1),
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
         first_date = timezone.localdate() + timedelta(days=2)
         revised_date = timezone.localdate() + timedelta(days=3)
 
@@ -687,16 +687,16 @@ class PublicViewingRequestApiTests(APITestCase):
             2,
         )
 
-    def test_customer_can_decline_a_proposal_and_broker_receives_notification(self):
-        broker = get_user_model().objects.create_user(username='proposal-decline-broker')
+    def test_customer_can_decline_a_proposal_and_agent_receives_notification(self):
+        agent = get_user_model().objects.create_user(username='proposal-decline-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=agent)
         customer = get_user_model().objects.create_user(username='declining-appointment-customer')
         Profile.objects.create(user=customer)
         request = ViewingRequest.objects.create(
@@ -727,7 +727,7 @@ class PublicViewingRequestApiTests(APITestCase):
         )
         self.assertTrue(
             InAppNotification.objects.filter(
-                recipient=broker,
+                recipient=agent,
                 notification_type='viewing_request_updated',
             ).exists()
         )
@@ -784,22 +784,22 @@ class ManagedViewingRequestApiTests(APITestCase):
         Profile.objects.create(user=self.owner, role=Profile.Role.OWNER)
         other_owner = user_model.objects.create_user(username='viewing-other-owner')
         Profile.objects.create(user=other_owner, role=Profile.Role.OWNER)
-        self.broker = user_model.objects.create_user(username='viewing-approved-broker')
+        self.agent = user_model.objects.create_user(username='viewing-approved-agent')
         Profile.objects.create(
-            user=self.broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=self.agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
             ],
         )
-        self.unapproved_broker = user_model.objects.create_user(username='viewing-unapproved-broker')
+        self.unapproved_agent = user_model.objects.create_user(username='viewing-unapproved-agent')
         Profile.objects.create(
-            user=self.unapproved_broker,
-            role=Profile.Role.BROKER,
-            broker_approved=False,
+            user=self.unapproved_agent,
+            role=Profile.Role.AGENT,
+            agent_approved=False,
             assigned_city=self.city,
         )
         self.property = Property.objects.create(
@@ -820,8 +820,8 @@ class ManagedViewingRequestApiTests(APITestCase):
             description='Another managed listing.',
             owner=other_owner,
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=self.broker)
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=self.unapproved_broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=self.agent)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=self.unapproved_agent)
         self.viewing = ViewingRequest.objects.create(
             property=self.property,
             full_name='Private Visitor',
@@ -875,17 +875,17 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.viewing.refresh_from_db()
         self.assertEqual(self.viewing.status, ViewingRequest.Status.PENDING)
 
-    def test_approved_broker_can_manage_requests_for_assigned_property(self):
-        broker = get_user_model().objects.create_user(username='property-only-broker')
+    def test_approved_agent_can_manage_requests_for_assigned_property(self):
+        agent = get_user_model().objects.create_user(username='property-only-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
-        self.client.force_authenticate(user=broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=agent)
+        self.client.force_authenticate(user=agent)
 
         detail = self.client.get(
             reverse('api:managed-viewing-detail', kwargs={'pk': self.viewing.pk})
@@ -895,18 +895,18 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(listed.status_code, 200)
 
-    def test_approved_broker_cannot_view_requests_outside_a_specific_assignment(self):
-        broker = get_user_model().objects.create_user(username='viewing-only-broker')
+    def test_approved_agent_cannot_view_requests_outside_a_specific_assignment(self):
+        agent = get_user_model().objects.create_user(username='viewing-only-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[Profile.Permission.VIEWING_MANAGE_ASSIGNED],
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
-        PropertyBrokerAssignment.objects.create(property=self.other_property, broker=broker)
-        self.client.force_authenticate(user=broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=agent)
+        PropertyAgentAssignment.objects.create(property=self.other_property, agent=agent)
+        self.client.force_authenticate(user=agent)
 
         response = self.client.get(
             reverse('api:managed-viewing-detail', kwargs={'pk': self.viewing.pk})
@@ -956,14 +956,14 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.assertEqual(listed.status_code, 403)
         self.assertEqual(detail.status_code, 403)
 
-    def test_approved_assigned_broker_can_manage_but_unapproved_broker_cannot(self):
-        self.client.force_authenticate(user=self.broker)
+    def test_approved_assigned_agent_can_manage_but_unapproved_agent_cannot(self):
+        self.client.force_authenticate(user=self.agent)
         allowed = self.client.get(
             reverse('api:managed-viewing-detail', kwargs={'pk': self.viewing.pk})
         )
 
         self.assertEqual(allowed.status_code, 200)
-        self.client.force_authenticate(user=self.unapproved_broker)
+        self.client.force_authenticate(user=self.unapproved_agent)
         denied = self.client.get(reverse('api:managed-viewing-list'))
         hidden = self.client.get(
             reverse('api:managed-viewing-detail', kwargs={'pk': self.viewing.pk})
@@ -972,7 +972,7 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(hidden.status_code, 403)
 
-    def test_broker_can_confirm_requested_slot_and_customer_is_notified(self):
+    def test_agent_can_confirm_requested_slot_and_customer_is_notified(self):
         customer = get_user_model().objects.create_user(username='appointment-customer')
         Profile.objects.create(user=customer)
         request = ViewingRequest.objects.create(
@@ -984,7 +984,7 @@ class ManagedViewingRequestApiTests(APITestCase):
             preferred_date=timezone.localdate() + timedelta(days=3),
             preferred_time='11:30',
         )
-        self.client.force_authenticate(user=self.broker)
+        self.client.force_authenticate(user=self.agent)
 
         response = self.client.post(
             reverse('api:managed-viewing-action', kwargs={'pk': request.pk}),
@@ -1001,7 +1001,7 @@ class ManagedViewingRequestApiTests(APITestCase):
         self.assertEqual(event.event_type, ViewingRequestEvent.Type.REQUEST_CONFIRMED)
         self.assertEqual(event.message, 'We will meet at the entrance.')
 
-    def test_broker_cannot_complete_a_viewing_before_its_scheduled_time(self):
+    def test_agent_cannot_complete_a_viewing_before_its_scheduled_time(self):
         request = ViewingRequest.objects.create(
             property=self.property,
             full_name='Completed Test Customer',
@@ -1012,7 +1012,7 @@ class ManagedViewingRequestApiTests(APITestCase):
             scheduled_date=timezone.localdate() + timedelta(days=2),
             scheduled_time='14:00',
         )
-        self.client.force_authenticate(user=self.broker)
+        self.client.force_authenticate(user=self.agent)
 
         early_response = self.client.post(
             reverse('api:managed-viewing-action', kwargs={'pk': request.pk}),

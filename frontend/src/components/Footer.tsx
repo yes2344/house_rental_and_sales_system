@@ -54,15 +54,15 @@ export function Footer({ contact, contactError, text }: FooterProps) {
           </Link>
         </nav>
         {(hasBrokerageContact || contactError) && (
-          <section className="footer-contact" aria-label={text('brokerContactTitle')}>
-            <h2>{text('brokerContactTitle')}</h2>
+          <section className="footer-contact" aria-label={text('agentContactTitle')}>
+            <h2>{text('agentContactTitle')}</h2>
             {contact.phone && (
               <a href={`tel:${contact.phone}`}><Phone size={15} aria-hidden="true" />{contact.phone}</a>
             )}
             {contact.email && (
               <a href={`mailto:${contact.email}`}><Mail size={15} aria-hidden="true" />{contact.email}</a>
             )}
-            {contactError && <p className="footer-contact-error" role="status">{text('brokerContactUnavailable')}</p>}
+            {contactError && <p className="footer-contact-error" role="status">{text('agentContactUnavailable')}</p>}
           </section>
         )}
       </div>

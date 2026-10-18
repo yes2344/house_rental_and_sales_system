@@ -2,20 +2,20 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../AuthContext';
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import {
-  createManagedBrokerAccount,
-  deleteManagedBrokerAccount,
-  getManagedBrokerAccounts,
-  updateManagedBrokerAccount,
-  type ManagedBrokerAccount,
+  createManagedAgentAccount,
+  deleteManagedAgentAccount,
+  getManagedAgentAccounts,
+  updateManagedAgentAccount,
+  type ManagedAgentAccount,
 } from '../api/management';
 import { getLocationsByTypes, type MarketplaceLocation } from '../api/properties';
 import type { MessageKey } from '../i18n';
 
-interface BrokerAccountManagementPageProps {
+interface AgentAccountManagementPageProps {
   text: (key: MessageKey) => string;
 }
 
-interface BrokerEditValues {
+interface AgentEditValues {
   username: string;
   initial_password: string;
   email: string;
@@ -28,7 +28,7 @@ interface BrokerEditValues {
   review_assigned_submissions: boolean;
 }
 
-const emptyEditValues: BrokerEditValues = {
+const emptyEditValues: AgentEditValues = {
   username: '',
   initial_password: '',
   email: '',
@@ -41,16 +41,16 @@ const emptyEditValues: BrokerEditValues = {
   review_assigned_submissions: false,
 };
 
-export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPageProps) {
+export function AgentAccountManagementPage({ text }: AgentAccountManagementPageProps) {
   const { account: currentAccount } = useAuth();
   const isPlatformOwner = Boolean(currentAccount?.is_platform_owner);
-  const [accounts, setAccounts] = useState<ManagedBrokerAccount[]>([]);
+  const [accounts, setAccounts] = useState<ManagedAgentAccount[]>([]);
   const [cities, setCities] = useState<MarketplaceLocation[]>([]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [assignedCityId, setAssignedCityId] = useState('');
-  const [editing, setEditing] = useState<ManagedBrokerAccount | null>(null);
-  const [editValues, setEditValues] = useState<BrokerEditValues>(emptyEditValues);
+  const [editing, setEditing] = useState<ManagedAgentAccount | null>(null);
+  const [editValues, setEditValues] = useState<AgentEditValues>(emptyEditValues);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -62,11 +62,11 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([
-      getManagedBrokerAccounts(controller.signal),
+      getManagedAgentAccounts(controller.signal),
       getLocationsByTypes(['city'], controller.signal),
     ])
-      .then(([brokerAccounts, configuredCities]) => {
-        setAccounts(brokerAccounts);
+      .then(([agentAccounts, configuredCities]) => {
+        setAccounts(agentAccounts);
         setCities(configuredCities);
       })
       .catch((loadError: unknown) => {
@@ -89,7 +89,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
     setSuccess('');
     setFieldErrors({});
     try {
-      const created = await createManagedBrokerAccount({
+      const created = await createManagedAgentAccount({
         username: username.trim(),
         password,
         assigned_city_id: Number(assignedCityId),
@@ -98,7 +98,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
       setUsername('');
       setPassword('');
       setAssignedCityId('');
-      setSuccess(text('brokerCreated'));
+      setSuccess(text('agentCreated'));
     } catch (createError: unknown) {
       setError(getErrorMessage(createError));
       setFieldErrors(getApiFieldErrors(createError));
@@ -107,7 +107,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
     }
   };
 
-  const beginEdit = (account: ManagedBrokerAccount) => {
+  const beginEdit = (account: ManagedAgentAccount) => {
     setEditing(account);
     setEditValues({
       username: account.username,
@@ -149,7 +149,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
         (permission) => permission !== 'settings.manage'
           && permission !== 'announcements.review_assigned',
       );
-      const updated = await updateManagedBrokerAccount(editing.id, {
+      const updated = await updateManagedAgentAccount(editing.id, {
         ...accountChanges,
         assigned_city_id: Number(assigned_city_id),
         ...(initial_password ? { initial_password } : {}),
@@ -161,7 +161,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
       });
       setAccounts((current) => current.map((item) => item.id === updated.id ? updated : item));
       setEditing(null);
-      setSuccess(text('brokerUpdated'));
+      setSuccess(text('agentUpdated'));
     } catch (updateError: unknown) {
       setError(getErrorMessage(updateError));
       setFieldErrors(getApiFieldErrors(updateError));
@@ -170,14 +170,14 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
     }
   };
 
-  const toggleActive = async (account: ManagedBrokerAccount) => {
+  const toggleActive = async (account: ManagedAgentAccount) => {
     setError('');
     setSuccess('');
     setUpdatingId(account.id);
     try {
-      const updated = await updateManagedBrokerAccount(account.id, { is_active: !account.is_active });
+      const updated = await updateManagedAgentAccount(account.id, { is_active: !account.is_active });
       setAccounts((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setSuccess(text('brokerUpdated'));
+      setSuccess(text('agentUpdated'));
     } catch (updateError: unknown) {
       setError(getErrorMessage(updateError));
     } finally {
@@ -185,16 +185,16 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
     }
   };
 
-  const removeAccount = async (account: ManagedBrokerAccount) => {
-    if (!window.confirm(text('confirmBrokerDelete'))) return;
+  const removeAccount = async (account: ManagedAgentAccount) => {
+    if (!window.confirm(text('confirmAgentDelete'))) return;
     setError('');
     setSuccess('');
     setDeletingId(account.id);
     try {
-      await deleteManagedBrokerAccount(account.id);
+      await deleteManagedAgentAccount(account.id);
       setAccounts((current) => current.filter((item) => item.id !== account.id));
       if (editing?.id === account.id) setEditing(null);
-      setSuccess(text('brokerDeleted'));
+      setSuccess(text('agentDeleted'));
     } catch (deleteError: unknown) {
       setError(getErrorMessage(deleteError));
     } finally {
@@ -206,8 +206,8 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
     <main className="manager-page" id="main-content">
       <header className="manager-page-header">
         <div>
-          <h1>{text('managerBrokerAccounts')}</h1>
-          <p>{text('brokerAccountsDescription')}</p>
+          <h1>{text('managerAgentAccounts')}</h1>
+          <p>{text('agentAccountsDescription')}</p>
         </div>
       </header>
 
@@ -215,10 +215,10 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
       {success && <p className="manager-inline-success" role="status">{success}</p>}
 
       <section className="manager-panel">
-        <h2>{text('createBrokerAccount')}</h2>
-        <p>{text('brokerInitialPasswordHelp')}</p>
+        <h2>{text('createAgentAccount')}</h2>
+        <p>{text('agentInitialPasswordHelp')}</p>
         <form className="manager-form-grid" onSubmit={(event) => void createAccount(event)}>
-          <label className="filter-label">{text('brokerUsername')}
+          <label className="filter-label">{text('agentUsername')}
             <input
               className="filter-input"
               required
@@ -263,7 +263,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
           </label>
           <div className="location-form-actions">
             <button className="button button-primary" type="submit" disabled={saving || cities.length === 0}>
-              {saving ? text('creatingAccount') : text('createBrokerAccount')}
+              {saving ? text('creatingAccount') : text('createAgentAccount')}
             </button>
           </div>
         </form>
@@ -271,9 +271,9 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
 
       {editing && (
         <section className="manager-panel">
-          <h2>{text('editBroker')}</h2>
+          <h2>{text('editAgent')}</h2>
           <form className="manager-form-grid" onSubmit={(event) => void saveEdit(event)}>
-            <label className="filter-label">{text('brokerUsername')}
+            <label className="filter-label">{text('agentUsername')}
               <input
                 className="filter-input"
                 required
@@ -283,7 +283,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
               />
               {fieldErrors.username && <small role="alert">{fieldErrors.username}</small>}
             </label>
-            <label className="filter-label">{text('resetBrokerPassword')}
+            <label className="filter-label">{text('resetAgentPassword')}
               <input
                 className="filter-input"
                 type="password"
@@ -292,7 +292,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
                 value={editValues.initial_password}
                 onChange={(event) => setEditValues((current) => ({ ...current, initial_password: event.target.value }))}
               />
-              <small>{text('brokerPasswordResetHelp')}</small>
+              <small>{text('agentPasswordResetHelp')}</small>
               {fieldErrors.initial_password && <small role="alert">{fieldErrors.initial_password}</small>}
             </label>
             <label className="filter-label">{text('assignedCity')}
@@ -309,7 +309,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
               </select>
               {fieldErrors.assigned_city_id && <small role="alert">{fieldErrors.assigned_city_id}</small>}
             </label>
-            <label className="filter-label">{text('brokerEmail')}
+            <label className="filter-label">{text('agentEmail')}
               <input
                 className="filter-input"
                 type="email"
@@ -319,7 +319,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
               />
               {fieldErrors.email && <small role="alert">{fieldErrors.email}</small>}
             </label>
-            <label className="filter-label">{text('brokerFirstName')}
+            <label className="filter-label">{text('agentFirstName')}
               <input
                 className="filter-input"
                 maxLength={150}
@@ -328,7 +328,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
               />
               {fieldErrors.first_name && <small role="alert">{fieldErrors.first_name}</small>}
             </label>
-            <label className="filter-label">{text('brokerLastName')}
+            <label className="filter-label">{text('agentLastName')}
               <input
                 className="filter-input"
                 maxLength={150}
@@ -337,7 +337,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
               />
               {fieldErrors.last_name && <small role="alert">{fieldErrors.last_name}</small>}
             </label>
-            <label className="filter-label">{text('brokerPhone')}
+            <label className="filter-label">{text('agentPhone')}
               <input
                 className="filter-input"
                 maxLength={50}
@@ -352,7 +352,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
                 checked={editValues.is_active}
                 onChange={(event) => setEditValues((current) => ({ ...current, is_active: event.target.checked }))}
               />
-              {' '}{text('brokerAccountActive')}
+              {' '}{text('agentAccountActive')}
             </label>
             {isPlatformOwner && (
               <label className="filter-label">
@@ -382,7 +382,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
             </label>
             <div className="location-form-actions">
               <button className="button button-primary" type="submit" disabled={saving}>
-                {saving ? text('savingLocation') : text('saveBroker')}
+                {saving ? text('savingLocation') : text('saveAgent')}
               </button>
               <button className="button button-secondary" type="button" onClick={() => setEditing(null)}>
                 {text('cancel')}
@@ -394,19 +394,19 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
 
       <section className="manager-panel location-list-panel">
         <div className="manager-panel-heading">
-          <h2>{text('configuredBrokerAccounts')}</h2>
+          <h2>{text('configuredAgentAccounts')}</h2>
           <span>{accounts.length}</span>
         </div>
         {loading ? <p role="status">{text('loadingLocations')}</p> : accounts.length === 0 ? (
-          <p>{text('brokerAccountsEmpty')}</p>
+          <p>{text('agentAccountsEmpty')}</p>
         ) : (
           <div className="location-table-wrap">
             <table className="manager-table">
               <thead>
                 <tr>
-                  <th>{text('brokerUsername')}</th>
-                  <th>{text('brokerFullName')}</th>
-                  <th>{text('brokerEmail')}</th>
+                  <th>{text('agentUsername')}</th>
+                  <th>{text('agentFullName')}</th>
+                  <th>{text('agentEmail')}</th>
                   <th>{text('assignedCity')}</th>
                   <th>{text('listingStatus')}</th>
                   <th>{text('actions')}</th>
@@ -422,14 +422,14 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
                     <td>
                       {!account.is_active
                         ? text('statusInactive')
-                        : account.broker_onboarding_required
-                          ? text('brokerSetupPending')
-                          : text('brokerSetupComplete')}
+                        : account.agent_onboarding_required
+                          ? text('agentSetupPending')
+                          : text('agentSetupComplete')}
                     </td>
                     <td>
                       <div className="location-row-actions">
                         <button className="button button-secondary" type="button" onClick={() => beginEdit(account)}>
-                          {text('editBroker')}
+                          {text('editAgent')}
                         </button>
                         <button
                           className="button button-secondary"
@@ -437,7 +437,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
                           disabled={updatingId === account.id}
                           onClick={() => void toggleActive(account)}
                         >
-                          {text(account.is_active ? 'deactivateBroker' : 'reactivateBroker')}
+                          {text(account.is_active ? 'deactivateAgent' : 'reactivateAgent')}
                         </button>
                         <button
                           className="button button-outline"
@@ -445,7 +445,7 @@ export function BrokerAccountManagementPage({ text }: BrokerAccountManagementPag
                           disabled={deletingId === account.id}
                           onClick={() => void removeAccount(account)}
                         >
-                          {text('deleteBroker')}
+                          {text('deleteAgent')}
                         </button>
                       </div>
                     </td>

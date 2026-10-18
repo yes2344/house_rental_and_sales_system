@@ -57,8 +57,8 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         )
         Profile.objects.create(
             user=self.agent,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[
                 Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
@@ -143,7 +143,7 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         for field, value in (
             ('publication_status', 'published'),
             ('status', 'available'),
-            ('service_type', 'broker_managed'),
+            ('service_type', 'agent_managed'),
             ('contact_phone', '+251900000009'),
         ):
             payload = {**self.valid_payload, field: value}
@@ -210,6 +210,62 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         self.assertEqual(second.status_code, 201, second.data)
         self.assertNotEqual(first.data['id'], second.data['id'])
         self.assertEqual(OwnerAnnouncement.objects.filter(submitter=self.submitter).count(), 2)
+
+    def test_submitter_bulk_delete_is_limited_to_own_unapproved_submissions(self):
+        own_submission = self.submit()
+        self.client.force_authenticate(self.other_user)
+        other_submission = self.client.post(
+            self.submission_url,
+            self.valid_payload,
+            format='json',
+        )
+        self.assertEqual(other_submission.status_code, 201, other_submission.data)
+
+        self.client.force_authenticate(self.submitter)
+        delete_url = reverse('api:owner-submission-bulk-delete')
+        mixed_delete = self.client.post(
+            delete_url,
+            {'ids': [own_submission.data['id'], other_submission.data['id']]},
+            format='json',
+        )
+        own_delete = self.client.post(
+            delete_url,
+            {'ids': [own_submission.data['id']]},
+            format='json',
+        )
+
+        self.assertEqual(mixed_delete.status_code, 404)
+        self.assertEqual(own_delete.status_code, 200, own_delete.data)
+        self.assertEqual(own_delete.data['deleted_count'], 1)
+        self.assertFalse(Property.objects.filter(pk=own_submission.data['id']).exists())
+        self.assertTrue(Property.objects.filter(pk=other_submission.data['id']).exists())
+
+    def test_admin_can_bulk_delete_owner_submissions_and_agent_cannot(self):
+        first = self.submit()
+        second = self.client.post(
+            self.submission_url,
+            {**self.valid_payload, 'title': 'Second owner-submitted property'},
+            format='json',
+        )
+        self.assertEqual(second.status_code, 201, second.data)
+        first_announcement = OwnerAnnouncement.objects.get(property_id=first.data['id'])
+        first_announcement.status = OwnerAnnouncement.Status.APPROVED
+        first_announcement.save(update_fields=['status'])
+
+        delete_url = reverse('api:owner-submission-review-bulk-delete')
+        property_ids = [first.data['id'], second.data['id']]
+        ids = list(OwnerAnnouncement.objects.filter(property_id__in=property_ids).values_list('pk', flat=True))
+        self.client.force_authenticate(self.agent)
+        agent_response = self.client.post(delete_url, {'ids': ids}, format='json')
+        self.assertEqual(agent_response.status_code, 403)
+        self.assertTrue(Property.objects.filter(pk__in=property_ids).exists())
+
+        self.client.force_authenticate(self.admin)
+        admin_response = self.client.post(delete_url, {'ids': ids}, format='json')
+
+        self.assertEqual(admin_response.status_code, 200, admin_response.data)
+        self.assertEqual(admin_response.data['deleted_count'], 2)
+        self.assertFalse(Property.objects.filter(pk__in=property_ids).exists())
 
     def test_submitter_cannot_read_or_edit_another_users_submission(self):
         created = self.submit()
@@ -279,8 +335,8 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         unprivileged_agent = User.objects.create_user(username='unprivileged-agent')
         Profile.objects.create(
             user=unprivileged_agent,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
         )
         self.client.force_authenticate(unprivileged_agent)
@@ -354,8 +410,8 @@ class OwnerSubmissionWorkflowTests(APITestCase):
     def test_agent_cannot_approve_own_submission(self):
         created = self.submit()
         profile = self.submitter.profile
-        profile.role = Profile.Role.BROKER
-        profile.broker_approved = True
+        profile.role = Profile.Role.AGENT
+        profile.agent_approved = True
         profile.assigned_city = self.city
         profile.management_permissions = [
             Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
@@ -367,7 +423,7 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         self.client.force_authenticate(self.submitter)
 
         response = self.client.post(
-            reverse('api:owner-submission-review-decision', args=[created.data['id']]),
+            reverse('api:owner-submission-review-decision', args=[announcement.pk]),
             {'action': 'approve'},
             format='json',
         )

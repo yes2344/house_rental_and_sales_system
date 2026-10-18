@@ -11,7 +11,7 @@ class Profile(models.Model):
     class Role(models.TextChoices):
         CUSTOMER = 'customer', 'Customer'
         OWNER = 'owner', 'Property owner'
-        BROKER = 'broker', 'Authorized agent'
+        AGENT = 'agent', 'Authorized agent'
         ADMINISTRATOR = 'administrator', 'Delegated administrator'
 
     class Permission(models.TextChoices):
@@ -30,7 +30,7 @@ class Profile(models.Model):
         REPORTS_REVIEW = 'reports.review', 'Review listing reports'
         STATISTICS_VIEW = 'statistics.view', 'View management statistics'
         AUDIT_VIEW = 'audit.view', 'View audit records'
-        BROKERS_ASSIGN = 'brokers.assign', 'Assign agents to listings'
+        AGENTS_ASSIGN = 'agents.assign', 'Assign agents to listings'
         SETTINGS_MANAGE = 'settings.manage', 'Manage platform settings'
         BRANDING_MANAGE = 'branding.manage', 'Manage site branding'
         LOCATIONS_MANAGE_CITIES = 'locations.manage_cities', 'Manage marketplace cities'
@@ -47,14 +47,14 @@ class Profile(models.Model):
     assigned_city = models.ForeignKey(
         'properties.Location',
         on_delete=models.PROTECT,
-        related_name='assigned_broker_profiles',
+        related_name='assigned_agent_profiles',
         null=True,
         blank=True,
         limit_choices_to={'location_type': 'city'},
     )
-    broker_approved = models.BooleanField(default=False)
-    broker_onboarding_required = models.BooleanField(default=False)
-    broker_password_changed = models.BooleanField(default=True)
+    agent_approved = models.BooleanField(default=False)
+    agent_onboarding_required = models.BooleanField(default=False)
+    agent_password_changed = models.BooleanField(default=True)
     management_permissions = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -62,10 +62,10 @@ class Profile(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=Q(role__in=['customer', 'owner', 'broker', 'administrator']),
+                condition=Q(role__in=['customer', 'owner', 'agent', 'administrator']),
                 name='account_profile_valid_role',
             ),
-            models.CheckConstraint(condition=Q(role='broker') | Q(broker_approved=False), name='account_approval_requires_broker'),
+            models.CheckConstraint(condition=Q(role='agent') | Q(agent_approved=False), name='account_approval_requires_agent'),
         ]
 
     def __str__(self):

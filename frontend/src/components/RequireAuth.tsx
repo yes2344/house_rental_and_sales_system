@@ -36,8 +36,8 @@ export function RequireAuth({ text }: RequireAuthProps) {
   }
 
   if (!account) return <Navigate to="/login" replace state={{ from: { pathname: location.pathname, search: location.search, hash: location.hash } }} />;
-  if (account.broker_onboarding_required && location.pathname !== '/broker-onboarding') {
-    return <Navigate to="/broker-onboarding" replace />;
+  if (account.agent_onboarding_required && location.pathname !== '/agent-onboarding') {
+    return <Navigate to="/agent-onboarding" replace />;
   }
   return <Outlet />;
 }

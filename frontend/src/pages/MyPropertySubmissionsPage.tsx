@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, Clock3, FileText, Plus } from 'lucide-react';
+import { ArrowUpRight, Clock3, FileText, Plus, Trash2 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
 import {
+  deleteMySubmissions,
   getMySubmissions,
   type OwnerSubmission,
   type OwnerSubmissionStatus,
@@ -32,6 +33,12 @@ const statusMessages: Record<OwnerSubmissionStatus, MessageKey> = {
   withdrawn: 'submissionWithdrawn',
 };
 
+const deletableStatuses = new Set<OwnerSubmissionStatus>([
+  'pending_review',
+  'corrections_requested',
+  'rejected',
+]);
+
 export function MyPropertySubmissionsPage({ locale, text }: MyPropertySubmissionsPageProps) {
   const location = useLocation();
   const locationState = location.state as SubmissionsLocationState | null;
@@ -42,6 +49,9 @@ export function MyPropertySubmissionsPage({ locale, text }: MyPropertySubmission
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const loadSubmissions = (pageNumber: number, append: boolean) => {
     if (append) setLoadingMore(true);
@@ -52,6 +62,7 @@ export function MyPropertySubmissionsPage({ locale, text }: MyPropertySubmission
         setSubmissions((current) => (
           append ? [...current, ...response.results] : response.results
         ));
+        if (!append) setSelectedIds(new Set());
         setCount(response.count);
         setHasNext(Boolean(response.next));
         setPage(pageNumber);
@@ -72,6 +83,53 @@ export function MyPropertySubmissionsPage({ locale, text }: MyPropertySubmission
     loadSubmissions(page + 1, true);
   };
 
+  const deletableSubmissions = submissions.filter(
+    (submission) => deletableStatuses.has(submission.submission_status),
+  );
+  const allDeletableSelected = deletableSubmissions.length > 0
+    && deletableSubmissions.every((submission) => selectedIds.has(submission.id));
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllDeletable = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allDeletableSelected) {
+        deletableSubmissions.forEach((submission) => next.delete(submission.id));
+      } else {
+        deletableSubmissions.forEach((submission) => next.add(submission.id));
+      }
+      return next;
+    });
+  };
+
+  const deleteSelected = async () => {
+    const ids = deletableSubmissions
+      .filter((submission) => selectedIds.has(submission.id))
+      .map((submission) => submission.id);
+    if (!ids.length || !window.confirm(
+      text('confirmDeleteSelectedSubmissions').replace('{count}', String(ids.length)),
+    )) return;
+    setBulkDeleting(true);
+    setActionError('');
+    try {
+      await deleteMySubmissions(ids);
+      setSelectedIds(new Set());
+      loadSubmissions(1, false);
+    } catch (requestError: unknown) {
+      setActionError(`${text('bulkSubmissionDeleteError')} ${getErrorMessage(requestError)}`);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <main className="customer-page" id="main-content">
       <section className="customer-heading">
@@ -83,6 +141,7 @@ export function MyPropertySubmissionsPage({ locale, text }: MyPropertySubmission
       </section>
       <section className="container customer-content">
         {locationState?.submitted && <p className="manager-inline-success" role="status">{text('submissionSubmitted')}</p>}
+        {actionError && <p className="manager-inline-error" role="alert">{actionError}</p>}
         {locationState?.imageUploadFailures?.length ? (
           <div className="manager-inline-error" role="alert">
             <p>{text('submissionImagesUploadIssue')}</p>
@@ -109,12 +168,48 @@ export function MyPropertySubmissionsPage({ locale, text }: MyPropertySubmission
           </div>
         ) : (
           <>
+            {deletableSubmissions.length > 0 && (
+              <div className="manager-bulk-actions">
+                <label className="manager-bulk-select">
+                  <input
+                    type="checkbox"
+                    checked={allDeletableSelected}
+                    onChange={toggleAllDeletable}
+                    aria-label={text('selectAllSubmissions')}
+                  />
+                  <span>{text('selectAllSubmissions')}</span>
+                </label>
+                <span>{text('selectedSubmissions').replace('{count}', String(selectedIds.size))}</span>
+                <button
+                  className="button button-danger button-small"
+                  type="button"
+                  disabled={!selectedIds.size || bulkDeleting}
+                  onClick={() => void deleteSelected()}
+                >
+                  <Trash2 size={15} aria-hidden="true" />
+                  {bulkDeleting ? text('deletingSelectedSubmissions') : text('deleteSelectedSubmissions')}
+                </button>
+              </div>
+            )}
             <div className="submission-list">
               {submissions.map((submission) => {
                 const statusKey = statusMessages[submission.submission_status];
                 const primaryImage = submission.images.find((image) => image.is_primary) ?? submission.images[0];
                 return (
                   <article className="submission-card" key={submission.id}>
+                    <label className="submission-select">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(submission.id)}
+                        disabled={!deletableStatuses.has(submission.submission_status) || bulkDeleting}
+                        onChange={() => toggleSelected(submission.id)}
+                        aria-label={`${text('selectSubmission')}: ${submission.title}`}
+                        title={!deletableStatuses.has(submission.submission_status)
+                          ? text('submissionNotDeletable')
+                          : undefined}
+                      />
+                      <span className="visually-hidden">{text('selectSubmission')}: {submission.title}</span>
+                    </label>
                     <div className="submission-card-media">
                       {primaryImage?.url
                         ? <img src={primaryImage.url} alt={primaryImage.caption || text('propertyPhoto')} />

@@ -17,26 +17,26 @@ ADMIN_MANAGEMENT_PERMISSIONS = frozenset({
     Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
     Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN,
 })
-BROKER_WORK_PERMISSIONS = frozenset({
+AGENT_WORK_PERMISSIONS = frozenset({
     Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
     Profile.Permission.VIEWING_MANAGE_ASSIGNED,
     Profile.Permission.LOCATIONS_MANAGE_SUBCITIES,
 })
-BROKER_GRANTABLE_PERMISSIONS = frozenset({
+AGENT_GRANTABLE_PERMISSIONS = frozenset({
     Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
 })
 
 
-def broker_work_permissions():
+def agent_work_permissions():
     return [
         permission
         for permission, _ in Profile.Permission.choices
-        if permission in BROKER_WORK_PERMISSIONS
+        if permission in AGENT_WORK_PERMISSIONS
     ]
 
 
-def broker_grantable_permissions():
-    return list(BROKER_GRANTABLE_PERMISSIONS)
+def agent_grantable_permissions():
+    return list(AGENT_GRANTABLE_PERMISSIONS)
 
 
 def is_platform_owner(user):
@@ -81,11 +81,11 @@ def effective_management_permissions(user):
             for permission, _ in Profile.Permission.choices
             if user.is_staff and permission in ADMIN_MANAGEMENT_PERMISSIONS
         ]
-    if profile.role == Profile.Role.BROKER and profile.broker_approved:
-        permissions = broker_work_permissions()
+    if profile.role == Profile.Role.AGENT and profile.agent_approved:
+        permissions = agent_work_permissions()
         permissions.extend(
             permission
-            for permission in BROKER_GRANTABLE_PERMISSIONS
+            for permission in AGENT_GRANTABLE_PERMISSIONS
             if permission in profile.management_permissions
         )
         if Profile.Permission.SETTINGS_MANAGE in profile.management_permissions:
@@ -110,13 +110,13 @@ def has_management_permission(user, permission):
         return False
     if profile.role == Profile.Role.ADMINISTRATOR:
         return bool(user.is_staff and permission in ADMIN_MANAGEMENT_PERMISSIONS)
-    if profile.role == Profile.Role.BROKER:
-        if not profile.broker_approved:
+    if profile.role == Profile.Role.AGENT:
+        if not profile.agent_approved:
             return False
         return (
-            permission in BROKER_WORK_PERMISSIONS
+            permission in AGENT_WORK_PERMISSIONS
             or (
-                permission in BROKER_GRANTABLE_PERMISSIONS
+                permission in AGENT_GRANTABLE_PERMISSIONS
                 and permission in profile.management_permissions
             )
             or (
@@ -127,7 +127,7 @@ def has_management_permission(user, permission):
     return False
 
 
-def can_manage_broker_accounts(user):
+def can_manage_agent_accounts(user):
     if not user or not user.is_authenticated or not user.is_active:
         return False
     if user.is_superuser:
@@ -141,9 +141,9 @@ def can_manage_broker_accounts(user):
     )
 
 
-class IsBrokerAccountManager(BasePermission):
+class IsAgentAccountManager(BasePermission):
     def has_permission(self, request, view):
-        return can_manage_broker_accounts(request.user)
+        return can_manage_agent_accounts(request.user)
 
 
 class IsLocationManager(BasePermission):
@@ -172,12 +172,12 @@ class HasManagementPermission(BasePermission):
         return bool(required_permission and has_management_permission(request.user, required_permission))
 
 
-def has_listing_role(user, role, *, broker_approved=False):
+def has_listing_role(user, role, *, agent_approved=False):
     if not user or not user.is_authenticated or not user.is_active:
         return False
     filters = {'user_id': user.pk, 'role': role}
-    if role == Profile.Role.BROKER:
-        filters['broker_approved'] = broker_approved
+    if role == Profile.Role.AGENT:
+        filters['agent_approved'] = agent_approved
     return Profile.objects.filter(**filters).exists()
 
 
@@ -187,14 +187,14 @@ class IsActiveAuthenticated(BasePermission):
         return bool(user and user.is_authenticated and user.is_active)
 
 
-class IsNotBrokerAccount(BasePermission):
+class IsNotAgentAccount(BasePermission):
     def has_permission(self, request, view):
         user = request.user
         return bool(
             user
             and user.is_authenticated
             and user.is_active
-            and not Profile.objects.filter(user_id=user.pk, role=Profile.Role.BROKER).exists()
+            and not Profile.objects.filter(user_id=user.pk, role=Profile.Role.AGENT).exists()
         )
 
 
@@ -216,12 +216,12 @@ class IsPropertyManagerOrAdministrator(IsListingManager):
     def has_object_permission(self, request, view, obj):
         user = request.user
         property_obj = getattr(obj, 'property', obj)
-        owns_broker_listing = (
-            has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
+        owns_agent_listing = (
+            has_listing_role(user, Profile.Role.AGENT, agent_approved=True)
             and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
             and property_obj.submitted_by_id == user.pk
         )
-        if owns_broker_listing:
+        if owns_agent_listing:
             return True
 
         request_method = getattr(request, 'method', 'GET')
@@ -252,12 +252,12 @@ class IsAuthenticatedPropertyManagerOrAdministrator(IsPropertyManagerOrAdministr
                 has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL)
                 and has_management_permission(user, Profile.Permission.PROPERTY_MODERATE)
             )
-            can_create_as_broker = (
-                has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
+            can_create_as_agent = (
+                has_listing_role(user, Profile.Role.AGENT, agent_approved=True)
                 and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
                 and bool(getattr(getattr(user, 'profile', None), 'assigned_city_id', None))
             )
-            return can_create_globally or can_create_as_broker
+            return can_create_globally or can_create_as_agent
         return True
 
 
@@ -287,7 +287,7 @@ class IsViewingRequestManager(IsPropertyManagerOrAdministrator):
             return True
         if (
             has_management_permission(request.user, Profile.Permission.VIEWING_MANAGE_ASSIGNED)
-            and obj.property.assigned_brokers.filter(pk=request.user.pk).exists()
+            and obj.property.assigned_agents.filter(pk=request.user.pk).exists()
         ):
             return True
         return False

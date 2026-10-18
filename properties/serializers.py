@@ -8,9 +8,22 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import Profile
-from properties.access import broker_city_location_ids, can_access_property_image_original
-from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
+from properties.access import agent_city_location_ids, can_access_property_image_original
+from properties.models import Amenity, Location, Property, PropertyAgentAssignment, PropertyImage
 from properties.search_terms import normalize_search_text
+
+
+class BulkDeleteIdsSerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+        max_length=100,
+    )
+
+    def validate_ids(self, value):
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError('Each listing can only be selected once.')
+        return value
 
 
 class LocationSerializer(serializers.ModelSerializer):
@@ -75,8 +88,8 @@ class LocationSerializer(serializers.ModelSerializer):
         is_admin = bool(user and user.is_superuser) or bool(
             profile and profile.role == Profile.Role.ADMINISTRATOR
         )
-        is_broker = not is_admin and bool(profile and profile.role == Profile.Role.BROKER)
-        if not (is_admin or is_broker):
+        is_agent = not is_admin and bool(profile and profile.role == Profile.Role.AGENT)
+        if not (is_admin or is_agent):
             return super().to_internal_value(data)
 
         editable_fields = {'name', 'name_am', 'is_active', 'display_order'}
@@ -88,7 +101,7 @@ class LocationSerializer(serializers.ModelSerializer):
                     for field in sorted(unsupported_fields)
                 })
             data = data.copy()
-            if is_broker:
+            if is_agent:
                 if profile.assigned_city_id is None:
                     raise serializers.ValidationError({
                         'parent': 'Ask an administrator to assign a city before managing sub-cities.',
@@ -181,7 +194,7 @@ class LocationSerializer(serializers.ModelSerializer):
         profile = Profile.objects.filter(user=user).select_related('assigned_city').first() if (
             user and user.is_authenticated
         ) else None
-        if profile and profile.role == Profile.Role.BROKER:
+        if profile and profile.role == Profile.Role.AGENT:
             if location.location_type != Location.Type.SUBCITY:
                 raise serializers.ValidationError({
                     'location_type': 'Agents can manage sub-cities within their assigned city only.',
@@ -351,20 +364,20 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
     def get_location_path(self, obj):
         return _location_path(obj.administrative_location) if obj.administrative_location_id else []
 
-    def _public_broker_managed_listing(self, obj):
-        broker = obj.submitted_by
+    def _public_agent_managed_listing(self, obj):
+        agent = obj.submitted_by
         if (
-            obj.service_type != Property.ServiceType.BROKER_MANAGED
-            or broker is None
-            or not broker.is_active
+            obj.service_type != Property.ServiceType.AGENT_MANAGED
+            or agent is None
+            or not agent.is_active
         ):
             return False
-        profile = getattr(broker, 'profile', None)
+        profile = getattr(agent, 'profile', None)
         return (
             profile is not None
-            and profile.role == Profile.Role.BROKER
-            and profile.broker_approved
-            and any(assignment.broker_id == broker.pk for assignment in obj.broker_assignments.all())
+            and profile.role == Profile.Role.AGENT
+            and profile.agent_approved
+            and any(assignment.agent_id == agent.pk for assignment in obj.agent_assignments.all())
         )
 
     @extend_schema_field(serializers.CharField(allow_blank=True))
@@ -373,13 +386,13 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_public_contact_phone(self, obj):
-        if self._public_broker_managed_listing(obj):
+        if self._public_agent_managed_listing(obj):
             return obj.contact_phone
         return ''
 
     @extend_schema_field(serializers.EmailField(allow_blank=True))
     def get_public_contact_email(self, obj):
-        if self._public_broker_managed_listing(obj):
+        if self._public_agent_managed_listing(obj):
             return obj.contact_email
         return ''
 
@@ -602,12 +615,12 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
                     })
             request = self.context.get('request')
             user = getattr(request, 'user', None)
-            broker_profile = Profile.objects.filter(
+            agent_profile = Profile.objects.filter(
                 user=user,
-                role=Profile.Role.BROKER,
-                broker_approved=True,
+                role=Profile.Role.AGENT,
+                agent_approved=True,
             ).first() if user and user.is_authenticated else None
-            if broker_profile:
+            if agent_profile:
                 location_city_id = next(
                     (
                         item.pk for item in path
@@ -616,8 +629,8 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
                     None,
                 )
                 if (
-                    broker_profile.assigned_city_id is None
-                    or location_city_id != broker_profile.assigned_city_id
+                    agent_profile.assigned_city_id is None
+                    or location_city_id != agent_profile.assigned_city_id
                     or (
                         not location_is_unchanged
                         and administrative_location.location_type != Location.Type.SUBCITY
@@ -632,14 +645,14 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         amenities = validated_data.pop('amenities', [])
         user = self.context['request'].user
-        broker_profile = Profile.objects.filter(
+        agent_profile = Profile.objects.filter(
             user=user,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
         ).first()
-        if broker_profile:
+        if agent_profile:
             if not validated_data.get('contact_phone'):
-                validated_data['contact_phone'] = broker_profile.phone
+                validated_data['contact_phone'] = agent_profile.phone
             if not validated_data.get('contact_email'):
                 validated_data['contact_email'] = user.email
         if 'area_sqft' in validated_data and 'area_value' not in validated_data:
@@ -652,8 +665,8 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             publication_status=Property.PublicationStatus.PUBLISHED,
             **validated_data,
         )
-        if broker_profile:
-            PropertyBrokerAssignment.objects.create(property=property_obj, broker=user)
+        if agent_profile:
+            PropertyAgentAssignment.objects.create(property=property_obj, agent=user)
         property_obj.amenities.set(amenities)
         return property_obj
 

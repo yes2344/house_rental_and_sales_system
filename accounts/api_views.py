@@ -21,8 +21,8 @@ from accounts.email_messages import (
 from accounts.serializers import (
     AccountActivitySerializer,
     AccountSerializer,
-    BrokerFirstLoginPasswordSerializer,
-    BrokerFirstLoginProfileSerializer,
+    AgentFirstLoginPasswordSerializer,
+    AgentFirstLoginProfileSerializer,
     CsrfTokenSerializer,
     DelegatedInvitationAcceptSerializer,
     EmptySerializer,
@@ -236,14 +236,14 @@ class AccountMeView(generics.RetrieveUpdateAPIView):
         return super().patch(request, *args, **kwargs)
 
 
-class BrokerFirstLoginPasswordView(generics.GenericAPIView):
+class AgentFirstLoginPasswordView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = BrokerFirstLoginPasswordSerializer
+    serializer_class = AgentFirstLoginPasswordSerializer
 
     @transaction.atomic
     @extend_schema(
         summary='Set a provisioned agent’s permanent password and optional username',
-        request=BrokerFirstLoginPasswordSerializer,
+        request=AgentFirstLoginPasswordSerializer,
         responses={200: AccountSerializer},
     )
     def post(self, request):
@@ -253,14 +253,14 @@ class BrokerFirstLoginPasswordView(generics.GenericAPIView):
         return Response(AccountSerializer(user).data)
 
 
-class BrokerFirstLoginProfileView(generics.GenericAPIView):
+class AgentFirstLoginProfileView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = BrokerFirstLoginProfileSerializer
+    serializer_class = AgentFirstLoginProfileSerializer
 
     @transaction.atomic
     @extend_schema(
         summary='Complete a provisioned agent’s contact profile and activate agent permissions',
-        request=BrokerFirstLoginProfileSerializer,
+        request=AgentFirstLoginProfileSerializer,
         responses={200: AccountSerializer},
     )
     def post(self, request):
@@ -332,7 +332,7 @@ class AccountActivityView(generics.GenericAPIView):
     def get(self, request):
         viewing_requests = ViewingRequest.objects.none()
         profile_role = Profile.objects.filter(user_id=request.user.pk).values_list('role', flat=True).first()
-        if profile_role != Profile.Role.BROKER:
+        if profile_role != Profile.Role.AGENT:
             viewing_requests = (
                 ViewingRequest.objects.filter(
                     requester=request.user,

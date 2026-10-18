@@ -3,11 +3,11 @@ import { Outlet } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import type { MessageKey } from '../i18n';
 
-interface RequireBrokerAccountManagerProps {
+interface RequireAgentAccountManagerProps {
   text: (key: MessageKey) => string;
 }
 
-export function RequireBrokerAccountManager({ text }: RequireBrokerAccountManagerProps) {
+export function RequireAgentAccountManager({ text }: RequireAgentAccountManagerProps) {
   const { account } = useAuth();
   const canManage = Boolean(
     account?.role === 'administrator'

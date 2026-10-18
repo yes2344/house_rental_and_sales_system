@@ -20,7 +20,7 @@ from PIL import Image, ImageChops
 from accounts.models import Profile
 from admin.models import AdminAuditEvent
 from properties.image_processing import watermark_image
-from properties.models import Amenity, Location, Property, PropertyBrokerAssignment, PropertyImage
+from properties.models import Amenity, Location, Property, PropertyAgentAssignment, PropertyImage
 from properties.serializers import LocationSerializer
 
 
@@ -442,55 +442,55 @@ class PublicPropertyApiTests(APITestCase):
         self.assertEqual(filtered.data['results'][0]['slug'], self.property.slug)
         self.assertCountEqual([item['id'] for item in cities.data], [city.id, other_city.id])
 
-    def test_broker_managed_listing_exposes_the_approved_brokers_public_account_contacts(self):
+    def test_agent_managed_listing_exposes_the_approved_agents_public_account_contacts(self):
         country = Location.objects.create(
-            name='Public Broker Contact Country',
-            slug='public-broker-contact-country',
+            name='Public Agent Contact Country',
+            slug='public-agent-contact-country',
             location_type=Location.Type.COUNTRY,
         )
         city = Location.objects.create(
-            name='Public Broker Contact City',
-            slug='public-broker-contact-city',
+            name='Public Agent Contact City',
+            slug='public-agent-contact-city',
             location_type=Location.Type.CITY,
             parent=country,
         )
-        broker = get_user_model().objects.create_user(
-            username='public-listing-broker',
-            email='broker@example.com',
+        agent = get_user_model().objects.create_user(
+            username='public-listing-agent',
+            email='agent@example.com',
         )
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=city,
             phone='+251911222333',
         )
-        self.property.submitted_by = broker
+        self.property.submitted_by = agent
         self.property.contact_phone = '+251911222333'
-        self.property.contact_email = 'broker@example.com'
+        self.property.contact_email = 'agent@example.com'
         self.property.save(update_fields=['submitted_by', 'contact_phone', 'contact_email'])
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=agent)
 
         response = self.client.get(reverse('api:property-list'))
         result = response.data['results'][0]
 
         self.assertEqual(result['public_contact_phone'], '+251911222333')
-        self.assertEqual(result['public_contact_email'], 'broker@example.com')
+        self.assertEqual(result['public_contact_email'], 'agent@example.com')
 
-    def test_unapproved_broker_contact_is_not_public(self):
-        broker = get_user_model().objects.create_user(
-            username='unapproved-listing-broker',
-            email='private-broker@example.com',
+    def test_unapproved_agent_contact_is_not_public(self):
+        agent = get_user_model().objects.create_user(
+            username='unapproved-listing-agent',
+            email='private-agent@example.com',
         )
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=False,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=False,
             phone='+251911222333',
         )
-        self.property.submitted_by = broker
+        self.property.submitted_by = agent
         self.property.contact_phone = '+251911222333'
-        self.property.contact_email = 'private-broker@example.com'
+        self.property.contact_email = 'private-agent@example.com'
         self.property.save(update_fields=['submitted_by', 'contact_phone', 'contact_email'])
 
         response = self.client.get(reverse('api:property-list'))
@@ -946,11 +946,11 @@ class ManagedPropertyApiTests(APITestCase):
         Profile.objects.create(user=self.other_owner, role=Profile.Role.OWNER)
         self.customer = user_model.objects.create_user(username='listing-customer')
         Profile.objects.create(user=self.customer, role=Profile.Role.CUSTOMER)
-        self.manager = user_model.objects.create_user(username='listing-broker')
+        self.manager = user_model.objects.create_user(username='listing-agent')
         Profile.objects.create(
             user=self.manager,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
@@ -968,7 +968,7 @@ class ManagedPropertyApiTests(APITestCase):
             submitted_by=self.manager,
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=self.manager)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=self.manager)
 
     def property_payload(self, **overrides):
         payload = {
@@ -987,7 +987,7 @@ class ManagedPropertyApiTests(APITestCase):
         payload.update(overrides)
         return payload
 
-    def test_broker_can_create_in_assigned_subcity_and_gets_only_its_viewing_assignment(self):
+    def test_agent_can_create_in_assigned_subcity_and_gets_only_its_viewing_assignment(self):
         self.client.force_authenticate(user=self.manager)
 
         response = self.client.post(
@@ -1000,13 +1000,13 @@ class ManagedPropertyApiTests(APITestCase):
         created_property = Property.objects.get(pk=response.data['id'])
         self.assertEqual(created_property.administrative_location, self.subcity)
         self.assertTrue(
-            PropertyBrokerAssignment.objects.filter(
+            PropertyAgentAssignment.objects.filter(
                 property=created_property,
-                broker=self.manager,
+                agent=self.manager,
             ).exists()
         )
 
-    def test_managed_listing_includes_images_for_broker_card_view(self):
+    def test_managed_listing_includes_images_for_agent_card_view(self):
         self.client.force_authenticate(user=self.manager)
 
         response = self.client.get(reverse('api:managed-property-list'))
@@ -1015,7 +1015,7 @@ class ManagedPropertyApiTests(APITestCase):
         listing = next(item for item in response.data['results'] if item['id'] == self.property.pk)
         self.assertEqual(listing['images'], [])
 
-    def test_broker_cannot_create_or_access_property_outside_assigned_city(self):
+    def test_agent_cannot_create_or_access_property_outside_assigned_city(self):
         outside_property = Property.objects.create(
             title='Outside city property',
             slug='outside-city-managed-property',
@@ -1197,7 +1197,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertIsNone(self.property.latitude)
         self.assertIsNone(self.property.longitude)
 
-    def test_only_brokers_can_publish_available_properties(self):
+    def test_only_agents_can_publish_available_properties(self):
         self.property.publication_status = Property.PublicationStatus.DRAFT
         self.property.save(update_fields=['publication_status'])
         publication_url = reverse('api:managed-property-publication', kwargs={'pk': self.property.pk})
@@ -1215,14 +1215,14 @@ class ManagedPropertyApiTests(APITestCase):
             {'publication_status': Property.PublicationStatus.PUBLISHED},
             format='json',
         )
-        broker = get_user_model().objects.create_user(username='listing-moderation-broker')
+        agent = get_user_model().objects.create_user(username='listing-moderation-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
         published = self.client.post(
             publication_url,
             {'publication_status': Property.PublicationStatus.PUBLISHED},
@@ -1308,7 +1308,7 @@ class ManagedPropertyApiTests(APITestCase):
             submitted_by=self.manager,
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
-        PropertyBrokerAssignment.objects.create(property=legacy_rental, broker=self.manager)
+        PropertyAgentAssignment.objects.create(property=legacy_rental, agent=self.manager)
         self.client.force_authenticate(user=self.manager)
 
         response = self.client.patch(
@@ -1321,7 +1321,7 @@ class ManagedPropertyApiTests(APITestCase):
         legacy_rental.refresh_from_db()
         self.assertEqual(legacy_rental.rental_frequency, Property.RentalFrequency.WEEKLY)
 
-    def test_authorized_broker_can_create_property_without_coordinates(self):
+    def test_authorized_agent_can_create_property_without_coordinates(self):
         self.client.force_authenticate(user=self.manager)
 
         response = self.client.post(
@@ -1365,7 +1365,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertIn('administrative_location', response.data['error']['details'])
         self.assertFalse(Property.objects.filter(title='New owner listing').exists())
 
-    def test_broker_must_select_a_subcity_not_the_assigned_city(self):
+    def test_agent_must_select_a_subcity_not_the_assigned_city(self):
         self.client.force_authenticate(user=self.manager)
 
         city_only = self.client.post(
@@ -1386,7 +1386,7 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertIn('administrative_location', city_only.data['error']['details'])
         self.assertEqual(selected_subcity.status_code, 201)
 
-    def test_broker_cannot_create_a_listing_outside_its_assigned_city_hierarchy(self):
+    def test_agent_cannot_create_a_listing_outside_its_assigned_city_hierarchy(self):
         administration = Location.objects.create(
             name='Test City Administration With Subcities',
             slug='test-city-administration-with-subcities',
@@ -1439,15 +1439,15 @@ class ManagedPropertyApiTests(APITestCase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertTrue(Property.objects.filter(title='Must not be published').exists())
 
-    def test_broker_can_manage_own_listing_but_not_another_brokers_listing(self):
-        broker = get_user_model().objects.create_user(
-            username='crud-broker',
-            email='crud-broker@example.com',
+    def test_agent_can_manage_own_listing_but_not_another_agents_listing(self):
+        agent = get_user_model().objects.create_user(
+            username='crud-agent',
+            email='crud-agent@example.com',
         )
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
             phone='+251911222333',
             management_permissions=[
@@ -1455,11 +1455,11 @@ class ManagedPropertyApiTests(APITestCase):
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
             ],
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
 
         created = self.client.post(
             reverse('api:managed-property-list'),
-            self.property_payload(title='Broker listing', contact_phone='', contact_email=''),
+            self.property_payload(title='Agent listing', contact_phone='', contact_email=''),
             format='json',
         )
         update = self.client.patch(
@@ -1467,7 +1467,7 @@ class ManagedPropertyApiTests(APITestCase):
             {'description': 'Updated by the listing agent.'},
             format='json',
         )
-        other_broker_update = self.client.patch(
+        other_agent_update = self.client.patch(
             reverse('api:managed-property-detail', kwargs={'pk': self.property.pk}),
             {'status': 'inactive'},
             format='json',
@@ -1475,14 +1475,14 @@ class ManagedPropertyApiTests(APITestCase):
 
         self.assertEqual(update.status_code, 200)
         self.assertEqual(created.status_code, 201)
-        self.assertEqual(other_broker_update.status_code, 404)
+        self.assertEqual(other_agent_update.status_code, 404)
         self.assertEqual(created.data['publication_status'], Property.PublicationStatus.PUBLISHED)
-        self.assertEqual(created.data['contact_phone'], broker.profile.phone)
-        self.assertEqual(created.data['contact_email'], broker.email)
+        self.assertEqual(created.data['contact_phone'], agent.profile.phone)
+        self.assertEqual(created.data['contact_email'], agent.email)
         public_list = self.client.get(reverse('api:property-list'))
         public_listing = next(item for item in public_list.data['results'] if item['slug'] == created.data['slug'])
-        self.assertEqual(public_listing['public_contact_phone'], broker.profile.phone)
-        self.assertEqual(public_listing['public_contact_email'], broker.email)
+        self.assertEqual(public_listing['public_contact_phone'], agent.profile.phone)
+        self.assertEqual(public_listing['public_contact_email'], agent.email)
 
     def test_registered_customer_cannot_create_or_manage_submitted_listings(self):
         self.client.force_authenticate(user=self.customer)
@@ -1665,17 +1665,17 @@ class ManagedLocationApiTests(APITestCase):
             ).exists()
         )
 
-    def test_city_with_a_broker_assignment_cannot_be_deleted(self):
+    def test_city_with_a_agent_assignment_cannot_be_deleted(self):
         city = Location.objects.create(
-            name='Broker Bound City',
-            slug='broker-bound-city',
+            name='Agent Bound City',
+            slug='agent-bound-city',
             location_type=Location.Type.CITY,
             parent=self.country,
         )
-        broker = get_user_model().objects.create_user(username='city-bound-broker')
+        agent = get_user_model().objects.create_user(username='city-bound-agent')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
+            user=agent,
+            role=Profile.Role.AGENT,
             assigned_city=city,
         )
         self.client.force_authenticate(user=self.location_admin)
@@ -1717,20 +1717,20 @@ class ManagedLocationApiTests(APITestCase):
         self.assertTrue(subcity.is_active)
 
     def test_location_manager_can_create_deactivate_and_reorder_a_subcity(self):
-        broker_city = Location.objects.create(
-            name='Broker Assigned City',
-            slug='broker-assigned-city',
+        agent_city = Location.objects.create(
+            name='Agent Assigned City',
+            slug='agent-assigned-city',
             location_type=Location.Type.CITY,
             parent=self.country,
         )
-        broker_user = get_user_model().objects.create_user(username='subcity-manager')
+        agent_user = get_user_model().objects.create_user(username='subcity-manager')
         Profile.objects.create(
-            user=broker_user,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
-            assigned_city=broker_city,
+            user=agent_user,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
+            assigned_city=agent_city,
         )
-        self.client.force_authenticate(user=broker_user)
+        self.client.force_authenticate(user=agent_user)
 
         created = self.client.post(
             reverse('api:managed-location-list'),
@@ -1750,7 +1750,7 @@ class ManagedLocationApiTests(APITestCase):
         )
         public_children = self.client.get(
             reverse('api:location-list'),
-            {'parent_id': broker_city.pk},
+            {'parent_id': agent_city.pk},
         )
         reactivated = self.client.patch(
             reverse('api:managed-location-detail', kwargs={'pk': created.data['id']}),
@@ -1759,7 +1759,7 @@ class ManagedLocationApiTests(APITestCase):
         )
         active_children = self.client.get(
             reverse('api:location-list'),
-            {'parent_id': broker_city.pk},
+            {'parent_id': agent_city.pk},
         )
 
         self.assertEqual(updated.status_code, 200)
@@ -1770,27 +1770,27 @@ class ManagedLocationApiTests(APITestCase):
         self.assertTrue(reactivated.data['is_active'])
         self.assertEqual([item['id'] for item in active_children.data], [created.data['id']])
 
-    def test_broker_location_management_is_limited_to_assigned_city(self):
+    def test_agent_location_management_is_limited_to_assigned_city(self):
         assigned_city = Location.objects.create(
-            name='Scoped Broker City',
-            slug='scoped-broker-city',
+            name='Scoped Agent City',
+            slug='scoped-agent-city',
             location_type=Location.Type.CITY,
             parent=self.country,
         )
         foreign_city = Location.objects.create(
-            name='Foreign Broker City',
-            slug='foreign-broker-city',
+            name='Foreign Agent City',
+            slug='foreign-agent-city',
             location_type=Location.Type.CITY,
             parent=self.country,
         )
-        broker_user = get_user_model().objects.create_user(username='scoped-subcity-manager')
+        agent_user = get_user_model().objects.create_user(username='scoped-subcity-manager')
         Profile.objects.create(
-            user=broker_user,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent_user,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=assigned_city,
         )
-        self.client.force_authenticate(user=broker_user)
+        self.client.force_authenticate(user=agent_user)
 
         locations = self.client.get(reverse('api:managed-location-list'), {'all': '1'})
         rejected_create = self.client.post(
@@ -1904,11 +1904,11 @@ class PropertyImageApiTests(APITestCase):
         )
         owner = get_user_model().objects.create_user(username='image-owner')
         Profile.objects.create(user=owner, role=Profile.Role.OWNER)
-        broker = get_user_model().objects.create_user(username='image-manager')
+        agent = get_user_model().objects.create_user(username='image-manager')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=city,
             management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
         )
@@ -1922,10 +1922,10 @@ class PropertyImageApiTests(APITestCase):
             price=400000,
             description='Image test listing.',
             owner=owner,
-            submitted_by=broker,
+            submitted_by=agent,
         )
-        PropertyBrokerAssignment.objects.create(property=self.property, broker=broker)
-        self.client.force_authenticate(user=broker)
+        PropertyAgentAssignment.objects.create(property=self.property, agent=agent)
+        self.client.force_authenticate(user=agent)
 
     def make_image(self, name='property.png', size=(300, 200), compress_level=6, image_format='PNG'):
         buffer = BytesIO()
@@ -2165,7 +2165,7 @@ class PropertyImageApiTests(APITestCase):
         self.assertFalse(PropertyImage.objects.get(pk=first.data['id']).is_primary)
         self.assertTrue(PropertyImage.objects.get(pk=second.data['id']).is_primary)
 
-    def test_approved_broker_cannot_manage_images_registered_by_another_user(self):
+    def test_approved_agent_cannot_manage_images_registered_by_another_user(self):
         other_property = Property.objects.create(
             title='Other image property',
             location='Submitted location',

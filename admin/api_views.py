@@ -13,7 +13,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from accounts.models import Profile, TabSessionToken
 from accounts.permissions import (
     HasManagementPermission,
-    IsBrokerAccountManager,
+    IsAgentAccountManager,
     has_management_permission,
 )
 from accounts.serializers import (
@@ -24,7 +24,7 @@ from admin.audit import record_admin_action
 from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, PublicInformationPage
 from admin.serializers import (
     AdminAuditEventSerializer,
-    AdminBrokerAssignmentSerializer,
+    AdminAgentAssignmentSerializer,
     AdminListingReportSerializer,
     AdminPropertySerializer,
     AdminUserSerializer,
@@ -35,7 +35,7 @@ from admin.serializers import (
     PublicListingReportSerializer,
     PublicReportReceiptSerializer,
 )
-from properties.models import ListingReport, Property, PropertyBrokerAssignment
+from properties.models import ListingReport, Property, PropertyAgentAssignment
 
 
 User = get_user_model()
@@ -211,7 +211,7 @@ class AdminUserListView(generics.ListAPIView):
     serializer_class = AdminUserSerializer
     queryset = User.objects.none()
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'profile__role', 'profile__broker_approved']
+    filterset_fields = ['is_active', 'profile__role', 'profile__agent_approved']
     search_fields = ['username', 'email', 'first_name', 'last_name']
     ordering_fields = ['date_joined', 'username']
     ordering = ['-date_joined']
@@ -222,7 +222,7 @@ class AdminUserListView(generics.ListAPIView):
         return User.objects.filter(
             is_staff=False,
             is_superuser=False,
-            profile__role=Profile.Role.BROKER,
+            profile__role=Profile.Role.AGENT,
         ).select_related('profile').order_by(*self.ordering)
 
 
@@ -239,7 +239,7 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
         return User.objects.filter(
             is_staff=False,
             is_superuser=False,
-            profile__role=Profile.Role.BROKER,
+            profile__role=Profile.Role.AGENT,
         ).select_related('profile')
 
     @transaction.atomic
@@ -251,7 +251,7 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
             'last_name': user.last_name,
             'is_active': user.is_active,
             'role': getattr(getattr(user, 'profile', None), 'role', None),
-            'broker_approved': getattr(getattr(user, 'profile', None), 'broker_approved', False),
+            'agent_approved': getattr(getattr(user, 'profile', None), 'agent_approved', False),
         }
         updated = serializer.save()
         profile = getattr(updated, 'profile', None)
@@ -261,7 +261,7 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
             'last_name': updated.last_name,
             'is_active': updated.is_active,
             'role': getattr(profile, 'role', None),
-            'broker_approved': getattr(profile, 'broker_approved', False),
+            'agent_approved': getattr(profile, 'agent_approved', False),
         }
         changes = {}
         for key, value in after.items():
@@ -286,14 +286,14 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
 
 
 class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsBrokerAccountManager]
+    permission_classes = [IsAgentAccountManager]
     serializer_class = DelegatedAccountSerializer
 
     def get_queryset(self):
         return User.objects.filter(
             is_staff=False,
             is_superuser=False,
-            profile__role=Profile.Role.BROKER,
+            profile__role=Profile.Role.AGENT,
         ).select_related('profile', 'profile__assigned_city').order_by('username')
 
     @transaction.atomic
@@ -307,7 +307,7 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
         profile = user.profile
         record_admin_action(
             request.user,
-            action='broker_account_created',
+            action='agent_account_created',
             object_type='user',
             object_id=user.pk,
             changes={
@@ -315,7 +315,7 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
                 'assigned_city_id': profile.assigned_city_id,
                 'management_permissions': profile.management_permissions,
                 'is_active': user.is_active,
-                'broker_onboarding_required': profile.broker_onboarding_required,
+                'agent_onboarding_required': profile.agent_onboarding_required,
             },
         )
         return Response(self.get_serializer(user).data, status=status.HTTP_201_CREATED)
@@ -329,7 +329,7 @@ class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):
 
 
 class AdminDelegatedAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsBrokerAccountManager]
+    permission_classes = [IsAgentAccountManager]
     serializer_class = DelegatedAccountSerializer
     http_method_names = ['get', 'patch', 'delete', 'head', 'options']
 
@@ -337,7 +337,7 @@ class AdminDelegatedAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
         return User.objects.filter(
             is_staff=False,
             is_superuser=False,
-            profile__role=Profile.Role.BROKER,
+            profile__role=Profile.Role.AGENT,
         ).select_related('profile', 'profile__assigned_city')
 
     @transaction.atomic
@@ -356,8 +356,8 @@ class AdminDelegatedAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
             'assigned_city_id': before_profile.assigned_city_id,
             'management_permissions': list(before_profile.management_permissions),
             'is_active': user.is_active,
-            'broker_onboarding_required': before_profile.broker_onboarding_required,
-            'broker_password_changed': before_profile.broker_password_changed,
+            'agent_onboarding_required': before_profile.agent_onboarding_required,
+            'agent_password_changed': before_profile.agent_password_changed,
         }
         updated = serializer.save()
         after_profile = updated.profile
@@ -373,8 +373,8 @@ class AdminDelegatedAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
             'assigned_city_id': after_profile.assigned_city_id,
             'management_permissions': list(after_profile.management_permissions),
             'is_active': updated.is_active,
-            'broker_onboarding_required': after_profile.broker_onboarding_required,
-            'broker_password_changed': after_profile.broker_password_changed,
+            'agent_onboarding_required': after_profile.agent_onboarding_required,
+            'agent_password_changed': after_profile.agent_password_changed,
         }
         changes = {}
         if before['username'] != after['username']:
@@ -386,15 +386,15 @@ class AdminDelegatedAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
             'assigned_city_id',
             'management_permissions',
             'is_active',
-            'broker_onboarding_required',
-            'broker_password_changed',
+            'agent_onboarding_required',
+            'agent_password_changed',
         ):
             if before[key] != after[key]:
                 changes[key] = {'from': before[key], 'to': after[key]}
         if changes:
             record_admin_action(
                 self.request.user,
-                action='broker_account_updated',
+                action='agent_account_updated',
                 object_type='user',
                 object_id=updated.pk,
                 changes=changes,
@@ -409,7 +409,7 @@ class AdminDelegatedAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         record_admin_action(
             self.request.user,
-            action='broker_account_deleted',
+            action='agent_account_deleted',
             object_type='user',
             object_id=instance.pk,
             changes={'username': instance.username},
@@ -437,7 +437,7 @@ class AdminPropertyListView(generics.ListAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return Property.objects.none()
         return Property.objects.filter(
-            service_type=Property.ServiceType.BROKER_MANAGED,
+            service_type=Property.ServiceType.AGENT_MANAGED,
         ).select_related('owner', 'submitted_by').order_by(*self.ordering)
 
 
@@ -458,7 +458,7 @@ class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return Property.objects.none()
         return Property.objects.filter(
-            service_type=Property.ServiceType.BROKER_MANAGED,
+            service_type=Property.ServiceType.AGENT_MANAGED,
         ).select_related('owner', 'submitted_by')
 
     @transaction.atomic
@@ -510,19 +510,19 @@ class AdminPropertyDetailView(generics.RetrieveUpdateAPIView):
         return super().patch(request, *args, **kwargs)
 
 
-class AdminBrokerAssignmentListCreateView(generics.ListCreateAPIView):
+class AdminAgentAssignmentListCreateView(generics.ListCreateAPIView):
     permission_classes = [HasManagementPermission]
-    required_management_permission = Profile.Permission.BROKERS_ASSIGN
-    serializer_class = AdminBrokerAssignmentSerializer
-    queryset = PropertyBrokerAssignment.objects.none()
+    required_management_permission = Profile.Permission.AGENTS_ASSIGN
+    serializer_class = AdminAgentAssignmentSerializer
+    queryset = PropertyAgentAssignment.objects.none()
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
-            return PropertyBrokerAssignment.objects.none()
-        return PropertyBrokerAssignment.objects.filter(
+            return PropertyAgentAssignment.objects.none()
+        return PropertyAgentAssignment.objects.filter(
             property_id=self.kwargs['property_id'],
-            property__service_type=Property.ServiceType.BROKER_MANAGED,
-        ).select_related('broker', 'granted_by')
+            property__service_type=Property.ServiceType.AGENT_MANAGED,
+        ).select_related('agent', 'granted_by')
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
@@ -531,51 +531,51 @@ class AdminBrokerAssignmentListCreateView(generics.ListCreateAPIView):
         property_obj = get_object_or_404(
             Property.objects.select_for_update(),
             pk=self.kwargs['property_id'],
-            service_type=Property.ServiceType.BROKER_MANAGED,
+            service_type=Property.ServiceType.AGENT_MANAGED,
         )
-        broker = serializer.validated_data['broker']
-        assignment, created = PropertyBrokerAssignment.objects.get_or_create(
+        agent = serializer.validated_data['agent']
+        assignment, created = PropertyAgentAssignment.objects.get_or_create(
             property=property_obj,
-            broker=broker,
+            agent=agent,
             defaults={'granted_by': request.user},
         )
         serializer.instance = assignment
         if created:
             record_admin_action(
                 request.user,
-                action='broker_assigned',
+                action='agent_assigned',
                 object_type='property',
                 object_id=property_obj.pk,
-                changes={'broker_id': broker.pk, 'broker_username': broker.get_username()},
+                changes={'agent_id': agent.pk, 'agent_username': agent.get_username()},
             )
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class AdminBrokerAssignmentDetailView(generics.DestroyAPIView):
+class AdminAgentAssignmentDetailView(generics.DestroyAPIView):
     permission_classes = [HasManagementPermission]
-    required_management_permission = Profile.Permission.BROKERS_ASSIGN
-    serializer_class = AdminBrokerAssignmentSerializer
-    queryset = PropertyBrokerAssignment.objects.none()
-    lookup_field = 'broker_id'
-    lookup_url_kwarg = 'broker_id'
+    required_management_permission = Profile.Permission.AGENTS_ASSIGN
+    serializer_class = AdminAgentAssignmentSerializer
+    queryset = PropertyAgentAssignment.objects.none()
+    lookup_field = 'agent_id'
+    lookup_url_kwarg = 'agent_id'
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
-            return PropertyBrokerAssignment.objects.none()
-        return PropertyBrokerAssignment.objects.filter(
+            return PropertyAgentAssignment.objects.none()
+        return PropertyAgentAssignment.objects.filter(
             property_id=self.kwargs['property_id'],
-            property__service_type=Property.ServiceType.BROKER_MANAGED,
-        ).select_related('broker')
+            property__service_type=Property.ServiceType.AGENT_MANAGED,
+        ).select_related('agent')
 
     @transaction.atomic
     def perform_destroy(self, instance):
         record_admin_action(
             self.request.user,
-            action='broker_unassigned',
+            action='agent_unassigned',
             object_type='property',
             object_id=instance.property_id,
-            changes={'broker_id': instance.broker_id, 'broker_username': instance.broker.get_username()},
+            changes={'agent_id': instance.agent_id, 'agent_username': instance.agent.get_username()},
         )
         instance.delete()
 

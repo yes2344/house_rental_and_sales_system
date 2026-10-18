@@ -12,24 +12,24 @@ from PIL import Image
 from PIL import Image
 
 from accounts.models import Profile
-from accounts.permissions import BROKER_WORK_PERMISSIONS
+from accounts.permissions import AGENT_WORK_PERMISSIONS
 from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
-from properties.models import Location, ListingReport, Property, PropertyBrokerAssignment
+from properties.models import Location, ListingReport, Property, PropertyAgentAssignment
 
 
 User = get_user_model()
 
 
 class AdminApiTests(APITestCase):
-    def create_broker(self, username):
-        broker = User.objects.create_user(username=username, email=f'{username}@example.com')
+    def create_agent(self, username):
+        agent = User.objects.create_user(username=username, email=f'{username}@example.com')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             assigned_city=self.city,
         )
-        return broker
+        return agent
 
     def setUp(self):
         country = Location.objects.create(
@@ -71,14 +71,14 @@ class AdminApiTests(APITestCase):
         )
 
     def test_django_superuser_has_same_administrator_scope_as_delegated_admin(self):
-        broker = User.objects.create_user(
-            username='django-admin-managed-broker',
-            email='managed-broker@example.com',
+        agent = User.objects.create_user(
+            username='django-admin-managed-agent',
+            email='managed-agent@example.com',
         )
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
         )
         delegated_admin = User.objects.create_user(
             username='another-delegated-admin',
@@ -92,7 +92,7 @@ class AdminApiTests(APITestCase):
         self.client.force_authenticate(user=self.admin_user)
 
         me = self.client.get(reverse('api:me'))
-        broker_accounts = self.client.get(reverse('api:admin-delegated-account-list'))
+        agent_accounts = self.client.get(reverse('api:admin-delegated-account-list'))
         users = self.client.get(reverse('api:admin-user-list'))
         listings = self.client.get(reverse('api:managed-property-list'))
         legacy_dashboard = self.client.get('/admin-portal/')
@@ -115,7 +115,7 @@ class AdminApiTests(APITestCase):
                 Profile.Permission.STAFF_MANAGE,
             ],
         )
-        self.assertEqual([account['id'] for account in broker_accounts.data['results']], [broker.pk])
+        self.assertEqual([account['id'] for account in agent_accounts.data['results']], [agent.pk])
         self.assertEqual(users.status_code, 403)
         self.assertEqual(listings.status_code, 200)
         self.assertEqual(
@@ -131,8 +131,8 @@ class AdminApiTests(APITestCase):
         self.assertEqual(legacy_properties.status_code, 302)
         self.assertEqual(legacy_properties.url, '/admin/login/')
 
-    def test_application_admin_can_manage_brokers_only_through_broker_account_endpoint(self):
-        broker = self.create_broker('managed-contact-broker')
+    def test_application_admin_can_manage_agents_only_through_agent_account_endpoint(self):
+        agent = self.create_agent('managed-contact-agent')
         self.client.force_authenticate(user=self.admin_user)
 
         customer_update = self.client.patch(
@@ -140,55 +140,55 @@ class AdminApiTests(APITestCase):
             {'email': 'updated-customer@example.com'},
             format='json',
         )
-        broker_user_update = self.client.patch(
-            reverse('api:admin-user-detail', kwargs={'pk': broker.pk}),
-            {'email': 'updated-broker@example.com'},
+        agent_user_update = self.client.patch(
+            reverse('api:admin-user-detail', kwargs={'pk': agent.pk}),
+            {'email': 'updated-agent@example.com'},
             format='json',
         )
-        broker_update = self.client.patch(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk}),
-            {'email': 'updated-broker@example.com'},
+        agent_update = self.client.patch(
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': agent.pk}),
+            {'email': 'updated-agent@example.com'},
             format='json',
         )
         self.assertEqual(customer_update.status_code, 403)
-        self.assertEqual(broker_user_update.status_code, 403)
-        self.assertEqual(broker_update.status_code, 200)
+        self.assertEqual(agent_user_update.status_code, 403)
+        self.assertEqual(agent_update.status_code, 200)
 
     def test_platform_owner_can_grant_and_revoke_assigned_submission_review_permission(self):
-        broker = self.create_broker('submission-review-permission-agent')
-        account_url = reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk})
+        agent = self.create_agent('submission-review-permission-agent')
+        account_url = reverse('api:admin-delegated-account-detail', kwargs={'pk': agent.pk})
         self.client.force_authenticate(user=self.admin_user)
 
         granted = self.client.patch(
             account_url,
             {
                 'management_permissions': [
-                    *sorted(BROKER_WORK_PERMISSIONS),
+                    *sorted(AGENT_WORK_PERMISSIONS),
                     Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
                 ],
             },
             format='json',
         )
-        broker.profile.refresh_from_db()
+        agent.profile.refresh_from_db()
         self.assertEqual(granted.status_code, 200, granted.data)
         self.assertIn(
             Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
-            broker.profile.management_permissions,
+            agent.profile.management_permissions,
         )
 
         revoked = self.client.patch(
             account_url,
-            {'management_permissions': sorted(BROKER_WORK_PERMISSIONS)},
+            {'management_permissions': sorted(AGENT_WORK_PERMISSIONS)},
             format='json',
         )
-        broker.profile.refresh_from_db()
+        agent.profile.refresh_from_db()
         self.assertEqual(revoked.status_code, 200, revoked.data)
         self.assertNotIn(
             Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
-            broker.profile.management_permissions,
+            agent.profile.management_permissions,
         )
 
-    def test_brokerage_contact_is_public_but_brokers_cannot_manage_platform_settings(self):
+    def test_brokerage_contact_is_public_but_agents_cannot_manage_platform_settings(self):
         public = self.client.get(reverse('api:brokerage-contact'))
         self.assertEqual(public.status_code, 200)
         self.assertEqual(public.data['site_name'], 'habeshapropertycenter')
@@ -237,7 +237,7 @@ class AdminApiTests(APITestCase):
         )
         self.assertEqual(administrator_update.status_code, 200)
         self.assertTrue(BrokerageSettings.objects.exists())
-        contact_manager = self.create_broker('brokerage-contact-broker')
+        contact_manager = self.create_agent('brokerage-contact-agent')
         self.client.force_authenticate(user=contact_manager)
         updated = self.client.patch(
             reverse('api:brokerage-contact'),
@@ -448,7 +448,7 @@ class AdminApiTests(APITestCase):
                 self.assertEqual(public.data['results'][0]['text'], 'Read the update and see the attached image.')
                 self.assertEqual(public.data['results'][0]['image'], created.data['image'])
 
-    def test_brokers_cannot_manage_platform_homepage_notes(self):
+    def test_agents_cannot_manage_platform_homepage_notes(self):
         note_url = reverse('api:managed-homepage-note-list')
         payload = {
             'title': 'Welcome',
@@ -471,26 +471,26 @@ class AdminApiTests(APITestCase):
         denied = self.client.post(note_url, payload, format='json')
         self.assertEqual(denied.status_code, 403)
 
-        self.client.force_authenticate(user=self.create_broker('homepage-note-broker'))
+        self.client.force_authenticate(user=self.create_agent('homepage-note-agent'))
         created = self.client.post(note_url, payload, format='json')
         self.assertEqual(created.status_code, 403)
         self.assertFalse(HomepageNote.objects.exists())
 
-    def test_approved_broker_can_manage_brokerage_contact_and_published_homepage_announcements(self):
-        broker = User.objects.create_user(username='approved-broker-content-manager')
+    def test_approved_agent_can_manage_brokerage_contact_and_published_homepage_announcements(self):
+        agent = User.objects.create_user(username='approved-agent-content-manager')
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
 
         contact = self.client.patch(
             reverse('api:brokerage-contact'),
             {
-                'business_name': 'Broker-managed Realty',
+                'business_name': 'Agent-managed Realty',
                 'phone': '+251900000001',
-                'email': 'broker@example.com',
+                'email': 'agent@example.com',
                 'social_links': [
                     {
                         'platform': 'whatsapp',
@@ -505,8 +505,8 @@ class AdminApiTests(APITestCase):
         announcement = self.client.post(
             reverse('api:managed-homepage-note-list'),
             {
-                'title': 'Broker announcement',
-                'text': 'A message written by the authorized broker.',
+                'title': 'Agent announcement',
+                'text': 'A message written by the authorized agent.',
                 'is_published': True,
                 'display_order': 0,
             },
@@ -523,7 +523,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(public_contact.status_code, 200)
         self.assertEqual(public_announcements.data['results'], [])
 
-    def test_social_links_are_broker_managed_and_only_enabled_https_links_are_public(self):
+    def test_social_links_are_agent_managed_and_only_enabled_https_links_are_public(self):
         contact_url = reverse('api:brokerage-contact')
         self.client.force_authenticate(user=self.customer)
         denied = self.client.patch(
@@ -551,8 +551,8 @@ class AdminApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(denied.status_code, 403)
-        social_broker = self.create_broker('social-link-broker')
-        self.client.force_authenticate(user=social_broker)
+        social_agent = self.create_agent('social-link-agent')
+        self.client.force_authenticate(user=social_agent)
         updated = self.client.patch(
             contact_url,
             {
@@ -570,7 +570,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(public.data['social_links'], [])
         self.assertNotIn('facebook_url', public.data)
 
-        self.client.force_authenticate(user=social_broker)
+        self.client.force_authenticate(user=social_agent)
         invalid = self.client.patch(
             contact_url,
             {'social_links': [{'platform': 'facebook', 'url': 'http://facebook.com/example', 'is_enabled': True, 'display_order': 0}]},
@@ -579,7 +579,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(invalid.status_code, 403)
 
     def test_platform_owner_can_grant_settings_access_and_social_links_upsert_without_deleting_disabled_urls(self):
-        broker = self.create_broker('social-settings-agent')
+        agent = self.create_agent('social-settings-agent')
         delegated_admin = User.objects.create_user(
             username='social-settings-delegated-admin',
             is_staff=True,
@@ -589,7 +589,7 @@ class AdminApiTests(APITestCase):
             role=Profile.Role.ADMINISTRATOR,
             management_permissions=[Profile.Permission.STAFF_MANAGE],
         )
-        account_url = reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk})
+        account_url = reverse('api:admin-delegated-account-detail', kwargs={'pk': agent.pk})
         self.client.force_authenticate(user=delegated_admin)
         denied_grant = self.client.patch(
             account_url,
@@ -603,7 +603,7 @@ class AdminApiTests(APITestCase):
             account_url,
             {
                 'management_permissions': [
-                    *sorted(BROKER_WORK_PERMISSIONS),
+                    *sorted(AGENT_WORK_PERMISSIONS),
                     Profile.Permission.SETTINGS_MANAGE,
                 ],
             },
@@ -613,7 +613,7 @@ class AdminApiTests(APITestCase):
         self.assertIn(Profile.Permission.SETTINGS_MANAGE, granted.data['management_permissions'])
 
         contact_url = reverse('api:brokerage-contact')
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
         initial_links = self.client.patch(
             contact_url,
             {
@@ -664,7 +664,7 @@ class AdminApiTests(APITestCase):
             ['facebook'],
         )
         self.assertNotIn('x', [link['platform'] for link in public_links.data['social_links']])
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
         private_links = self.client.get(contact_url)
         self.assertIn(
             'https://x.com/habasha-center',
@@ -672,10 +672,10 @@ class AdminApiTests(APITestCase):
         )
 
     def test_social_media_x_requires_https(self):
-        broker = self.create_broker('invalid-x-settings-agent')
-        broker.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
-        broker.profile.save(update_fields=['management_permissions'])
-        self.client.force_authenticate(user=broker)
+        agent = self.create_agent('invalid-x-settings-agent')
+        agent.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
+        agent.profile.save(update_fields=['management_permissions'])
+        self.client.force_authenticate(user=agent)
 
         response = self.client.patch(
             reverse('api:brokerage-contact'),
@@ -695,7 +695,7 @@ class AdminApiTests(APITestCase):
         self.assertFalse(SocialMediaLink.objects.filter(platform='x').exists())
 
     def test_non_owner_superuser_cannot_manage_or_grant_platform_settings(self):
-        broker = self.create_broker('non-owner-settings-agent')
+        agent = self.create_agent('non-owner-settings-agent')
         non_owner = User.objects.create_superuser(
             username='additional-platform-superuser',
             email='additional-superuser@example.com',
@@ -710,7 +710,7 @@ class AdminApiTests(APITestCase):
             format='json',
         )
         denied_grant = self.client.patch(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk}),
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': agent.pk}),
             {'management_permissions': [Profile.Permission.SETTINGS_MANAGE]},
             format='json',
         )
@@ -742,7 +742,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(settings.platform_owner_id, next_owner.pk)
 
-    def test_application_user_management_cannot_access_non_broker_or_admin_accounts(self):
+    def test_application_user_management_cannot_access_non_agent_or_admin_accounts(self):
         self.client.force_authenticate(user=self.admin_user)
         escalation = self.client.patch(
             reverse('api:admin-user-detail', kwargs={'pk': self.customer.pk}),
@@ -796,46 +796,46 @@ class AdminApiTests(APITestCase):
         browser_client.force_login(self.admin_user)
         self.assertEqual(browser_client.get('/admin/auth/user/add/').status_code, 200)
 
-    def test_admin_creates_broker_with_credentials_and_setup_is_pending(self):
+    def test_admin_creates_agent_with_credentials_and_setup_is_pending(self):
         self.client.force_authenticate(user=self.admin_user)
         created = self.client.post(
             reverse('api:admin-delegated-account-list'),
             {
-                'username': 'invited-broker',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'invited-agent',
+                'password': 'Temp!AgentLogin9281',
                 'assigned_city_id': self.city.pk,
             },
             format='json',
         )
-        invited_user = User.objects.get(username='invited-broker')
+        invited_user = User.objects.get(username='invited-agent')
         self.assertEqual(created.status_code, 201)
         self.assertNotIn('password', created.data)
         self.assertTrue(invited_user.is_active)
-        self.assertTrue(invited_user.check_password('Temp!BrokerLogin9281'))
-        self.assertEqual(invited_user.profile.role, Profile.Role.BROKER)
+        self.assertTrue(invited_user.check_password('Temp!AgentLogin9281'))
+        self.assertEqual(invited_user.profile.role, Profile.Role.AGENT)
         self.assertEqual(invited_user.profile.assigned_city_id, self.city.pk)
         self.assertEqual(created.data['assigned_city_id'], self.city.pk)
-        self.assertTrue(invited_user.profile.broker_onboarding_required)
-        self.assertFalse(invited_user.profile.broker_password_changed)
-        self.assertFalse(invited_user.profile.broker_approved)
+        self.assertTrue(invited_user.profile.agent_onboarding_required)
+        self.assertFalse(invited_user.profile.agent_password_changed)
+        self.assertFalse(invited_user.profile.agent_approved)
         self.assertEqual(created.data['management_permissions'], [])
 
-    def test_admin_cannot_create_broker_without_a_valid_assigned_city(self):
+    def test_admin_cannot_create_agent_without_a_valid_assigned_city(self):
         self.client.force_authenticate(user=self.admin_user)
 
         missing_city = self.client.post(
             reverse('api:admin-delegated-account-list'),
             {
-                'username': 'broker-without-city',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'agent-without-city',
+                'password': 'Temp!AgentLogin9281',
             },
             format='json',
         )
         invalid_city = self.client.post(
             reverse('api:admin-delegated-account-list'),
             {
-                'username': 'broker-with-invalid-city',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'agent-with-invalid-city',
+                'password': 'Temp!AgentLogin9281',
                 'assigned_city_id': 0,
             },
             format='json',
@@ -845,9 +845,9 @@ class AdminApiTests(APITestCase):
         self.assertIn('assigned_city_id', missing_city.data['error']['details'])
         self.assertEqual(invalid_city.status_code, 400)
         self.assertIn('assigned_city_id', invalid_city.data['error']['details'])
-        self.assertFalse(User.objects.filter(username__startswith='broker-with-').exists())
+        self.assertFalse(User.objects.filter(username__startswith='agent-with-').exists())
 
-    def test_superuser_can_update_and_delete_broker_accounts_but_not_assign_brokers(self):
+    def test_superuser_can_update_and_delete_agent_accounts_but_not_assign_agents(self):
         self.client.force_authenticate(user=self.admin_user)
         other_city = Location.objects.create(
             name='Admin Test Other City',
@@ -858,73 +858,73 @@ class AdminApiTests(APITestCase):
         created = self.client.post(
             reverse('api:admin-delegated-account-list'),
             {
-                'username': 'assigned-broker',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'assigned-agent',
+                'password': 'Temp!AgentLogin9281',
                 'assigned_city_id': self.city.pk,
             },
             format='json',
         )
-        broker = User.objects.get(username='assigned-broker')
+        agent = User.objects.get(username='assigned-agent')
         update = self.client.patch(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk}),
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': agent.pk}),
             {
-                'email': 'assigned-broker@example.com',
+                'email': 'assigned-agent@example.com',
                 'first_name': 'Assigned',
-                'initial_password': 'Reset!BrokerLogin2847',
+                'initial_password': 'Reset!AgentLogin2847',
                 'assigned_city_id': other_city.pk,
             },
             format='json',
         )
         assignment = self.client.post(
             reverse(
-                'api:admin-broker-assignment-list',
+                'api:admin-agent-assignment-list',
                 kwargs={'property_id': self.property.pk},
             ),
-            {'broker_id': broker.pk},
+            {'agent_id': agent.pk},
             format='json',
         )
         self.assertEqual(assignment.status_code, 403)
         self.assertEqual(created.status_code, 201)
         self.assertEqual(update.status_code, 200)
-        broker.refresh_from_db()
-        self.assertEqual(broker.email, 'assigned-broker@example.com')
-        self.assertEqual(broker.first_name, 'Assigned')
-        self.assertEqual(broker.profile.assigned_city_id, other_city.pk)
-        self.assertTrue(broker.check_password('Reset!BrokerLogin2847'))
-        self.assertTrue(broker.profile.broker_onboarding_required)
-        self.assertFalse(broker.profile.broker_password_changed)
-        self.assertFalse(broker.profile.broker_approved)
+        agent.refresh_from_db()
+        self.assertEqual(agent.email, 'assigned-agent@example.com')
+        self.assertEqual(agent.first_name, 'Assigned')
+        self.assertEqual(agent.profile.assigned_city_id, other_city.pk)
+        self.assertTrue(agent.check_password('Reset!AgentLogin2847'))
+        self.assertTrue(agent.profile.agent_onboarding_required)
+        self.assertFalse(agent.profile.agent_password_changed)
+        self.assertFalse(agent.profile.agent_approved)
         deleted = self.client.delete(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk}),
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': agent.pk}),
         )
         self.assertEqual(deleted.status_code, 204)
-        self.assertFalse(User.objects.filter(pk=broker.pk).exists())
-        self.assertTrue(AdminAuditEvent.objects.filter(action='broker_account_deleted').exists())
+        self.assertFalse(User.objects.filter(pk=agent.pk).exists())
+        self.assertTrue(AdminAuditEvent.objects.filter(action='agent_account_deleted').exists())
 
-    def test_created_broker_has_no_effective_permissions_until_profile_setup(self):
+    def test_created_agent_has_no_effective_permissions_until_profile_setup(self):
         self.client.force_authenticate(user=self.admin_user)
         response = self.client.post(
             reverse('api:admin-delegated-account-list'),
             {
-                'username': 'overprivileged-broker',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'overprivileged-agent',
+                'password': 'Temp!AgentLogin9281',
                 'assigned_city_id': self.city.pk,
             },
             format='json',
         )
 
         self.assertEqual(response.status_code, 201)
-        broker = User.objects.get(username='overprivileged-broker')
+        agent = User.objects.get(username='overprivileged-agent')
         self.assertEqual(
-            set(broker.profile.management_permissions),
-            BROKER_WORK_PERMISSIONS,
+            set(agent.profile.management_permissions),
+            AGENT_WORK_PERMISSIONS,
         )
         self.assertEqual(response.data['management_permissions'], [])
-        self.assertFalse(broker.profile.broker_approved)
+        self.assertFalse(agent.profile.agent_approved)
         self.assertEqual(
             self.client.post(
                 reverse('api:admin-delegated-account-list'),
-                {'username': 'invalid-broker-password', 'password': 'password'},
+                {'username': 'invalid-agent-password', 'password': 'password'},
                 format='json',
             ).status_code,
             400,
@@ -953,9 +953,9 @@ class AdminApiTests(APITestCase):
         self.assertEqual(can_view.status_code, 200)
         self.assertEqual(can_moderate.status_code, 200)
 
-    def test_delegated_administrator_can_manage_brokers_and_admin_listings(self):
+    def test_delegated_administrator_can_manage_agents_and_admin_listings(self):
         delegated_admin = User.objects.create_user(
-            username='broker-account-admin',
+            username='agent-account-admin',
             password='SecurePass123!value',
             is_staff=True,
         )
@@ -968,11 +968,11 @@ class AdminApiTests(APITestCase):
                 Profile.Permission.SETTINGS_MANAGE,
             ],
         )
-        broker = User.objects.create_user(
+        agent = User.objects.create_user(
             username='managed-by-delegated-admin',
-            email='managed-broker@example.com',
+            email='managed-agent@example.com',
         )
-        Profile.objects.create(user=broker, role=Profile.Role.BROKER, broker_approved=True)
+        Profile.objects.create(user=agent, role=Profile.Role.AGENT, agent_approved=True)
         self.client.force_authenticate(user=delegated_admin)
 
         current_account = self.client.get(reverse('api:me'))
@@ -981,8 +981,8 @@ class AdminApiTests(APITestCase):
         created = self.client.post(
             reverse('api:admin-delegated-account-list'),
             {
-                'username': 'new-delegated-broker',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'new-delegated-agent',
+                'password': 'Temp!AgentLogin9281',
                 'assigned_city_id': self.city.pk,
             },
             format='json',
@@ -1014,15 +1014,15 @@ class AdminApiTests(APITestCase):
         )
         self.assertEqual(users.status_code, 403)
         self.assertEqual(delegated_accounts.status_code, 200)
-        self.assertEqual([row['id'] for row in delegated_accounts.data['results']], [broker.pk])
+        self.assertEqual([row['id'] for row in delegated_accounts.data['results']], [agent.pk])
         self.assertEqual(created.status_code, 201)
-        created_broker = User.objects.get(username='new-delegated-broker')
+        created_agent = User.objects.get(username='new-delegated-agent')
         self.assertEqual(
-            set(created_broker.profile.management_permissions),
-            BROKER_WORK_PERMISSIONS,
+            set(created_agent.profile.management_permissions),
+            AGENT_WORK_PERMISSIONS,
         )
-        self.assertTrue(created_broker.profile.broker_onboarding_required)
-        self.assertFalse(created_broker.profile.broker_approved)
+        self.assertTrue(created_agent.profile.agent_onboarding_required)
+        self.assertFalse(created_agent.profile.agent_approved)
         self.assertEqual(cannot_create_admin.status_code, 400)
 
         self.assertEqual(self.client.get(reverse('api:managed-property-list')).status_code, 200)
@@ -1037,9 +1037,9 @@ class AdminApiTests(APITestCase):
             403,
         )
 
-    def test_delegated_administrator_portal_shows_only_broker_account_management(self):
+    def test_delegated_administrator_portal_shows_only_agent_account_management(self):
         delegated_admin = User.objects.create_user(
-            username='broker-portal-admin',
+            username='agent-portal-admin',
             password='SecurePass123!value',
             is_staff=True,
         )
@@ -1132,10 +1132,10 @@ class AdminApiTests(APITestCase):
             ).exists()
         )
 
-        broker = self.create_broker('public-page-settings-agent')
-        broker.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
-        broker.profile.save(update_fields=['management_permissions'])
-        self.client.force_authenticate(user=broker)
+        agent = self.create_agent('public-page-settings-agent')
+        agent.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
+        agent.profile.save(update_fields=['management_permissions'])
+        self.client.force_authenticate(user=agent)
         agent_update = self.client.patch(
             reverse(
                 'api:managed-public-information-page-detail',
@@ -1152,10 +1152,10 @@ class AdminApiTests(APITestCase):
         self.assertEqual(public_before.status_code, 200)
         self.assertEqual(public_before.data['footer_copyright'], '')
 
-        broker = self.create_broker('footer-copyright-settings-agent')
-        broker.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
-        broker.profile.save(update_fields=['management_permissions'])
-        self.client.force_authenticate(user=broker)
+        agent = self.create_agent('footer-copyright-settings-agent')
+        agent.profile.management_permissions = [Profile.Permission.SETTINGS_MANAGE]
+        agent.profile.save(update_fields=['management_permissions'])
+        self.client.force_authenticate(user=agent)
         updated = self.client.patch(
             reverse('api:brokerage-contact'),
             {'footer_copyright': '© {year} Habasha Homes'},
@@ -1169,7 +1169,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(public_after.data['footer_copyright'], '© {year} Habasha Homes')
         self.assertTrue(self.admin_user.is_superuser)
 
-    def test_superuser_can_deactivate_a_broker_but_not_a_delegated_administrator(self):
+    def test_superuser_can_deactivate_a_agent_but_not_a_delegated_administrator(self):
         delegated = User.objects.create_user(
             username='deactivated-reviewer',
             password='SecurePass123!value',
@@ -1180,7 +1180,7 @@ class AdminApiTests(APITestCase):
             role=Profile.Role.ADMINISTRATOR,
             management_permissions=[Profile.Permission.USERS_MANAGE],
         )
-        broker = self.create_broker('deactivated-broker')
+        agent = self.create_agent('deactivated-agent')
         self.client.force_authenticate(user=delegated)
         self.assertEqual(
             self.client.get(reverse('api:admin-delegated-account-list')).status_code,
@@ -1194,29 +1194,29 @@ class AdminApiTests(APITestCase):
             format='json',
         )
         response = self.client.patch(
-            reverse('api:admin-delegated-account-detail', kwargs={'pk': broker.pk}),
+            reverse('api:admin-delegated-account-detail', kwargs={'pk': agent.pk}),
             {'is_active': False},
             format='json',
         )
         self.assertEqual(cannot_deactivate_admin.status_code, 404)
         self.assertEqual(response.status_code, 200)
         delegated.refresh_from_db()
-        broker.refresh_from_db()
+        agent.refresh_from_db()
         self.assertTrue(delegated.is_active)
-        self.assertFalse(broker.is_active)
+        self.assertFalse(agent.is_active)
         self.client.force_authenticate(user=delegated)
         self.assertEqual(
             self.client.get(reverse('api:admin-delegated-account-list')).status_code,
             200,
         )
-        self.client.force_authenticate(user=broker)
+        self.client.force_authenticate(user=agent)
         self.assertEqual(
             self.client.get(reverse('api:admin-delegated-account-list')).status_code,
             403,
         )
 
-    def test_broker_cannot_moderate_listings_from_other_cities_or_use_admin_moderation_api(self):
-        self.client.force_authenticate(user=self.create_broker('moderating-broker'))
+    def test_agent_cannot_moderate_listings_from_other_cities_or_use_admin_moderation_api(self):
+        self.client.force_authenticate(user=self.create_agent('moderating-agent'))
         url = reverse('api:admin-property-detail', kwargs={'pk': self.property.pk})
 
         missing_reason = self.client.patch(
@@ -1245,8 +1245,8 @@ class AdminApiTests(APITestCase):
         )
         self.assertEqual(owner_view.status_code, 403)
 
-    def test_broker_cannot_suspend_listings_through_administrator_moderation_api(self):
-        self.client.force_authenticate(user=self.create_broker('suspending-broker'))
+    def test_agent_cannot_suspend_listings_through_administrator_moderation_api(self):
+        self.client.force_authenticate(user=self.create_agent('suspending-agent'))
         url = reverse('api:admin-property-detail', kwargs={'pk': self.property.pk})
 
         missing_reason = self.client.patch(
@@ -1269,10 +1269,10 @@ class AdminApiTests(APITestCase):
         self.assertNotEqual(self.property.publication_status, Property.PublicationStatus.SUSPENDED)
         self.assertEqual(self.property.moderation_note, '')
 
-    def test_broker_cannot_publish_a_sold_or_rented_listing(self):
+    def test_agent_cannot_publish_a_sold_or_rented_listing(self):
         self.property.status = Property.Status.RENTED
         self.property.save()
-        self.client.force_authenticate(user=self.create_broker('publication-broker'))
+        self.client.force_authenticate(user=self.create_agent('publication-agent'))
 
         response = self.client.patch(
             reverse('api:admin-property-detail', kwargs={'pk': self.property.pk}),
@@ -1282,7 +1282,7 @@ class AdminApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_public_report_submission_hides_reporter_data_and_broker_can_review(self):
+    def test_public_report_submission_hides_reporter_data_and_agent_can_review(self):
         self.property.publication_status = Property.PublicationStatus.PUBLISHED
         self.property.status = Property.Status.AVAILABLE
         self.property.save()
@@ -1301,7 +1301,7 @@ class AdminApiTests(APITestCase):
         self.assertEqual(submitted.status_code, 201)
         self.assertNotIn('reporter_email', submitted.data)
         report = ListingReport.objects.get(pk=submitted.data['id'])
-        reviewer = self.create_broker('report-review-broker')
+        reviewer = self.create_agent('report-review-agent')
         self.client.force_authenticate(user=reviewer)
         reviewed = self.client.patch(
             reverse('api:admin-report-detail', kwargs={'pk': report.pk}),
@@ -1326,60 +1326,60 @@ class AdminApiTests(APITestCase):
         portal_response = self.client.get('/admin-portal/')
         self.assertEqual(portal_response.status_code, 302)
 
-    def test_broker_cannot_assign_other_brokers_to_properties(self):
-        broker = User.objects.create_user(
+    def test_agent_cannot_assign_other_agents_to_properties(self):
+        agent = User.objects.create_user(
             username='approved-assignee',
             password='SecurePass123!value',
         )
-        unapproved_broker = User.objects.create_user(
+        unapproved_agent = User.objects.create_user(
             username='unapproved-assignee',
             password='SecurePass123!value',
         )
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
         )
         Profile.objects.create(
-            user=unapproved_broker,
-            role=Profile.Role.BROKER,
-            broker_approved=False,
+            user=unapproved_agent,
+            role=Profile.Role.AGENT,
+            agent_approved=False,
         )
-        assigning_broker = self.create_broker('broker-assignment-manager')
-        self.client.force_authenticate(user=assigning_broker)
+        assigning_agent = self.create_agent('agent-assignment-manager')
+        self.client.force_authenticate(user=assigning_agent)
 
         denied = self.client.post(
             reverse(
-                'api:admin-broker-assignment-list',
+                'api:admin-agent-assignment-list',
                 kwargs={'property_id': self.property.pk},
             ),
-            {'broker_id': unapproved_broker.pk},
+            {'agent_id': unapproved_agent.pk},
             format='json',
         )
         assigned = self.client.post(
             reverse(
-                'api:admin-broker-assignment-list',
+                'api:admin-agent-assignment-list',
                 kwargs={'property_id': self.property.pk},
             ),
-            {'broker_id': broker.pk},
+            {'agent_id': agent.pk},
             format='json',
         )
 
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(assigned.status_code, 403)
         self.assertFalse(
-            PropertyBrokerAssignment.objects.filter(property=self.property, broker=broker).exists()
+            PropertyAgentAssignment.objects.filter(property=self.property, agent=agent).exists()
         )
-        self.assertFalse(AdminAuditEvent.objects.filter(action='broker_assigned').exists())
+        self.assertFalse(AdminAuditEvent.objects.filter(action='agent_assigned').exists())
 
         removed = self.client.delete(
             reverse(
-                'api:admin-broker-assignment-detail',
-                kwargs={'property_id': self.property.pk, 'broker_id': broker.pk},
+                'api:admin-agent-assignment-detail',
+                kwargs={'property_id': self.property.pk, 'agent_id': agent.pk},
             )
         )
         self.assertEqual(removed.status_code, 403)
-        self.assertFalse(AdminAuditEvent.objects.filter(action='broker_unassigned').exists())
+        self.assertFalse(AdminAuditEvent.objects.filter(action='agent_unassigned').exists())
 
 
 class AdminPortalMethodTests(TestCase):
@@ -1425,7 +1425,7 @@ class AdminPortalMethodTests(TestCase):
         )
         self.assertRedirects(response, '/admin/login/')
 
-    def test_superuser_portal_routes_to_broker_management_only(self):
+    def test_superuser_portal_routes_to_agent_management_only(self):
         owner = User.objects.create_superuser(
             username='viewings-removed-owner',
             password='SecurePass123!value',
@@ -1437,34 +1437,34 @@ class AdminPortalMethodTests(TestCase):
 
         self.assertEqual(dashboard.status_code, 302)
         self.assertEqual(dashboard.url, '/admin-portal/delegated-accounts/')
-        broker_page = client.get(reverse('admin_delegated_accounts'))
-        self.assertEqual(broker_page.status_code, 200)
-        self.assertNotContains(broker_page, '/admin-portal/properties/')
-        self.assertNotContains(broker_page, 'viewing requests')
+        agent_page = client.get(reverse('admin_delegated_accounts'))
+        self.assertEqual(agent_page.status_code, 200)
+        self.assertNotContains(agent_page, '/admin-portal/properties/')
+        self.assertNotContains(agent_page, 'viewing requests')
         self.assertEqual(client.get('/admin-portal/viewing-requests/').status_code, 404)
 
-    def test_brokers_cannot_access_broker_account_management(self):
-        broker = User.objects.create_user(
-            username='broker-without-account-management',
+    def test_agents_cannot_access_agent_account_management(self):
+        agent = User.objects.create_user(
+            username='agent-without-account-management',
             password='SecurePass123!value',
         )
         Profile.objects.create(
-            user=broker,
-            role=Profile.Role.BROKER,
-            broker_approved=True,
+            user=agent,
+            role=Profile.Role.AGENT,
+            agent_approved=True,
             management_permissions=[
                 Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
                 Profile.Permission.VIEWING_MANAGE_ASSIGNED,
             ],
         )
         client = Client()
-        client.force_login(broker)
+        client.force_login(agent)
 
         response = client.get(reverse('admin_delegated_accounts'))
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], '/')
-        self.assertNotIn(Profile.Permission.USERS_MANAGE, broker.profile.management_permissions)
+        self.assertNotIn(Profile.Permission.USERS_MANAGE, agent.profile.management_permissions)
 
     def test_portal_logout_requires_post_and_ends_session(self):
         owner = User.objects.create_superuser(
@@ -1494,7 +1494,7 @@ class AdminPortalMethodTests(TestCase):
         self.assertNotIn('_auth_user_id', client.session)
         self.assertEqual(client.get(reverse('admin_dashboard')).status_code, 302)
 
-    def test_owner_can_create_broker_credentials_from_portal(self):
+    def test_owner_can_create_agent_credentials_from_portal(self):
         owner = User.objects.create_superuser(
             username='portal-owner',
             password='SecurePass123!value',
@@ -1516,30 +1516,30 @@ class AdminPortalMethodTests(TestCase):
         response = client.post(
             reverse('admin_delegated_accounts'),
             {
-                'username': 'portal-broker',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'portal-agent',
+                'password': 'Temp!AgentLogin9281',
                 'assigned_city': city.pk,
             },
         )
 
-        broker = User.objects.get(username='portal-broker')
+        agent = User.objects.get(username='portal-agent')
         self.assertEqual(response.status_code, 200)
         self.assertIn('Cache-Control', response)
         self.assertEqual(response['Cache-Control'], 'no-store')
-        self.assertTrue(broker.is_active)
-        self.assertTrue(broker.check_password('Temp!BrokerLogin9281'))
-        self.assertEqual(broker.profile.role, Profile.Role.BROKER)
-        self.assertEqual(broker.profile.assigned_city_id, city.pk)
+        self.assertTrue(agent.is_active)
+        self.assertTrue(agent.check_password('Temp!AgentLogin9281'))
+        self.assertEqual(agent.profile.role, Profile.Role.AGENT)
+        self.assertEqual(agent.profile.assigned_city_id, city.pk)
         self.assertEqual(
-            set(broker.profile.management_permissions),
-            BROKER_WORK_PERMISSIONS,
+            set(agent.profile.management_permissions),
+            AGENT_WORK_PERMISSIONS,
         )
-        self.assertTrue(broker.profile.broker_onboarding_required)
-        self.assertFalse(broker.profile.broker_approved)
+        self.assertTrue(agent.profile.agent_onboarding_required)
+        self.assertFalse(agent.profile.agent_approved)
         self.assertTrue(
             AdminAuditEvent.objects.filter(
-                action='broker_account_created',
-                object_id=str(broker.pk),
+                action='agent_account_created',
+                object_id=str(agent.pk),
             ).exists()
         )
 
@@ -1566,8 +1566,8 @@ class AdminPortalMethodTests(TestCase):
         self.assertEqual(form_page.status_code, 200)
         csrf_token = client.cookies['csrftoken'].value
         payload = {
-            'username': 'opaque-origin-broker',
-            'password': 'Temp!BrokerLogin9281',
+            'username': 'opaque-origin-agent',
+            'password': 'Temp!AgentLogin9281',
         }
 
         invalid = client.post(
@@ -1577,13 +1577,13 @@ class AdminPortalMethodTests(TestCase):
             HTTP_X_CSRFTOKEN='invalid',
         )
         self.assertEqual(invalid.status_code, 403)
-        self.assertFalse(User.objects.filter(username='opaque-origin-broker').exists())
+        self.assertFalse(User.objects.filter(username='opaque-origin-agent').exists())
 
         accepted = client.post(
             reverse('admin_delegated_accounts'),
             {
                 **payload,
-                'username': 'valid-opaque-origin-broker',
+                'username': 'valid-opaque-origin-agent',
                 'assigned_city': city.pk,
                 'csrfmiddlewaretoken': csrf_token,
             },
@@ -1594,7 +1594,7 @@ class AdminPortalMethodTests(TestCase):
             200,
             accepted.wsgi_request.META.get('CSRF_FAILURE_REASON', ''),
         )
-        self.assertTrue(User.objects.filter(username='valid-opaque-origin-broker').exists())
+        self.assertTrue(User.objects.filter(username='valid-opaque-origin-agent').exists())
 
     def test_null_origin_is_not_allowed_on_other_portal_post_routes(self):
         owner = User.objects.create_superuser(
@@ -1626,15 +1626,15 @@ class AdminPortalMethodTests(TestCase):
         response = client.post(
             reverse('admin_delegated_accounts'),
             {
-                'username': 'production-origin-broker',
-                'password': 'Temp!BrokerLogin9281',
+                'username': 'production-origin-agent',
+                'password': 'Temp!AgentLogin9281',
                 'csrfmiddlewaretoken': client.cookies['csrftoken'].value,
             },
             HTTP_ORIGIN='null',
         )
 
         self.assertEqual(response.status_code, 403)
-        self.assertFalse(User.objects.filter(username='production-origin-broker').exists())
+        self.assertFalse(User.objects.filter(username='production-origin-agent').exists())
 
     def test_owner_portal_can_revoke_delegated_account_access(self):
         owner = User.objects.create_superuser(
@@ -1653,15 +1653,15 @@ class AdminPortalMethodTests(TestCase):
             parent=country,
         )
         delegated = User.objects.create_user(
-            username='portal-access-broker',
+            username='portal-access-agent',
             password='SecurePass123!value',
             is_active=True,
         )
         profile = Profile.objects.create(
             user=delegated,
-            role=Profile.Role.BROKER,
+            role=Profile.Role.AGENT,
             assigned_city=city,
-            broker_approved=True,
+            agent_approved=True,
             management_permissions=[Profile.Permission.PROPERTY_MANAGE_ASSIGNED],
         )
         client = Client()
@@ -1689,7 +1689,7 @@ class AdminPortalMethodTests(TestCase):
         self.assertNotIn(Profile.Permission.STAFF_MANAGE, profile.management_permissions)
         self.assertTrue(
             AdminAuditEvent.objects.filter(
-                action='broker_account_updated',
+                action='agent_account_updated',
                 object_id=str(delegated.pk),
             ).exists()
         )

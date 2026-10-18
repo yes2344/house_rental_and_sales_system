@@ -3,15 +3,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import {
   endSession,
-  changeBrokerInitialPassword as changeBrokerInitialPasswordRequest,
-  completeBrokerInitialProfile as completeBrokerInitialProfileRequest,
+  changeAgentInitialPassword as changeAgentInitialPasswordRequest,
+  completeAgentInitialProfile as completeAgentInitialProfileRequest,
   getCurrentAccount,
   startSession,
   updateAccount as updateAccountRequest,
   type Account,
   type AccountUpdatePayload,
-  type BrokerInitialPasswordPayload,
-  type BrokerProfilePayload,
+  type AgentInitialPasswordPayload,
+  type AgentProfilePayload,
 } from './api/accounts';
 import { addFavorite, getFavorites, removeFavorite, type Favorite } from './api/favorites';
 import { getErrorMessage } from './api/client';
@@ -26,8 +26,8 @@ interface AuthContextValue {
   signIn: (username: string, password: string) => Promise<Account>;
   signOut: () => Promise<void>;
   updateProfile: (payload: AccountUpdatePayload) => Promise<void>;
-  changeBrokerInitialPassword: (payload: BrokerInitialPasswordPayload) => Promise<Account>;
-  completeBrokerInitialProfile: (payload: BrokerProfilePayload) => Promise<Account>;
+  changeAgentInitialPassword: (payload: AgentInitialPasswordPayload) => Promise<Account>;
+  completeAgentInitialProfile: (payload: AgentProfilePayload) => Promise<Account>;
   refreshFavorites: () => Promise<void>;
   toggleFavorite: (propertyId: number) => Promise<void>;
 }
@@ -110,14 +110,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setAccount(updatedAccount);
   }, []);
 
-  const changeBrokerInitialPassword = useCallback(async (payload: BrokerInitialPasswordPayload) => {
-    const updatedAccount = await changeBrokerInitialPasswordRequest(payload);
+  const changeAgentInitialPassword = useCallback(async (payload: AgentInitialPasswordPayload) => {
+    const updatedAccount = await changeAgentInitialPasswordRequest(payload);
     setAccount(updatedAccount);
     return updatedAccount;
   }, []);
 
-  const completeBrokerInitialProfile = useCallback(async (payload: BrokerProfilePayload) => {
-    const updatedAccount = await completeBrokerInitialProfileRequest(payload);
+  const completeAgentInitialProfile = useCallback(async (payload: AgentProfilePayload) => {
+    const updatedAccount = await completeAgentInitialProfileRequest(payload);
     setAccount(updatedAccount);
     return updatedAccount;
   }, []);
@@ -148,8 +148,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signIn,
     signOut,
     updateProfile,
-    changeBrokerInitialPassword,
-    completeBrokerInitialProfile,
+    changeAgentInitialPassword,
+    completeAgentInitialProfile,
     refreshFavorites,
     toggleFavorite,
   }), [
@@ -162,8 +162,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     signIn,
     signOut,
     updateProfile,
-    changeBrokerInitialPassword,
-    completeBrokerInitialProfile,
+    changeAgentInitialPassword,
+    completeAgentInitialProfile,
     refreshFavorites,
     toggleFavorite,
   ]);

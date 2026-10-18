@@ -25,7 +25,7 @@ export interface AmenityOption {
   slug: string;
 }
 
-export interface ManagedBrokerAccount {
+export interface ManagedAgentAccount {
   id: number;
   username: string;
   email: string;
@@ -33,10 +33,10 @@ export interface ManagedBrokerAccount {
   last_name: string;
   phone: string;
   assigned_city_id: number | null;
-  role: 'broker';
+  role: 'agent';
   is_active: boolean;
-  broker_approved: boolean;
-  broker_onboarding_required: boolean;
+  agent_approved: boolean;
+  agent_onboarding_required: boolean;
   management_permissions: string[];
   date_joined: string;
 }
@@ -75,12 +75,12 @@ export async function deleteManagedLocation(id: number): Promise<void> {
   await apiClient.delete(`/management/locations/${id}/`);
 }
 
-export async function getManagedBrokerAccounts(signal?: AbortSignal): Promise<ManagedBrokerAccount[]> {
-  const accounts: ManagedBrokerAccount[] = [];
+export async function getManagedAgentAccounts(signal?: AbortSignal): Promise<ManagedAgentAccount[]> {
+  const accounts: ManagedAgentAccount[] = [];
   let nextPage: string | null = '/admin/delegated-accounts/';
   while (nextPage) {
     const currentPage: string = nextPage;
-    const pageResponse = await apiClient.get<PaginatedResponse<ManagedBrokerAccount>>(
+    const pageResponse = await apiClient.get<PaginatedResponse<ManagedAgentAccount>>(
       currentPage,
       { signal },
     );
@@ -90,23 +90,23 @@ export async function getManagedBrokerAccounts(signal?: AbortSignal): Promise<Ma
   return accounts;
 }
 
-export async function createManagedBrokerAccount(
+export async function createManagedAgentAccount(
   payload: { username: string; password: string; assigned_city_id: number },
-): Promise<ManagedBrokerAccount> {
-  const response = await apiClient.post<ManagedBrokerAccount>('/admin/delegated-accounts/', payload);
+): Promise<ManagedAgentAccount> {
+  const response = await apiClient.post<ManagedAgentAccount>('/admin/delegated-accounts/', payload);
   return response.data;
 }
 
-export async function updateManagedBrokerAccount(
+export async function updateManagedAgentAccount(
   id: number,
-  payload: Partial<Pick<ManagedBrokerAccount, 'username' | 'email' | 'first_name' | 'last_name' | 'phone' | 'is_active' | 'assigned_city_id'>>
+  payload: Partial<Pick<ManagedAgentAccount, 'username' | 'email' | 'first_name' | 'last_name' | 'phone' | 'is_active' | 'assigned_city_id'>>
     & { initial_password?: string; management_permissions?: string[] },
-): Promise<ManagedBrokerAccount> {
-  const response = await apiClient.patch<ManagedBrokerAccount>(`/admin/delegated-accounts/${id}/`, payload);
+): Promise<ManagedAgentAccount> {
+  const response = await apiClient.patch<ManagedAgentAccount>(`/admin/delegated-accounts/${id}/`, payload);
   return response.data;
 }
 
-export async function deleteManagedBrokerAccount(id: number): Promise<void> {
+export async function deleteManagedAgentAccount(id: number): Promise<void> {
   await apiClient.delete(`/admin/delegated-accounts/${id}/`);
 }
 
@@ -285,6 +285,14 @@ export async function updateManagedPropertyPublication(
 
 export async function deleteManagedProperty(id: number): Promise<void> {
   await apiClient.delete(`/management/properties/${id}/`);
+}
+
+export async function deleteManagedProperties(ids: number[]): Promise<number> {
+  const response = await apiClient.post<{ deleted_count: number }>(
+    '/management/properties/bulk-delete/',
+    { ids },
+  );
+  return response.data.deleted_count;
 }
 
 export async function getManagedImages(propertyId: number, signal?: AbortSignal): Promise<ManagedImage[]> {

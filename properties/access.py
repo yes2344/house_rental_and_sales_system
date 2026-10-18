@@ -9,7 +9,7 @@ from accounts.permissions import (
 from properties.models import Location, Property
 
 
-def broker_city_location_ids(user):
+def agent_city_location_ids(user):
     profile = getattr(user, 'profile', None)
     city_id = getattr(profile, 'assigned_city_id', None)
     if city_id is None:
@@ -33,7 +33,7 @@ def public_properties():
             publication_status=Property.PublicationStatus.PUBLISHED,
             status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
         ).filter(
-            Q(service_type=Property.ServiceType.BROKER_MANAGED)
+            Q(service_type=Property.ServiceType.AGENT_MANAGED)
             | Q(
                 service_type=Property.ServiceType.OWNER_ANNOUNCED,
                 owner_announcement__status='approved',
@@ -46,7 +46,7 @@ def public_properties():
 
 
 def managed_properties(user):
-    broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
+    agent_managed = Property.objects.filter(service_type=Property.ServiceType.AGENT_MANAGED)
     if any(
         has_management_permission(user, permission)
         for permission in (
@@ -56,24 +56,24 @@ def managed_properties(user):
             Profile.Permission.PROPERTY_DELETE_ALL,
         )
     ):
-        return broker_managed
+        return agent_managed
     if (
-        has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
+        has_listing_role(user, Profile.Role.AGENT, agent_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
     ):
-        return broker_managed.filter(submitted_by=user)
+        return agent_managed.filter(submitted_by=user)
     return Property.objects.none()
 
 
 def editable_properties(user):
-    broker_managed = Property.objects.filter(service_type=Property.ServiceType.BROKER_MANAGED)
+    agent_managed = Property.objects.filter(service_type=Property.ServiceType.AGENT_MANAGED)
     if has_management_permission(user, Profile.Permission.PROPERTY_EDIT_ALL):
-        return broker_managed
+        return agent_managed
     if (
-        has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
+        has_listing_role(user, Profile.Role.AGENT, agent_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
     ):
-        return broker_managed.filter(submitted_by=user)
+        return agent_managed.filter(submitted_by=user)
     return Property.objects.none()
 
 
@@ -90,7 +90,7 @@ def can_access_property_image_original(user, property_obj):
         return True
     if (
         property_obj.submitted_by_id == user.pk
-        and has_listing_role(user, Profile.Role.BROKER, broker_approved=True)
+        and has_listing_role(user, Profile.Role.AGENT, agent_approved=True)
         and has_management_permission(user, Profile.Permission.PROPERTY_MANAGE_ASSIGNED)
     ):
         return True

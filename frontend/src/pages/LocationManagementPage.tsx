@@ -56,12 +56,12 @@ function toPayload(values: LocationFormValues): ManagedLocationPayload {
 
 export function LocationManagementPage({ locale, text }: LocationManagementPageProps) {
   const { account } = useAuth();
-  const isBroker = account?.role === 'broker';
-  const managedType: ManagedLocationType = isBroker ? 'subcity' : 'city';
+  const isAgent = account?.role === 'agent';
+  const managedType: ManagedLocationType = isAgent ? 'subcity' : 'city';
   const [locations, setLocations] = useState<MarketplaceLocation[]>([]);
   const [values, setValues] = useState<LocationFormValues>(() => ({
     ...emptyForm,
-    location_type: isBroker ? 'subcity' : 'city',
+    location_type: isAgent ? 'subcity' : 'city',
   }));
   const [editingId, setEditingId] = useState<number | null>(null);
   const [search, setSearch] = useState('');
@@ -102,7 +102,7 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
       && location.name.trim().toLocaleLowerCase() === 'ethiopia'
       && location.is_active,
   );
-  const canCreateLocation = isBroker
+  const canCreateLocation = isAgent
     ? Boolean(account?.assigned_city_id)
     : hasActiveEthiopia;
   const filteredLocations = useMemo(() => {
@@ -235,7 +235,7 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
               {text('locationLevelFixed')}
               <div className="location-level-fixed" aria-live="polite">
                 <strong>{localizedLocationType(managedType)}</strong>
-                {isBroker && (
+                {isAgent && (
                   <small>
                     {locale === 'am'
                       ? account?.assigned_city_name_am ?? account?.assigned_city_name ?? text('assignedCity')
@@ -244,7 +244,7 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
                 )}
               </div>
             </div>
-            {!isBroker && editingId === null && !hasActiveEthiopia && (
+            {!isAgent && editingId === null && !hasActiveEthiopia && (
               <p className="manager-error location-form-message" role="alert">{text('locationCountryMissing')}</p>
             )}
             <label className="filter-label">{text('displayOrder')}

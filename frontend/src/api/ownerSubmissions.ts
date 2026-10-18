@@ -50,7 +50,7 @@ export interface OwnerSubmissionReview {
   owner_contact_phone: string;
   owner_contact_email: string;
   status: OwnerSubmissionStatus;
-  broker_feedback: string;
+  agent_feedback: string;
   submitted_at: string;
   reviewed_at: string | null;
   reviewed_by_id: number | null;
@@ -98,6 +98,22 @@ export async function updateOwnerSubmission(
 ): Promise<OwnerSubmission> {
   const response = await apiClient.patch<OwnerSubmission>(`/submissions/${id}/`, payload);
   return response.data;
+}
+
+export async function deleteMySubmissions(ids: number[]): Promise<number> {
+  const response = await apiClient.post<{ deleted_count: number }>(
+    '/submissions/bulk-delete/',
+    { ids },
+  );
+  return response.data.deleted_count;
+}
+
+export async function deleteManagedSubmissions(ids: number[]): Promise<number> {
+  const response = await apiClient.post<{ deleted_count: number }>(
+    '/management/submissions/bulk-delete/',
+    { ids },
+  );
+  return response.data.deleted_count;
 }
 
 export async function uploadOwnerSubmissionImage(id: number, image: File): Promise<ManagedImage> {

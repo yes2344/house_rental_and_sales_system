@@ -9,7 +9,7 @@ interface RequireDashboardAccessProps {
 
 export function RequireDashboardAccess({ text }: RequireDashboardAccessProps) {
   const { account } = useAuth();
-  const canAccessDashboard = Boolean(account && ['broker', 'administrator'].includes(account.role ?? ''));
+  const canAccessDashboard = Boolean(account && ['agent', 'administrator'].includes(account.role ?? ''));
 
   if (canAccessDashboard) return <Outlet />;
 

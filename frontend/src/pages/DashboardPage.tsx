@@ -25,19 +25,19 @@ export function DashboardPage({ text }: DashboardPageProps) {
 
   const permissions = account.management_permissions;
   const isAdministrator = account.role === 'administrator';
-  const isBroker = account.role === 'broker';
+  const isAgent = account.role === 'agent';
   const canManageListings = permissions.some((permission) => permission.startsWith('properties.'));
   const canReviewSubmissions = permissions.some((permission) => [
     'announcements.review',
     'announcements.review_assigned',
   ].includes(permission));
   const canManageRequests = permissions.some((permission) => permission.startsWith('viewings.'));
-  const canManageSubcities = isBroker && permissions.includes('locations.manage_subcities');
-  const canManageBrokers = account.role === 'administrator' && permissions.includes('staff.manage');
+  const canManageSubcities = isAgent && permissions.includes('locations.manage_subcities');
+  const canManageAgents = account.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account.role === 'administrator' && permissions.includes('locations.manage_cities');
   const canManageBranding = account.role === 'administrator' && permissions.includes('branding.manage');
   const canManageSettings = account.is_platform_owner
-    || (isBroker && permissions.includes('settings.manage'));
+    || (isAgent && permissions.includes('settings.manage'));
 
   const entries: {
     href: string;
@@ -45,8 +45,8 @@ export function DashboardPage({ text }: DashboardPageProps) {
     icon: ReactNode;
   }[] = [
     ...(isAdministrator
-      ? (canManageBrokers ? [
-        { href: '/management/brokers', title: text('managerBrokerAccounts'), icon: <Users aria-hidden="true" /> },
+      ? (canManageAgents ? [
+        { href: '/management/agents', title: text('managerAgentAccounts'), icon: <Users aria-hidden="true" /> },
       ] : []).concat(canManageCities ? [
         { href: '/management/locations', title: text('locationManagementTitle'), icon: <MapPinned aria-hidden="true" /> },
       ] : []).concat(canManageBranding ? [
@@ -61,7 +61,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
       ]),
   ];
 
-  if (!isAdministrator && account.role !== 'broker') {
+  if (!isAdministrator && account.role !== 'agent') {
     entries.push({
       href: '/viewing-requests',
       title: text('yourViewingRequests'),

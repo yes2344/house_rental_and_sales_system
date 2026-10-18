@@ -208,7 +208,7 @@ class Command(BaseCommand):
                     f'{SAMPLE_MARKER} Demonstration listing created for interface testing only. '
                     f'This fictional {type_label.lower()} example is assigned to {city["name"]} '
                     'at city level only. It has no verified street address, neighborhood, '
-                    'owner, broker, availability, market price, or property photograph. '
+                    'owner, agent, availability, market price, or property photograph. '
                     'Do not use this sample as a real offer or contact a real person about it.'
                 )
                 defaults = {
@@ -235,7 +235,7 @@ class Command(BaseCommand):
                     ),
                     'status': Property.Status.AVAILABLE,
                     'publication_status': Property.PublicationStatus.PUBLISHED,
-                    'service_type': Property.ServiceType.BROKER_MANAGED,
+                    'service_type': Property.ServiceType.AGENT_MANAGED,
                     'is_featured': False,
                     'contact_name': '',
                     'contact_phone': '',

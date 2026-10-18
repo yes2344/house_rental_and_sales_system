@@ -70,7 +70,7 @@ export interface PropertySummary {
   bathrooms: number;
   area_sqft: number;
   status: 'available' | 'rented' | 'sold' | 'inactive';
-  service_type: 'broker_managed' | 'owner_announced';
+  service_type: 'agent_managed' | 'owner_announced';
   public_contact_name: string;
   public_contact_phone: string;
   public_contact_email: string;

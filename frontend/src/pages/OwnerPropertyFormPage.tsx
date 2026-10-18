@@ -582,7 +582,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
                 value={values.administrative_location}
                 locale={locale}
                 text={text}
-                fixedCityId={account?.role === 'broker' ? account.assigned_city_id : null}
+                fixedCityId={account?.role === 'agent' ? account.assigned_city_id : null}
                 required={!property || values.administrative_location !== (
                   property.administrative_location === null ? '' : String(property.administrative_location)
                 )}

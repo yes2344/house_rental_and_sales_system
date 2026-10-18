@@ -17,8 +17,8 @@ from accounts.models import (
     UserPreferences,
 )
 from accounts.permissions import (
-    broker_grantable_permissions,
-    broker_work_permissions,
+    agent_grantable_permissions,
+    agent_work_permissions,
     effective_management_permissions,
     is_platform_owner,
 )
@@ -52,8 +52,8 @@ class AccountSerializer(serializers.ModelSerializer):
     phone = ProfilePhoneField(required=False, allow_blank=True)
     management_permissions = serializers.SerializerMethodField()
     is_platform_owner = serializers.SerializerMethodField()
-    broker_onboarding_required = serializers.SerializerMethodField()
-    broker_password_changed = serializers.SerializerMethodField()
+    agent_onboarding_required = serializers.SerializerMethodField()
+    agent_password_changed = serializers.SerializerMethodField()
     assigned_city_id = serializers.SerializerMethodField()
     assigned_city_name = serializers.SerializerMethodField()
     assigned_city_name_am = serializers.SerializerMethodField()
@@ -70,8 +70,8 @@ class AccountSerializer(serializers.ModelSerializer):
             'phone',
             'management_permissions',
             'is_platform_owner',
-            'broker_onboarding_required',
-            'broker_password_changed',
+            'agent_onboarding_required',
+            'agent_password_changed',
             'assigned_city_id',
             'assigned_city_name',
             'assigned_city_name_am',
@@ -82,8 +82,8 @@ class AccountSerializer(serializers.ModelSerializer):
             'role',
             'management_permissions',
             'is_platform_owner',
-            'broker_onboarding_required',
-            'broker_password_changed',
+            'agent_onboarding_required',
+            'agent_password_changed',
         ]
 
     @extend_schema_field(serializers.CharField(allow_null=True))
@@ -104,14 +104,14 @@ class AccountSerializer(serializers.ModelSerializer):
         return is_platform_owner(obj)
 
     @extend_schema_field(serializers.BooleanField())
-    def get_broker_onboarding_required(self, obj):
+    def get_agent_onboarding_required(self, obj):
         profile = getattr(obj, 'profile', None)
-        return bool(profile and profile.broker_onboarding_required)
+        return bool(profile and profile.agent_onboarding_required)
 
     @extend_schema_field(serializers.BooleanField())
-    def get_broker_password_changed(self, obj):
+    def get_agent_password_changed(self, obj):
         profile = getattr(obj, 'profile', None)
-        return bool(profile and profile.broker_password_changed)
+        return bool(profile and profile.agent_password_changed)
 
     def get_assigned_city_id(self, obj):
         profile = getattr(obj, 'profile', None)
@@ -285,7 +285,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(source='profile.phone', max_length=50, required=False, allow_blank=True)
     initial_password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
     role = serializers.ChoiceField(
-        choices=[(Profile.Role.BROKER, 'Agent')],
+        choices=[(Profile.Role.AGENT, 'Agent')],
         source='profile.role',
     )
     assigned_city_id = serializers.PrimaryKeyRelatedField(
@@ -302,9 +302,9 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         allow_empty=True,
         required=False,
     )
-    broker_approved = serializers.BooleanField(source='profile.broker_approved', read_only=True)
-    broker_onboarding_required = serializers.BooleanField(
-        source='profile.broker_onboarding_required',
+    agent_approved = serializers.BooleanField(source='profile.agent_approved', read_only=True)
+    agent_onboarding_required = serializers.BooleanField(
+        source='profile.agent_onboarding_required',
         read_only=True,
     )
     first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
@@ -324,12 +324,12 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             'role',
             'assigned_city_id',
             'is_active',
-            'broker_approved',
-            'broker_onboarding_required',
+            'agent_approved',
+            'agent_onboarding_required',
             'management_permissions',
             'date_joined',
         ]
-        read_only_fields = ['id', 'broker_approved', 'broker_onboarding_required', 'date_joined']
+        read_only_fields = ['id', 'agent_approved', 'agent_onboarding_required', 'date_joined']
 
     def validate_username(self, value):
         existing = User.objects.filter(username__iexact=value)
@@ -357,7 +357,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
         owner_is_actor = is_platform_owner(self.context['request'].user)
         if owner_only.intersection(permissions) and not owner_is_actor:
             raise serializers.ValidationError('These permissions are reserved for the platform owner.')
-        permitted = set(broker_work_permissions()) | set(broker_grantable_permissions())
+        permitted = set(agent_work_permissions()) | set(agent_grantable_permissions())
         if owner_is_actor:
             permitted.add(Profile.Permission.SETTINGS_MANAGE)
         unsupported = set(permissions) - permitted
@@ -381,7 +381,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             'role',
             self.instance.profile.role if self.instance else None,
         )
-        if role != Profile.Role.BROKER:
+        if role != Profile.Role.AGENT:
             raise serializers.ValidationError(
                 {'role': 'This endpoint manages agent accounts only.'}
             )
@@ -394,7 +394,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'assigned_city': 'Assign an active city to this agent account.',
                 })
-            profile_data['management_permissions'] = broker_work_permissions()
+            profile_data['management_permissions'] = agent_work_permissions()
             permissions = profile_data['management_permissions']
         owner_only = {Profile.Permission.STAFF_MANAGE, Profile.Permission.SETTINGS_MANAGE}
         owner_is_actor = is_platform_owner(self.context['request'].user)
@@ -402,7 +402,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'management_permissions': 'These permissions are reserved for the platform owner.'}
             )
-        permitted = set(broker_work_permissions()) | set(broker_grantable_permissions())
+        permitted = set(agent_work_permissions()) | set(agent_grantable_permissions())
         if owner_is_actor:
             permitted.add(Profile.Permission.SETTINGS_MANAGE)
         if set(permissions) - permitted:
@@ -424,7 +424,7 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
 
         profile = instance.profile
         role = profile_data.get('role', profile.role)
-        if role != Profile.Role.BROKER:
+        if role != Profile.Role.AGENT:
             raise serializers.ValidationError({'role': 'This endpoint manages agent accounts only.'})
         profile.role = role
         profile.assigned_city = profile_data.get('assigned_city', profile.assigned_city)
@@ -432,17 +432,17 @@ class DelegatedAccountSerializer(serializers.ModelSerializer):
             profile.management_permissions = permissions
         profile.phone = profile_data.get('phone', profile.phone)
         if initial_password:
-            profile.broker_approved = False
-            profile.broker_onboarding_required = True
-            profile.broker_password_changed = False
+            profile.agent_approved = False
+            profile.agent_onboarding_required = True
+            profile.agent_password_changed = False
         profile.save(update_fields=[
             'role',
             'assigned_city',
             'management_permissions',
             'phone',
-            'broker_approved',
-            'broker_onboarding_required',
-            'broker_password_changed',
+            'agent_approved',
+            'agent_onboarding_required',
+            'agent_password_changed',
             'updated_at',
         ])
         instance.is_staff = False
@@ -496,17 +496,17 @@ class DelegatedAccountCreateSerializer(serializers.Serializer):
         user.save()
         Profile.objects.create(
             user=user,
-            role=Profile.Role.BROKER,
+            role=Profile.Role.AGENT,
             assigned_city=assigned_city,
-            broker_approved=False,
-            broker_onboarding_required=True,
-            broker_password_changed=False,
-            management_permissions=broker_work_permissions(),
+            agent_approved=False,
+            agent_onboarding_required=True,
+            agent_password_changed=False,
+            management_permissions=agent_work_permissions(),
         )
         return user
 
 
-class BrokerFirstLoginPasswordSerializer(serializers.Serializer):
+class AgentFirstLoginPasswordSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150, required=False, allow_blank=True)
     new_password = serializers.CharField(write_only=True, trim_whitespace=False)
 
@@ -537,9 +537,9 @@ class BrokerFirstLoginPasswordSerializer(serializers.Serializer):
         profile = getattr(self.context['request'].user, 'profile', None)
         if (
             profile is None
-            or profile.role != Profile.Role.BROKER
-            or not profile.broker_onboarding_required
-            or profile.broker_password_changed
+            or profile.role != Profile.Role.AGENT
+            or not profile.agent_onboarding_required
+            or profile.agent_password_changed
         ):
             raise serializers.ValidationError('This account is not waiting for its initial password change.')
         return attrs
@@ -550,9 +550,9 @@ class BrokerFirstLoginPasswordSerializer(serializers.Serializer):
         user = User.objects.select_for_update().get(pk=request.user.pk)
         profile = Profile.objects.select_for_update().get(user=user)
         if (
-            profile.role != Profile.Role.BROKER
-            or not profile.broker_onboarding_required
-            or profile.broker_password_changed
+            profile.role != Profile.Role.AGENT
+            or not profile.agent_onboarding_required
+            or profile.agent_password_changed
         ):
             raise serializers.ValidationError('This account is not waiting for its initial password change.')
         username = self.validated_data.get('username')
@@ -560,8 +560,8 @@ class BrokerFirstLoginPasswordSerializer(serializers.Serializer):
             user.username = username
         user.set_password(self.validated_data['new_password'])
         user.save(update_fields=['username', 'password'])
-        profile.broker_password_changed = True
-        profile.save(update_fields=['broker_password_changed', 'updated_at'])
+        profile.agent_password_changed = True
+        profile.save(update_fields=['agent_password_changed', 'updated_at'])
         from accounts.models import TabSessionToken
 
         TabSessionToken.objects.filter(user=user, revoked_at__isnull=True).exclude(
@@ -571,7 +571,7 @@ class BrokerFirstLoginPasswordSerializer(serializers.Serializer):
 
         record_admin_action(
             user,
-            action='broker_initial_password_changed',
+            action='agent_initial_password_changed',
             object_type='user',
             object_id=user.pk,
             changes={'username_changed': bool(username)},
@@ -579,7 +579,7 @@ class BrokerFirstLoginPasswordSerializer(serializers.Serializer):
         return user
 
 
-class BrokerFirstLoginProfileSerializer(serializers.Serializer):
+class AgentFirstLoginProfileSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150)
     last_name = serializers.CharField(max_length=150)
     email = serializers.EmailField()
@@ -597,9 +597,9 @@ class BrokerFirstLoginProfileSerializer(serializers.Serializer):
         profile = getattr(self.context['request'].user, 'profile', None)
         if (
             profile is None
-            or profile.role != Profile.Role.BROKER
-            or not profile.broker_onboarding_required
-            or not profile.broker_password_changed
+            or profile.role != Profile.Role.AGENT
+            or not profile.agent_onboarding_required
+            or not profile.agent_password_changed
         ):
             raise serializers.ValidationError('Change the initial password before completing your agent profile.')
         if profile.assigned_city_id is None:
@@ -614,22 +614,22 @@ class BrokerFirstLoginProfileSerializer(serializers.Serializer):
         user = User.objects.select_for_update().get(pk=request.user.pk)
         profile = Profile.objects.select_for_update().get(user=user)
         if (
-            profile.role != Profile.Role.BROKER
-            or not profile.broker_onboarding_required
-            or not profile.broker_password_changed
+            profile.role != Profile.Role.AGENT
+            or not profile.agent_onboarding_required
+            or not profile.agent_password_changed
         ):
             raise serializers.ValidationError('Change the initial password before completing your agent profile.')
         for field in ('first_name', 'last_name', 'email'):
             setattr(user, field, self.validated_data[field])
         user.save(update_fields=['first_name', 'last_name', 'email'])
         profile.phone = self.validated_data['phone']
-        profile.broker_onboarding_required = False
-        profile.broker_approved = True
-        profile.management_permissions = broker_work_permissions()
+        profile.agent_onboarding_required = False
+        profile.agent_approved = True
+        profile.management_permissions = agent_work_permissions()
         profile.save(update_fields=[
             'phone',
-            'broker_onboarding_required',
-            'broker_approved',
+            'agent_onboarding_required',
+            'agent_approved',
             'management_permissions',
             'updated_at',
         ])
@@ -637,7 +637,7 @@ class BrokerFirstLoginProfileSerializer(serializers.Serializer):
 
         record_admin_action(
             user,
-            action='broker_onboarding_completed',
+            action='agent_onboarding_completed',
             object_type='user',
             object_id=user.pk,
             changes={'role': profile.role},
@@ -679,14 +679,14 @@ class DelegatedInvitationAcceptSerializer(serializers.Serializer):
         user.is_active = True
         user.save(update_fields=['password', 'is_active'])
         profile = user.profile
-        if profile.role == Profile.Role.BROKER:
-            profile.broker_approved = False
-            profile.broker_onboarding_required = True
-            profile.broker_password_changed = True
+        if profile.role == Profile.Role.AGENT:
+            profile.agent_approved = False
+            profile.agent_onboarding_required = True
+            profile.agent_password_changed = True
             profile.save(update_fields=[
-                'broker_approved',
-                'broker_onboarding_required',
-                'broker_password_changed',
+                'agent_approved',
+                'agent_onboarding_required',
+                'agent_password_changed',
                 'updated_at',
             ])
         invitation.accepted_at = timezone.now()

@@ -10,7 +10,7 @@ interface OwnerDashboardLayoutProps {
 export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   const { account } = useAuth();
   const permissions = account?.management_permissions ?? [];
-  const isAuthorizedBroker = account?.role === 'broker';
+  const isAuthorizedAgent = account?.role === 'agent';
   const canReviewSubmissions = permissions.some((permission) => [
     'announcements.review',
     'announcements.review_assigned',
@@ -22,13 +22,13 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
       'properties.manage_assigned',
     ].includes(permission));
   const canViewRequests = permissions.some((permission) => permission.startsWith('viewings.'));
-  const canManageSubcities = isAuthorizedBroker && permissions.includes('locations.manage_subcities');
-  const canManageBrokers = account?.role === 'administrator' && permissions.includes('staff.manage');
+  const canManageSubcities = isAuthorizedAgent && permissions.includes('locations.manage_subcities');
+  const canManageAgents = account?.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account?.role === 'administrator' && permissions.includes('locations.manage_cities');
   const canManageBranding = account?.role === 'administrator' && permissions.includes('branding.manage');
   const canManageSettings = Boolean(
     account?.is_platform_owner
-    || (isAuthorizedBroker && permissions.includes('settings.manage')),
+    || (isAuthorizedAgent && permissions.includes('settings.manage')),
   );
 
   return (
@@ -38,7 +38,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
         {canReviewSubmissions && <NavLink to="/management/submissions">{text('submissionReviewTitle')}</NavLink>}
         {canViewRequests && <NavLink to="/management/viewing-requests">{text('managerViewingRequests')}</NavLink>}
         {(canManageSubcities || canManageCities) && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
-        {canManageBrokers && <NavLink to="/management/brokers">{text('managerBrokerAccounts')}</NavLink>}
+        {canManageAgents && <NavLink to="/management/agents">{text('managerAgentAccounts')}</NavLink>}
         {canManageBranding && <NavLink to="/management/branding">{text('siteBrandingTitle')}</NavLink>}
         {canManageSettings && <NavLink to="/management/brokerage">{text('brokerageSettingsTitle')}</NavLink>}
       </nav>

@@ -157,7 +157,7 @@ class Property(models.Model):
         WITHDRAWN = 'withdrawn', 'Withdrawn'
 
     class ServiceType(models.TextChoices):
-        BROKER_MANAGED = 'broker_managed', 'Agent-managed'
+        AGENT_MANAGED = 'agent_managed', 'Agent-managed'
         OWNER_ANNOUNCED = 'owner_announced', 'Owner-announced'
 
     class AreaUnit(models.TextChoices):
@@ -252,7 +252,7 @@ class Property(models.Model):
     service_type = models.CharField(
         max_length=20,
         choices=ServiceType.choices,
-        default=ServiceType.BROKER_MANAGED,
+        default=ServiceType.AGENT_MANAGED,
     )
     is_featured = models.BooleanField(default=False)
     owner = models.ForeignKey(
@@ -272,11 +272,11 @@ class Property(models.Model):
     advertising_authorized = models.BooleanField(default=False)
     contact_publicly_visible = models.BooleanField(default=False)
     moderation_note = models.TextField(blank=True)
-    assigned_brokers = models.ManyToManyField(
+    assigned_agents = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
-        through='PropertyBrokerAssignment',
+        through='PropertyAgentAssignment',
         related_name='assigned_properties',
-        through_fields=('property', 'broker'),
+        through_fields=('property', 'agent'),
         blank=True,
     )
     amenities = models.ManyToManyField(Amenity, related_name='properties', blank=True)
@@ -506,17 +506,17 @@ def delete_property_image_files(sender, instance, **kwargs):
             transaction.on_commit(lambda storage=storage, name=name: storage.delete(name))
 
 
-class PropertyBrokerAssignment(models.Model):
-    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='broker_assignments')
-    broker = models.ForeignKey(
+class PropertyAgentAssignment(models.Model):
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='agent_assignments')
+    agent = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='property_broker_assignments',
+        related_name='property_agent_assignments',
     )
     granted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        related_name='granted_property_broker_assignments',
+        related_name='granted_property_agent_assignments',
         null=True,
         blank=True,
     )
@@ -525,16 +525,16 @@ class PropertyBrokerAssignment(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['property', 'broker'],
-                name='property_broker_assignment_unique',
+                fields=['property', 'agent'],
+                name='property_agent_assignment_unique',
             ),
         ]
         indexes = [
-            models.Index(fields=['broker', 'granted_at'], name='broker_assignment_user_idx'),
+            models.Index(fields=['agent', 'granted_at'], name='agent_assignment_user_idx'),
         ]
 
     def __str__(self):
-        return f'{self.broker} assigned to {self.property}'
+        return f'{self.agent} assigned to {self.property}'
 
 
 class ListingReport(models.Model):

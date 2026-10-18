@@ -87,8 +87,8 @@ export function PublicInformationPage({ kind, locale, text }: PublicInformationP
       </section>
       {kind === 'contact' && (
         <section className="container public-contact-section" aria-labelledby="public-contact-heading">
-          <h2 id="public-contact-heading">{text('brokerContactTitle')}</h2>
-          {error && <p className="public-contact-error" role="status">{text('brokerContactUnavailable')}</p>}
+          <h2 id="public-contact-heading">{text('agentContactTitle')}</h2>
+          {error && <p className="public-contact-error" role="status">{text('agentContactUnavailable')}</p>}
           {!hasContact && !error && <p>{text('contactDetailsNotConfigured')}</p>}
           <div className="public-contact-options">
             {contact.phone && (

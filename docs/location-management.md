@@ -6,7 +6,7 @@ aliases do not create duplicate city or property records.
 
 ## Managing verified locations
 
-An authorized broker or platform administrator with the existing
+An authorized agent or platform administrator with the existing
 `settings.manage` permission can use **Management → Manage locations**. The
 screen supports creating and editing location names, English and Amharic
 display names, aliases, parent relationships, ordering, and active status.
@@ -35,7 +35,7 @@ children, it also requires selection beneath one of those sub-cities.
   `location_id` filtering continues to support more specific hierarchy nodes.
 - The public city bar and its area selector are populated from the active
   location API, not a frontend-maintained city list.
-- Property cards, detail pages, and broker listing rows display the configured
+- Property cards, detail pages, and agent listing rows display the configured
   location path using the selected interface language, followed by any distinct
   free-text address information.
 - Pagination, sorting, publication visibility, and existing property data are

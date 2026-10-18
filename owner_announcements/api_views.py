@@ -6,7 +6,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import filters, generics, status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -27,9 +27,9 @@ from owner_announcements.serializers import (
     OwnerAnnouncementReviewSerializer,
     OwnerPropertySubmissionSerializer,
 )
-from properties.access import broker_city_location_ids
+from properties.access import agent_city_location_ids
 from properties.models import Property, PropertyImage
-from properties.serializers import PropertyImageManagementSerializer
+from properties.serializers import BulkDeleteIdsSerializer, PropertyImageManagementSerializer
 
 
 class IsPropertySubmitter(BasePermission):
@@ -92,6 +92,100 @@ class OwnerSubmissionDetailView(generics.RetrieveUpdateAPIView):
         serializer.save()
 
 
+class OwnerSubmissionBulkDeleteView(APIView):
+    permission_classes = [IsAuthenticated, IsPropertySubmitter]
+    serializer_class = BulkDeleteIdsSerializer
+    deletable_statuses = (
+        OwnerAnnouncement.Status.PENDING_REVIEW,
+        OwnerAnnouncement.Status.CORRECTIONS_REQUESTED,
+        OwnerAnnouncement.Status.REJECTED,
+    )
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data['ids']
+        announcements = list(
+            OwnerAnnouncement.objects
+            .select_for_update()
+            .filter(submitter=request.user, property_id__in=ids)
+            .order_by('property_id')
+        )
+        if {announcement.property_id for announcement in announcements} != set(ids):
+            raise NotFound('One or more selected submissions are unavailable.')
+        if any(
+            announcement.status not in self.deletable_statuses
+            or announcement.agreements.exists()
+            for announcement in announcements
+        ):
+            raise ValidationError({
+                'ids': 'Only submissions that have not been approved can be deleted.',
+            })
+
+        for announcement in announcements:
+            property_obj = Property.objects.select_for_update().get(pk=announcement.property_id)
+            record_admin_action(
+                request.user,
+                action='owner_submission_deleted',
+                object_type='owner_announcement',
+                object_id=announcement.pk,
+                changes={
+                    'property_title': property_obj.title,
+                    'submission_status': announcement.status,
+                },
+            )
+            property_obj.delete()
+
+        return Response({'deleted_count': len(announcements)})
+
+
+class AdminSubmissionBulkDeleteView(APIView):
+    permission_classes = [HasManagementPermission]
+    required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW
+    serializer_class = BulkDeleteIdsSerializer
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        profile = Profile.objects.filter(user=request.user).first()
+        if not request.user.is_superuser and not (
+            request.user.is_staff
+            and profile
+            and profile.role == Profile.Role.ADMINISTRATOR
+        ):
+            raise PermissionDenied('Only administrators can delete owner submissions.')
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data['ids']
+        announcements = list(
+            OwnerAnnouncement.objects
+            .select_for_update()
+            .filter(pk__in=ids)
+            .order_by('pk')
+        )
+        if {announcement.pk for announcement in announcements} != set(ids):
+            raise NotFound('One or more selected submissions are unavailable.')
+
+        for announcement in announcements:
+            property_obj = Property.objects.select_for_update().get(pk=announcement.property_id)
+            record_admin_action(
+                request.user,
+                action='owner_submission_deleted',
+                object_type='owner_announcement',
+                object_id=announcement.pk,
+                changes={
+                    'property_title': property_obj.title,
+                    'submission_status': announcement.status,
+                },
+            )
+            property_obj.delete()
+
+        return Response({'deleted_count': len(announcements)})
+
+
 class OwnerSubmissionImageListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsPropertySubmitter]
     serializer_class = PropertyImageManagementSerializer
@@ -131,7 +225,7 @@ def _review_queryset_for_user(user):
         and Profile.objects.filter(user=user, role=Profile.Role.ADMINISTRATOR).exists()
     ):
         return queryset
-    if Profile.objects.filter(user=user, role=Profile.Role.BROKER).exists():
+    if Profile.objects.filter(user=user, role=Profile.Role.AGENT).exists():
         if has_management_permission(user, Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED):
             return queryset.filter(assigned_reviewer=user)
     return queryset.none()
@@ -180,8 +274,8 @@ class OwnerAnnouncementReviewerListView(generics.ListAPIView):
     def get_queryset(self):
         candidates = get_user_model().objects.filter(
             is_active=True,
-            profile__role=Profile.Role.BROKER,
-            profile__broker_approved=True,
+            profile__role=Profile.Role.AGENT,
+            profile__agent_approved=True,
         ).select_related('profile').order_by('username')
         return [
             user
@@ -217,8 +311,8 @@ class OwnerAnnouncementAssignmentView(APIView):
             reviewer = get_object_or_404(
                 get_user_model().objects.select_related('profile').filter(
                     is_active=True,
-                    profile__role=Profile.Role.BROKER,
-                    profile__broker_approved=True,
+                    profile__role=Profile.Role.AGENT,
+                    profile__agent_approved=True,
                 ),
                 pk=reviewer_id,
             )
@@ -361,12 +455,12 @@ class OwnerAnnouncementDecisionView(APIView):
             property_obj.moderation_note = feedback
 
         announcement.status = next_status
-        announcement.broker_feedback = feedback
+        announcement.agent_feedback = feedback
         announcement.reviewed_by = request.user
         announcement.reviewed_at = now
         announcement.save(update_fields=[
             'status',
-            'broker_feedback',
+            'agent_feedback',
             'reviewed_by',
             'reviewed_at',
             'updated_at',

@@ -163,22 +163,22 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
             <a className="contact-method" href={`tel:${contact.phone}`}><Phone size={17} aria-hidden="true" /><span><small>{text('contactByPhone')}</small><strong>{contact.phone}</strong></span></a>
           )}
           {whatsappLink && (
-            <a className="contact-method" href={whatsappLink} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>WhatsApp</small><strong>{text('contactBroker')}</strong></span></a>
+            <a className="contact-method" href={whatsappLink} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>WhatsApp</small><strong>{text('contactAgent')}</strong></span></a>
           )}
           {telegramLink && (
-            <a className="contact-method" href={telegramLink} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>Telegram</small><strong>{text('contactBroker')}</strong></span></a>
+            <a className="contact-method" href={telegramLink} target="_blank" rel="noreferrer"><Send size={17} aria-hidden="true" /><span><small>Telegram</small><strong>{text('contactAgent')}</strong></span></a>
           )}
           {contact.email && (
             <a className="contact-method" href={`mailto:${contact.email}`}><Mail size={17} aria-hidden="true" /><span><small>{text('contactByEmail')}</small><strong>{contact.email}</strong></span></a>
           )}
-          {account?.role !== 'broker' && (
+          {account?.role !== 'agent' && (
             <>
               <Link className="button button-primary viewing-cta" to={`/viewing-requests/new?property_id=${property.id}&property_slug=${encodeURIComponent(property.slug)}`}><CalendarDays size={16} aria-hidden="true" />{text('requestViewing')}</Link>
-              <p className="contact-note">{contactError ? text('brokerContactUnavailable') : text('viewingNoAccount')}</p>
+              <p className="contact-note">{contactError ? text('agentContactUnavailable') : text('viewingNoAccount')}</p>
             </>
           )}
           {!contactError && !contact.phone && !contact.email && !whatsappLink && !telegramLink && (
-            <p className="contact-note">{text('brokerContactNotConfigured')}</p>
+            <p className="contact-note">{text('agentContactNotConfigured')}</p>
           )}
         </aside>
       </section>
