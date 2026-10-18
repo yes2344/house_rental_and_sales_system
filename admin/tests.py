@@ -191,7 +191,7 @@ class AdminApiTests(APITestCase):
     def test_brokerage_contact_is_public_but_brokers_cannot_manage_platform_settings(self):
         public = self.client.get(reverse('api:brokerage-contact'))
         self.assertEqual(public.status_code, 200)
-        self.assertEqual(public.data['site_name'], 'Habasha Property Center')
+        self.assertEqual(public.data['site_name'], 'Habesha Property Center')
         self.assertEqual(public.data['business_name'], '')
 
         self.client.force_authenticate(user=self.customer)
@@ -273,6 +273,13 @@ class AdminApiTests(APITestCase):
         delegated_update = self.client.patch(endpoint, {'site_name': 'Delegated Admin Site'}, format='json')
         self.assertEqual(delegated_update.status_code, 200)
         self.assertEqual(delegated_update.data['site_name'], 'Delegated Admin Site')
+        corrected_branding = self.client.patch(
+            endpoint,
+            {'site_name': 'Habasha Property Center'},
+            format='json',
+        )
+        self.assertEqual(corrected_branding.status_code, 200)
+        self.assertEqual(corrected_branding.data['site_name'], 'Habesha Property Center')
 
         image_buffer = BytesIO()
         Image.new('RGB', (1, 1), color='white').save(image_buffer, format='PNG')

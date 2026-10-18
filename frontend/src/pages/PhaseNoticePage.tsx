@@ -28,7 +28,7 @@ export function NotFoundPage({ text }: PhaseNoticePageProps) {
     <main className="notice-page" id="main-content">
       <div className="notice-card">
         <span className="notice-code">404</span>
-        <p className="eyebrow eyebrow-muted">{contact.site_name || 'Habasha Property Center'}</p>
+        <p className="eyebrow eyebrow-muted">{contact.site_name || 'Habesha Property Center'}</p>
         <h1>{text('notFoundTitle')}</h1>
         <p>{text('notFoundBody')}</p>
         <Link className="button button-primary" to="/"><ArrowLeft size={16} aria-hidden="true" />{text('backHome')}</Link>

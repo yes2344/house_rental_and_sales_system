@@ -36,3 +36,41 @@ export function formatRegistrationDate(createdAt: string | null | undefined, loc
     dateStyle: 'medium',
   }).format(date);
 }
+
+export function formatRegistrationAge(createdAt: string | null | undefined, locale: Locale): string | null {
+  if (!createdAt) return null;
+  const registeredAt = new Date(createdAt);
+  if (Number.isNaN(registeredAt.getTime())) return null;
+
+  const elapsedSeconds = (Date.now() - registeredAt.getTime()) / 1000;
+  const elapsedDays = Math.abs(elapsedSeconds) / 86400;
+  let value: number;
+  let unit: Intl.RelativeTimeFormatUnit;
+
+  if (elapsedDays >= 365) {
+    value = Math.floor(elapsedDays / 365);
+    unit = 'year';
+  } else if (elapsedDays >= 30) {
+    value = Math.floor(elapsedDays / 30);
+    unit = 'month';
+  } else if (elapsedDays >= 7) {
+    value = Math.floor(elapsedDays / 7);
+    unit = 'week';
+  } else if (elapsedDays >= 1) {
+    value = Math.floor(elapsedDays);
+    unit = 'day';
+  } else if (Math.abs(elapsedSeconds) >= 3600) {
+    value = Math.floor(Math.abs(elapsedSeconds) / 3600);
+    unit = 'hour';
+  } else if (Math.abs(elapsedSeconds) >= 60) {
+    value = Math.floor(Math.abs(elapsedSeconds) / 60);
+    unit = 'minute';
+  } else {
+    value = Math.floor(Math.abs(elapsedSeconds));
+    unit = 'second';
+  }
+
+  return new Intl.RelativeTimeFormat(locale === 'am' ? 'am-ET' : 'en-ET', {
+    numeric: 'always',
+  }).format(elapsedSeconds >= 0 ? -value : value, unit);
+}

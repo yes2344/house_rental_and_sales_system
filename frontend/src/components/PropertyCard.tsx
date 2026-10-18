@@ -1,11 +1,11 @@
-import { BedDouble, Bath, MapPin, Phone, Ruler } from 'lucide-react';
+import { BedDouble, Bath, CalendarDays, MapPin, Phone, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { PropertySummary } from '../api/properties';
 import { useBrokerageContact } from '../BrokerageContactContext';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
-import { formatPropertyPrice } from './propertyDisplay';
+import { formatPropertyPrice, formatRegistrationAge, formatRegistrationDate } from './propertyDisplay';
 import { formatPropertyLocation } from './locationDisplay';
 import { PropertySlideshow } from './PropertySlideshow';
 
@@ -52,6 +52,8 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
     ? `tel:${phoneNumber.trim().startsWith('+') ? '+' : ''}${phoneDigits}`
     : '';
   const location = formatPropertyLocation(property, locale);
+  const registrationDate = formatRegistrationDate(property.created_at, locale);
+  const registrationAge = formatRegistrationAge(property.created_at, locale);
 
   return (
     <article className="listing-card">
@@ -124,6 +126,17 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
             </span>
           )}
         </div>
+        {registrationDate && registrationAge && (
+          <p className="listing-registration-date">
+            <CalendarDays size={14} aria-hidden="true" />
+            <span>
+              {text('registeredDate')}{' '}
+              <time dateTime={property.created_at}>
+                {registrationDate} ({registrationAge})
+              </time>
+            </span>
+          </p>
+        )}
       </div>
     </article>
   );

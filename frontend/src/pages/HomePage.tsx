@@ -351,7 +351,7 @@ export function HomePage({ locale, text }: HomePageProps) {
         <div className="hero-grid">
           <div className="hero-copy">
             <h1>
-              {text('heroHeadline')}
+              <span className="hero-headline">{text('heroHeadline')}</span>
               <span>{text('heroBrandLine')}</span>
             </h1>
           </div>

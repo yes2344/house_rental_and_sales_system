@@ -29,7 +29,7 @@ export interface BrokerageContact {
 }
 
 export const emptyBrokerageContact: BrokerageContact = {
-  site_name: 'Habasha Property Center',
+  site_name: 'Habesha Property Center',
   footer_copyright: '',
   site_logo: '',
   homepage_hero_image: '',

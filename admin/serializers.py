@@ -61,9 +61,17 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        if representation['site_name'].casefold() == 'habeshahome':
-            representation['site_name'] = 'Habasha Property Center'
+        site_name = representation['site_name']
+        if site_name.strip().casefold() in {'habasha property center', 'habeshahome'}:
+            representation['site_name'] = 'Habesha Property Center'
+        else:
+            representation['site_name'] = site_name.replace('Habasha', 'Habesha')
         return representation
+
+    def validate_site_name(self, value):
+        if value.strip().casefold() in {'habasha property center', 'habeshahome'}:
+            return 'Habesha Property Center'
+        return value.replace('Habasha', 'Habesha')
 
     def get_fields(self):
         fields = super().get_fields()
