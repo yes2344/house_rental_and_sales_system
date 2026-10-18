@@ -124,7 +124,23 @@ TEMPLATES = [
 WSGI_APPLICATION = 'house.wsgi.application'
 
 database_url = env('DATABASE_URL', default='')
-if database_url:
+if DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': env('POSTGRES_DB', default='house_db'),
+            'USER': env('POSTGRES_USER', default='postgres'),
+            'PASSWORD': env('POSTGRES_PASSWORD', default=''),
+            'HOST': env('POSTGRES_HOST', default='localhost'),
+            'PORT': env('POSTGRES_PORT', default='5432'),
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
+            'TEST': {
+                'NAME': env('POSTGRES_TEST_DB', default=None),
+            },
+        }
+    }
+elif database_url:
     database_config = env.db_url_config(database_url)
     if database_config['ENGINE'] != 'django.db.backends.postgresql':
         raise ImproperlyConfigured('DATABASE_URL must use PostgreSQL.')

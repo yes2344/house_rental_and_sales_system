@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, LogOut, Mail, Menu, Phone, UserRound, X } from 'lucide-react';
+import { ChevronDown, LogIn, LogOut, Mail, Menu, Phone, X } from 'lucide-react';
 import { Link, NavLink } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
@@ -218,7 +218,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                 aria-label={text('signIn')}
                 onClick={closeNavigation}
               >
-                <UserRound size={21} aria-hidden="true" />
+                <LogIn size={21} aria-hidden="true" />
               </Link>
             )}
           </div>
@@ -305,7 +305,16 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                 </button>
               </>
             ) : (
-              <Link className="header-sign-in" to="/login" onClick={closeNavigation}>{text('signIn')}</Link>
+              <Link
+                className="header-sign-in header-account-icon"
+                to="/login"
+                state={{ from: '/account' }}
+                aria-label={text('signIn')}
+                title={text('signIn')}
+                onClick={closeNavigation}
+              >
+                <LogIn size={20} aria-hidden="true" />
+              </Link>
             )}
             {canManageListings && (
               <Link className="button button-small button-primary" to="/management/listings" onClick={closeNavigation}>
