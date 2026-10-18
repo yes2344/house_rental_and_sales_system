@@ -19,8 +19,10 @@ from properties.models import ListingReport, Property, PropertyAgentAssignment
 
 
 User = get_user_model()
-SITE_NAME = 'habeshapropertycenter'
+SITE_NAME = 'Infinit House'
 LEGACY_SITE_NAMES = {
+    'infinity house',
+    'habeshapropertycenter',
     'habasha property center',
     'habesha property center',
     'habesha home center',

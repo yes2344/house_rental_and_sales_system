@@ -9,8 +9,8 @@ def _branding():
 
     settings = BrokerageSettings.objects.filter(pk=1).first()
     if settings is None:
-        return 'habeshapropertycenter', None, ''
-    name = settings.site_name.strip() or 'habeshapropertycenter'
+        return 'Infinit House', None, ''
+    name = settings.site_name.strip() or 'Infinit House'
     if not settings.site_logo:
         return name, None, settings.phone.strip()
     with settings.site_logo.open('rb') as logo_file:
@@ -185,7 +185,7 @@ def watermark_image(image_file):
             stroke_width=max(1, phone_font.size // 16),
             stroke_fill=(0, 0, 0, 220),
         )
-    center_label = '@habeshapropertycenter'
+    center_label = 'Infinit House'
     center_font_size = max(12, min(64, round(min(width, height) * 0.065)))
     center_font = ImageFont.load_default(size=center_font_size)
     center_box = draw.textbbox((0, 0), center_label, font=center_font)

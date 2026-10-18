@@ -171,7 +171,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
           <Link
             className="brand"
             to="/"
-            aria-label={contact.site_name || 'habeshapropertycenter'}
+            aria-label={contact.site_name || 'Infinit House'}
             onClick={closeNavigation}
           >
             {contact.site_logo ? (
@@ -185,7 +185,7 @@ export function Header({ locale, onLocaleChange, preferenceError, text }: Header
                 </svg>
               </span>
             )}
-            <span className="brand-copy"><strong>{contact.site_name || 'habeshapropertycenter'}</strong></span>
+            <span className="brand-copy"><strong>{contact.site_name || 'Infinit House'}</strong></span>
           </Link>
 
           <div className="mobile-header-actions">

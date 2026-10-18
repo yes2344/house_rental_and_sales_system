@@ -1,13 +1,13 @@
 <footer>
   <div class="container">
-    <strong>{{ brokerage_contact.business_name|default:"habeshapropertycenter" }}</strong>
+    <strong>{{ brokerage_contact.business_name|default:"Infinit House" }}</strong>
     {% if brokerage_contact.phone %}
       <span> · <a href="tel:{{ brokerage_contact.phone }}">{{ brokerage_contact.phone }}</a></span>
     {% endif %}
     {% if brokerage_contact.email %}
       <span> · <a href="mailto:{{ brokerage_contact.email }}">{{ brokerage_contact.email }}</a></span>
     {% endif %}
-    <nav class="brokerage-social-links" aria-label="habeshapropertycenter social media">
+    <nav class="brokerage-social-links" aria-label="Infinit House social media">
       {% for link in brokerage_social_links %}
         <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" aria-label="{{ link.get_platform_display }}" title="{{ link.get_platform_display }}">
           <svg class="social-platform-mark social-{{ link.platform }}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">

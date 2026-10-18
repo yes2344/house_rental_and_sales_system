@@ -191,7 +191,7 @@ class AdminApiTests(APITestCase):
     def test_brokerage_contact_is_public_but_agents_cannot_manage_platform_settings(self):
         public = self.client.get(reverse('api:brokerage-contact'))
         self.assertEqual(public.status_code, 200)
-        self.assertEqual(public.data['site_name'], 'habeshapropertycenter')
+        self.assertEqual(public.data['site_name'], 'Infinit House')
         self.assertEqual(public.data['business_name'], '')
 
         self.client.force_authenticate(user=self.customer)
@@ -279,7 +279,21 @@ class AdminApiTests(APITestCase):
             format='json',
         )
         self.assertEqual(corrected_branding.status_code, 200)
-        self.assertEqual(corrected_branding.data['site_name'], 'habeshapropertycenter')
+        self.assertEqual(corrected_branding.data['site_name'], 'Infinit House')
+        legacy_branding = self.client.patch(
+            endpoint,
+            {'site_name': 'habeshapropertycenter'},
+            format='json',
+        )
+        self.assertEqual(legacy_branding.status_code, 200)
+        self.assertEqual(legacy_branding.data['site_name'], 'Infinit House')
+        previous_branding = self.client.patch(
+            endpoint,
+            {'site_name': 'Infinity House'},
+            format='json',
+        )
+        self.assertEqual(previous_branding.status_code, 200)
+        self.assertEqual(previous_branding.data['site_name'], 'Infinit House')
 
         image_buffer = BytesIO()
         Image.new('RGB', (1, 1), color='white').save(image_buffer, format='PNG')
