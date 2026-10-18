@@ -66,7 +66,7 @@ class BrokerageSettingsView(APIView):
 
     @transaction.atomic
     @extend_schema(
-        summary='Update site branding or authorized Habesha Property Center contact and social links',
+        summary='Update site branding or authorized habeshapropertycenter contact and social links',
         request=BrokerageSettingsSerializer,
         responses={200: BrokerageSettingsSerializer},
     )

@@ -1946,7 +1946,7 @@ class PropertyImageApiTests(APITestCase):
 
         with patch(
             'properties.image_processing._branding',
-            return_value=('Habesha Home Center', None, ''),
+            return_value=('habeshapropertycenter', None, ''),
         ):
             watermarked = watermark_image(ContentFile(image_buffer.getvalue()))
 
@@ -2048,7 +2048,7 @@ class PropertyImageApiTests(APITestCase):
 
         with patch(
             'properties.image_processing._branding',
-            return_value=('Habesha Home Center', None, '+251911222333'),
+            return_value=('habeshapropertycenter', None, '+251911222333'),
         ):
             call_command('watermark_property_images', '--refresh')
         image.refresh_from_db()

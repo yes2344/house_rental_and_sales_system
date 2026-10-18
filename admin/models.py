@@ -15,7 +15,7 @@ class BrokerageSettings(models.Model):
         blank=True,
     )
     business_name = models.CharField(max_length=160, blank=True)
-    site_name = models.CharField(max_length=100, default='Habesha Property Center')
+    site_name = models.CharField(max_length=100, default='habeshapropertycenter')
     footer_copyright = models.CharField(max_length=200, blank=True)
     site_logo = models.ImageField(upload_to='site-branding/', blank=True)
     homepage_hero_image = models.ImageField(upload_to='site-branding/homepage/', blank=True)
@@ -31,7 +31,7 @@ class BrokerageSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name_plural = 'Habesha Property Center contact settings'
+        verbose_name_plural = 'habeshapropertycenter contact settings'
 
     def save(self, *args, **kwargs):
         self.pk = 1
@@ -47,12 +47,12 @@ class BrokerageSettings(models.Model):
             ).order_by('pk').first()
             if self.platform_owner is None:
                 raise ValidationError(
-                    'Create an active platform-owner account before saving Habesha Property Center contact settings.'
+                    'Create an active platform-owner account before saving habeshapropertycenter contact settings.'
                 )
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.business_name or 'Habesha Property Center contact settings'
+        return self.business_name or 'habeshapropertycenter contact settings'
 
 
 class SocialMediaLink(models.Model):

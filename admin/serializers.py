@@ -18,6 +18,14 @@ from properties.models import ListingReport, Property, PropertyBrokerAssignment
 
 
 User = get_user_model()
+SITE_NAME = 'habeshapropertycenter'
+LEGACY_SITE_NAMES = {
+    'habasha property center',
+    'habesha property center',
+    'habesha home center',
+    'habeshahome',
+    'kekalehabesha home',
+}
 
 
 class SocialMediaLinkSerializer(serializers.ModelSerializer):
@@ -62,16 +70,14 @@ class BrokerageSettingsSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         site_name = representation['site_name']
-        if site_name.strip().casefold() in {'habasha property center', 'habeshahome'}:
-            representation['site_name'] = 'Habesha Property Center'
-        else:
-            representation['site_name'] = site_name.replace('Habasha', 'Habesha')
+        if site_name.strip().casefold() in LEGACY_SITE_NAMES:
+            representation['site_name'] = SITE_NAME
         return representation
 
     def validate_site_name(self, value):
-        if value.strip().casefold() in {'habasha property center', 'habeshahome'}:
-            return 'Habesha Property Center'
-        return value.replace('Habasha', 'Habesha')
+        if value.strip().casefold() in LEGACY_SITE_NAMES:
+            return SITE_NAME
+        return value
 
     def get_fields(self):
         fields = super().get_fields()

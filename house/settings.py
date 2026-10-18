@@ -250,7 +250,7 @@ EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT_SECONDS', default=10)
 BREVO_API_KEY = env('BREVO_API_KEY', default='')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='Habesha Home Center <no-reply@example.com>')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='habeshapropertycenter <no-reply@example.com>')
 cache_backend = env(
     'DJANGO_CACHE_BACKEND',
     default=(
@@ -275,7 +275,7 @@ CACHES = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Habesha Home Center API',
+    'TITLE': 'habeshapropertycenter API',
     'DESCRIPTION': 'Versioned API for verified property listings and viewing requests.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
