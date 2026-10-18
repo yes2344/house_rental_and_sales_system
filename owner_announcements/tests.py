@@ -487,8 +487,13 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         public_property = public_list.data['results'][0]
         self.assertEqual(public_property['id'], property_obj.pk)
         self.assertEqual(public_property['public_contact_name'], '')
-        self.assertEqual(public_property['public_contact_phone'], '')
+        self.assertEqual(public_property['public_contact_phone'], '+251900000001')
         self.assertEqual(public_property['public_contact_email'], '')
+        public_detail = self.client.get(
+            reverse('api:property-detail', args=[property_obj.slug]),
+        )
+        self.assertEqual(public_detail.status_code, 200)
+        self.assertEqual(public_detail.data['public_contact_phone'], '+251900000001')
 
     def test_agent_rejection_requires_explanation_and_keeps_property_hidden(self):
         created = self.submit()

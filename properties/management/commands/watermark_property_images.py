@@ -22,7 +22,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         refresh = options['refresh']
-        queryset = PropertyImage.objects.order_by('pk')
+        queryset = PropertyImage.objects.select_related('property').order_by('pk')
         total = queryset.count()
         processed = 0
         skipped = 0

@@ -163,7 +163,7 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
   const chooseImages = (event: ChangeEvent<HTMLInputElement>) => {
     const accepted = ['jpg', 'jpeg', 'png', 'webp'];
     const existingImageCount = submission?.images.length ?? 0;
-    const availableSlots = Math.max(0, 10 - existingImageCount - stagedImages.length);
+    const maximumStagedImages = Math.max(0, 10 - existingImageCount);
     const files = Array.from(event.target.files ?? []);
     const nextImages = [...stagedImages];
     let issue = '';
@@ -173,7 +173,7 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
         issue = text('imageTypeError');
       } else if (file.size > 10 * 1024 * 1024) {
         issue = text('imageSizeError');
-      } else if (nextImages.length >= availableSlots) {
+      } else if (nextImages.length >= maximumStagedImages) {
         issue = text('imageLimitError');
       } else {
         nextImages.push(file);
@@ -428,8 +428,8 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
           <p className="manager-field-hint">{text('submissionPhotoHelp')}</p>
           {stagedImages.length > 0 && (
             <ul className="submission-staged-images">
-              {stagedImages.map((file) => (
-                <li key={`${file.name}-${file.lastModified}`}>{file.name}
+              {stagedImages.map((file, index) => (
+                <li key={`${file.name}-${file.lastModified}-${index}`}>{file.name}
                   <button className="filter-clear" type="button" onClick={() => setStagedImages((current) => current.filter((item) => item !== file))}>
                     {text('removeSelectedImage')}
                   </button>

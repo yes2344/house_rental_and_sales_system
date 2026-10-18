@@ -225,7 +225,7 @@ img { display: block; max-width: 100%; }
 .listing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .listing-card { position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--line); background: var(--paper); transition: transform .2s ease, box-shadow .2s ease; }
 .listing-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-card); }
-.listing-image-link { position: relative; display: block; overflow: hidden; aspect-ratio: 1.5; background: #e9eee5; }
+.listing-image-link { position: relative; display: block; overflow: hidden; aspect-ratio: 30 / 17; background: #e9eee5; }
 .listing-image { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
 .property-slideshow { position: absolute; inset: 0; }
 .property-slideshow > .listing-image { position: absolute; inset: 0; }
@@ -264,19 +264,20 @@ img { display: block; max-width: 100%; }
 .listing-status-overlay span { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #3b9961; }
 .listing-status-overlay.is-unavailable { color: #8c3d32; }
 .listing-status-overlay.is-unavailable span { background: #bd6251; }
-.listing-image-bottom { position: absolute; right: 13px; bottom: 22px; left: 13px; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; color: white; pointer-events: none; }
-.listing-image-contact { display: flex; min-width: 0; max-width: 50%; flex-direction: column; align-items: flex-end; gap: 5px; text-align: right; }
-.listing-image-contact a { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: 5px; color: white; font-size: 16.500px; font-weight: 700; text-shadow: 0 1px 4px rgb(0 0 0 / 65%); pointer-events: auto; }
+.listing-image-bottom { position: absolute; right: 13px; bottom: 12px; left: 13px; display: flex; align-items: flex-end; color: white; pointer-events: none; }
+.listing-image-contact { position: absolute; z-index: 4; right: 8px; bottom: 8px; display: flex; min-width: 0; max-width: 50%; flex-direction: column; align-items: flex-end; gap: 5px; text-align: right; }
+.listing-image-contact a { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: 5px; padding: 4px 6px; background: rgb(16 45 74 / 88%); color: white; font-size: 14px; font-weight: 700; text-shadow: 0 1px 4px rgb(0 0 0 / 65%); pointer-events: auto; }
 .listing-image-contact a:hover { text-decoration: underline; }
 .listing-image-contact a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.listing-card-content { min-width: 0; padding: 15px 16px 14px; }
+.listing-price-overlay { max-width: 50%; overflow-wrap: anywhere; }
+.listing-card-content { min-width: 0; padding: 9px 12px 8px; }
 .listing-location { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 18px; }
 .listing-location svg { color: var(--green-700); }
 .listing-location > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-location-address { display: flex; align-items: center; gap: 6px; margin: -5px 0 13px; color: var(--ink-soft); font-size: 18px; }
 .detail-location-address svg { flex: 0 0 auto; color: var(--green-700); }
-.listing-card h3 { overflow: hidden; margin: 0 0 11px; font-family: Manrope, 'Noto Sans Ethiopic', sans-serif; font-size: 24px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.listing-card-content > .listing-location { margin: -3px 0 11px; }
+.listing-card h3 { overflow: hidden; margin: 0 0 5px; font-family: Manrope, 'Noto Sans Ethiopic', sans-serif; font-size: 24px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.listing-card-content > .listing-location { margin: -2px 0 6px; }
 .listing-card h3 a:hover { color: var(--green-700); }
 .listing-specs { display: flex; flex-wrap: wrap; gap: 12px; color: var(--ink-soft); font-size: 18px; }
 .listing-specs span { display: inline-flex; align-items: center; gap: 4px; }
@@ -285,13 +286,13 @@ img { display: block; max-width: 100%; }
 .listing-card-specs span { min-width: 0; }
 .listing-card-specs svg { flex: 0 0 auto; }
 .listing-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--line); }
-.listing-registration-date { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: var(--muted); font-size: 18px; }
+.listing-registration-date { margin: 5px 0 0; color: var(--muted); font-size: 14px; }
 .listing-contact { display: flex; flex-wrap: wrap; gap: 7px 12px; margin-top: 10px; }
 .listing-contact a { display: inline-flex; min-width: 0; align-items: center; gap: 5px; color: var(--green-800); font-size: 18px; }
 .listing-contact a:hover { text-decoration: underline; }
 .listing-contact a span { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .listing-contact svg { flex: 0 0 auto; }
-.listing-price { font-family: Manrope, sans-serif; font-size: 24px; font-weight: 800; }
+.listing-price { font-family: Manrope, sans-serif; font-size: 19px; font-weight: 800; }
 .listing-price span { color: var(--green-800); font-family: 'DM Sans', 'Noto Sans Ethiopic', sans-serif; font-size: 18px; font-weight: 700; }
 .listing-status { display: inline-flex; align-items: center; gap: 5px; color: #55745b; font-size: 18px; font-weight: 600; }
 .listing-status span { width: 6px; height: 6px; border-radius: 50%; background: #73a376; }
@@ -493,10 +494,10 @@ img { display: block; max-width: 100%; }
 .results-main { min-width: 0; }
 .results-range { margin: 0 0 11px; color: var(--muted); font-size: 15px; }
 .results-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
-.results-grid .listing-card-content { padding: 12px; }
+.results-grid .listing-card-content { padding: 9px 10px 8px; }
 .results-grid .listing-card h3 { font-size: 21px; }
 .results-grid .listing-specs { gap: 7px; font-size: 13.500px; }
-.results-grid .listing-price { font-size: 21px; }
+.results-grid .listing-price { font-size: 18px; }
 .results-grid .listing-card-bottom { gap: 5px; }
 .results-grid .listing-status { font-size: 12px; }
 .results-state { min-height: 280px; flex-direction: column; }
@@ -834,16 +835,17 @@ img { display: block; max-width: 100%; }
   .mobile-only { display: flex; width: fit-content; margin: 20px auto 0; }
   .listing-grid { grid-template-columns: 1fr; gap: 15px; }
   .listing-card { display: block; }
-  .listing-image-link { min-height: 0; aspect-ratio: 1.35; }
-  .listing-card-content { display: block; min-width: 0; padding: 13px; }
-  .listing-card h3 { margin: 6px 0 9px; }
+  .listing-image-link { min-height: 0; aspect-ratio: 27 / 17; }
+  .listing-card-content { display: block; min-width: 0; padding: 8px 10px 7px; }
+  .listing-card h3 { margin: 3px 0 5px; }
   .listing-specs { gap: 7px; }
   .listing-specs span { gap: 3px; }
   .listing-specs svg { width: 13px; }
   .listing-card-bottom { margin-top: 11px; padding-top: 9px; }
-  .listing-image-bottom { right: 10px; left: 10px; gap: 5px; }
-  .listing-price-overlay { max-width: 52%; overflow-wrap: anywhere; }
-  .listing-image-contact { max-width: 52%; }
+  .listing-image-bottom { right: 10px; bottom: 12px; left: 10px; }
+  .listing-price-overlay { max-width: 46%; overflow-wrap: anywhere; font-size: 17px; }
+  .listing-image-contact { right: 8px; bottom: 8px; max-width: 64%; }
+  .listing-image-contact a { gap: 4px; padding: 4px 5px; font-size: 12px; }
   .listing-state { min-height: 170px; flex-direction: column; }
   .listing-error { justify-content: center; }
   .homepage-notes-section { padding: 24px 0; }
@@ -914,8 +916,8 @@ img { display: block; max-width: 100%; }
   .filter-form.is-expanded { display: block; padding: 8px 14px 15px; border: 1px solid var(--line); border-top: 0; }
   .results-grid { grid-template-columns: 1fr; gap: 12px; }
   .results-grid .listing-card { display: block; }
-  .results-grid .listing-card-content { padding: 13px; }
-  .results-grid .listing-image-link { min-height: 0; aspect-ratio: 1.35; }
+  .results-grid .listing-card-content { padding: 8px 10px 7px; }
+  .results-grid .listing-image-link { min-height: 0; aspect-ratio: 27 / 17; }
   .results-grid .listing-specs { gap: 7px; }
   .results-empty { min-height: 290px; padding: 23px 16px; }
   .pagination { gap: 8px; justify-content: space-between; }
@@ -1607,7 +1609,6 @@ img { display: block; max-width: 100%; }
   .footer-contact-error { font-size: 16.5px; }
   .nav-dropdown-error,
   .eyebrow,
-  .listing-image-contact a,
   .favorite-error,
   .step-number,
   .trust-item,

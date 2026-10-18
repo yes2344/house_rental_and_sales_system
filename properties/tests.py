@@ -477,7 +477,7 @@ class PublicPropertyApiTests(APITestCase):
         self.assertEqual(result['public_contact_phone'], '+251911222333')
         self.assertEqual(result['public_contact_email'], 'agent@example.com')
 
-    def test_unapproved_agent_contact_is_not_public(self):
+    def test_registered_phone_is_public_on_a_published_listing(self):
         agent = get_user_model().objects.create_user(
             username='unapproved-listing-agent',
             email='private-agent@example.com',
@@ -495,7 +495,7 @@ class PublicPropertyApiTests(APITestCase):
 
         response = self.client.get(reverse('api:property-list'))
 
-        self.assertEqual(response.data['results'][0]['public_contact_phone'], '')
+        self.assertEqual(response.data['results'][0]['public_contact_phone'], '+251911222333')
         self.assertEqual(response.data['results'][0]['public_contact_email'], '')
 
     def test_formatted_rent_price_includes_period_and_sale_price_does_not(self):
@@ -1984,7 +1984,7 @@ class PropertyImageApiTests(APITestCase):
             kwargs={'property_id': self.property.pk},
         )
 
-    def test_watermark_places_low_opacity_millennial_pink_handle_in_the_center(self):
+    def test_watermark_places_visible_millennial_pink_handle_in_the_center(self):
         image_buffer = BytesIO()
         Image.new('RGB', (600, 400), color=(80, 120, 160)).save(image_buffer, format='PNG')
 
@@ -2000,7 +2000,7 @@ class PropertyImageApiTests(APITestCase):
             result_center = result.convert('RGB').crop(center)
             difference = ImageChops.difference(original_center, result_center)
             self.assertIsNotNone(difference.getbbox())
-            self.assertLess(max(channel[1] for channel in difference.getextrema()), 100)
+            self.assertGreater(max(channel[1] for channel in difference.getextrema()), 100)
             self.assertTrue(any(
                 result_pixel[0] - original_pixel[0]
                 > result_pixel[1] - original_pixel[1]

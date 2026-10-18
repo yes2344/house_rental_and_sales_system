@@ -1,11 +1,11 @@
-import { BedDouble, Bath, CalendarDays, MapPin, Phone, Ruler } from 'lucide-react';
+import { BedDouble, Bath, MapPin, Phone, Ruler } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import type { PropertySummary } from '../api/properties';
 import { useBrokerageContact } from '../BrokerageContactContext';
 import type { Locale, MessageKey } from '../i18n';
 import { FavoriteButton } from './FavoriteButton';
-import { formatPropertyPrice, formatRegistrationAge, formatRegistrationDate } from './propertyDisplay';
+import { formatPropertyPrice, formatRegistrationAge } from './propertyDisplay';
 import { formatPropertyLocation } from './locationDisplay';
 import { PropertySlideshow } from './PropertySlideshow';
 
@@ -52,7 +52,6 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
     ? `tel:${phoneNumber.trim().startsWith('+') ? '+' : ''}${phoneDigits}`
     : '';
   const location = formatPropertyLocation(property, locale);
-  const registrationDate = formatRegistrationDate(property.created_at, locale);
   const registrationAge = formatRegistrationAge(property.created_at, locale);
 
   return (
@@ -80,19 +79,19 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
         </span>
         <div className="listing-image-bottom">
           <strong className="listing-price listing-price-overlay">{price}</strong>
-          <div className="listing-image-contact">
-            {phoneNumber && (
-              <a
-                href={phoneHref}
-                aria-label={`${text('contactByPhone')}: ${phoneNumber}`}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <Phone size={13} aria-hidden="true" />
-                <span>{phoneNumber}</span>
-              </a>
-            )}
-          </div>
         </div>
+        {phoneNumber && (
+          <div className="listing-image-contact">
+            <a
+              href={phoneHref}
+              aria-label={`${text('contactByPhone')}: ${phoneNumber}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Phone size={13} aria-hidden="true" />
+              <span>{phoneNumber}</span>
+            </a>
+          </div>
+        )}
         <FavoriteButton propertyId={property.id} text={text} />
       </div>
 
@@ -126,15 +125,9 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
             </span>
           )}
         </div>
-        {registrationDate && registrationAge && (
+        {registrationAge && (
           <p className="listing-registration-date">
-            <CalendarDays size={14} aria-hidden="true" />
-            <span>
-              {text('registeredDate')}{' '}
-              <time dateTime={property.created_at}>
-                {registrationDate} ({registrationAge})
-              </time>
-            </span>
+            <time dateTime={property.created_at}>{registrationAge}</time>
           </p>
         )}
       </div>

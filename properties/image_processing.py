@@ -189,10 +189,7 @@ def watermark_image(image_file):
     center_font_size = max(12, min(64, round(min(width, height) * 0.065)))
     center_font = ImageFont.load_default(size=center_font_size)
     center_box = draw.textbbox((0, 0), center_label, font=center_font)
-    while (
-        center_font_size > 10
-        and center_box[2] - center_box[0] > width * 0.9
-    ):
+    while center_font_size > 8 and center_box[2] - center_box[0] > width * 0.9:
         center_font_size -= 1
         center_font = ImageFont.load_default(size=center_font_size)
         center_box = draw.textbbox((0, 0), center_label, font=center_font)
@@ -204,9 +201,9 @@ def watermark_image(image_file):
         (center_text_left, center_text_top),
         center_label,
         font=center_font,
-        fill=(243, 197, 201, 62),
-        stroke_width=max(1, center_font.size // 20),
-        stroke_fill=(0, 0, 0, 42),
+        fill=(243, 197, 201, 230),
+        stroke_width=max(1, center_font.size // 16),
+        stroke_fill=(13, 31, 49, 220),
     )
     image = Image.alpha_composite(image, overlay)
     output = BytesIO()

@@ -393,9 +393,11 @@ class PublicPropertyListSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.CharField(allow_blank=True))
     def get_public_contact_phone(self, obj):
-        if self._public_agent_managed_listing(obj):
-            return obj.contact_phone
-        return ''
+        if obj.service_type == Property.ServiceType.OWNER_ANNOUNCED:
+            announcement = getattr(obj, 'owner_announcement', None)
+            if announcement is not None:
+                return announcement.owner_contact_phone
+        return obj.contact_phone
 
     @extend_schema_field(serializers.EmailField(allow_blank=True))
     def get_public_contact_email(self, obj):

@@ -277,7 +277,7 @@ class PublicPropertyListView(generics.ListAPIView):
     def get_queryset(self):
         return (
             public_properties()
-            .select_related('submitted_by')
+            .select_related('submitted_by', 'owner_announcement')
             .prefetch_related(
                 'images',
                 'amenities',
@@ -317,7 +317,10 @@ class PublicPropertyDetailView(generics.RetrieveAPIView):
     permission_classes = [AllowAny]
     serializer_class = PublicPropertyDetailSerializer
     lookup_field = 'slug'
-    queryset = public_properties().select_related('submitted_by').prefetch_related(
+    queryset = public_properties().select_related(
+        'submitted_by',
+        'owner_announcement',
+    ).prefetch_related(
         'images',
         'amenities',
         'agent_assignments__agent__profile',
