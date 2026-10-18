@@ -476,14 +476,20 @@ export function HomePage({ locale, text }: HomePageProps) {
 
       <section className="section listings-section" id="latest-listings">
         <div className="container">
-          <div className="section-heading">
+          <div className="section-heading home-listings-heading">
             <div>
               <h2>{text('latestTitle')}</h2>
               <p className="section-description">
                 {listingsLoading ? text('loadingListings') : `${result?.count ?? 0} ${text('resultCount')}`}
               </p>
             </div>
-            <button className="filter-clear" type="button" onClick={clearFilters}>{text('clearFilters')}</button>
+            <button
+              className="button button-outline button-small home-filter-clear"
+              type="button"
+              onClick={clearFilters}
+            >
+              {text('clearFilters')}
+            </button>
           </div>
           {listingsLoading ? (
             <div className="listing-state" role="status"><span className="loading-spinner" />{text('loadingListings')}</div>

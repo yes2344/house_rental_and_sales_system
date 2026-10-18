@@ -186,11 +186,7 @@ img { display: block; max-width: 100%; }
 .listing-type-toggle button.is-active { background: var(--green-900); color: #fff; box-shadow: 0 2px 6px rgb(21 77 129 / 22%); }
 .search-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 7.7px; }
 .search-fields.has-subcity { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.search-fields:not(.has-subcity) .search-field-ordering { grid-column: 2; grid-row: 2; }
-.search-fields:not(.has-subcity) .search-submit { grid-column: 1; grid-row: 2; }
-.search-fields.has-subcity .search-field-type { grid-column: 1; grid-row: 2; }
-.search-fields.has-subcity .search-field-ordering { grid-column: 1; grid-row: 3; }
-.search-fields.has-subcity .search-submit { grid-column: 2; grid-row: 3; }
+.search-submit { grid-column: 1 / -1; width: 100%; }
 .search-field { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: var(--ink-soft); font-size: 36px; font-weight: 700; }
 .search-input-wrap { display: flex; align-items: center; gap: 8px; min-height: 46.4px; padding: 0 12px; border: 1px solid var(--line); color: var(--green-700); }
 .search-input-wrap:focus-within, .search-field select:focus { border-color: var(--green-700); outline: 0; }
@@ -215,6 +211,11 @@ img { display: block; max-width: 100%; }
 .section { padding: 68px 0; }
 .listings-section { background: var(--cream); }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 25px; margin-bottom: 30px; }
+.home-listings-heading { align-items: center; gap: 14px; }
+.home-listings-heading > div { min-width: 0; }
+.home-listings-heading h2 { white-space: nowrap; font-size: clamp(20px, 3.3vw, 42px); letter-spacing: -.05em; }
+.home-listings-heading .section-description { margin-top: 6px; }
+.home-filter-clear { flex: 0 0 auto; white-space: nowrap; }
 .eyebrow-muted { margin-bottom: 11px; color: var(--green-700); }
 .section-heading h2, .process-intro h2 { font-size: clamp(45px, 4.950vw, 63px); line-height: 1.2; letter-spacing: -1.4px; }
 .section-description { margin: 11px 0 0; color: var(--muted); font-size: 19.500px; line-height: 1.7; }
@@ -726,11 +727,9 @@ img { display: block; max-width: 100%; }
   .listing-type-toggle button { min-height: 37.8px; padding: 0 18px; font-size: 21px; line-height: 1; }
   .search-input-wrap, .search-field select, .search-field > input, .search-submit { min-height: 39.2px; height: 39.2px; font-size: 21px; }
   .search-fields:not(.has-subcity) .search-field-ordering { grid-column: 2; grid-row: 2; }
-  .search-fields:not(.has-subcity) .search-submit { grid-column: 1; grid-row: 2; }
   .search-fields.has-subcity .search-field-subcity { grid-column: 2; grid-row: 1; }
   .search-fields.has-subcity .search-field-type { grid-column: 1; grid-row: 2; }
   .search-fields.has-subcity .search-field-ordering { grid-column: 1; grid-row: 3; }
-  .search-fields.has-subcity .search-submit { grid-column: 2; grid-row: 3; }
   .listing-grid { grid-template-columns: 1fr; gap: 18px; }
   .search-fields > .search-submit { grid-column: 1 / -1; }
   .search-submit { min-width: 145px; padding: 0 13px; }
@@ -817,7 +816,7 @@ img { display: block; max-width: 100%; }
   .search-fields .search-field-subcity,
   .search-fields .search-field-ordering { grid-column: auto; }
   .search-field-type { grid-column: 1 / 2; }
-  .search-submit { grid-column: 2 / 3; width: 100%; min-width: 0; padding: 0 9px; }
+  .search-submit { min-width: 0; padding: 0 9px; }
   .search-note { align-items: flex-start; line-height: 1.5; }
   .trust-inner { min-height: auto; display: grid; grid-template-columns: 1fr 1fr; justify-content: start; gap: 15px 12px; padding-top: 18px; padding-bottom: 18px; }
   .trust-item { gap: 7px; }
@@ -825,6 +824,9 @@ img { display: block; max-width: 100%; }
   .trust-divider { display: none; }
   .section { padding: 42px 0; }
   .section-heading { align-items: flex-start; margin-bottom: 23px; }
+  .home-listings-heading { align-items: center; gap: 8px; }
+  .home-listings-heading h2 { font-size: clamp(18px, 5vw, 32px); }
+  .home-filter-clear { min-height: 38px; padding: 0 9px; font-size: 14px; }
   .section-heading h2, .process-intro h2 { letter-spacing: -1.1px; }
   .section-description { max-width: 370px; }
   .desktop-only { display: none; }
