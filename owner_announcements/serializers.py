@@ -50,12 +50,14 @@ class OwnerAnnouncementDecisionSerializer(serializers.Serializer):
 
 
 class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
+    requires_listing_contact_phone = False
+
     status = serializers.ChoiceField(choices=Property.Status.choices, read_only=True)
     contact_name = serializers.CharField(read_only=True)
     contact_phone = serializers.CharField(read_only=True)
     contact_email = serializers.EmailField(read_only=True)
     owner_contact_name = serializers.CharField(max_length=200, write_only=True, required=False)
-    owner_contact_phone = serializers.CharField(max_length=50, write_only=True, required=False)
+    owner_contact_phone = serializers.CharField(max_length=50, write_only=True, allow_blank=False)
     owner_contact_email = serializers.EmailField(allow_blank=True, write_only=True, required=False)
     authorization_confirmed = serializers.BooleanField(write_only=True, required=False)
     terms_accepted = serializers.BooleanField(write_only=True, required=False)

@@ -429,6 +429,8 @@ class PublicPropertyDetailSerializer(PublicPropertyListSerializer):
 
 
 class PropertyManagementSerializer(serializers.ModelSerializer):
+    requires_listing_contact_phone = True
+
     administrative_location = serializers.PrimaryKeyRelatedField(
         queryset=Location.objects.all(),
         required=False,
@@ -546,6 +548,22 @@ class PropertyManagementSerializer(serializers.ModelSerializer):
             'listing_type',
             self.instance.listing_type if self.instance else Property.ListingType.SALE,
         )
+        if self.instance is None and self.requires_listing_contact_phone:
+            contact_phone = (attrs.get('contact_phone') or '').strip()
+            if not contact_phone:
+                request = self.context.get('request')
+                user = getattr(request, 'user', None)
+                agent_profile = Profile.objects.filter(
+                    user=user,
+                    role=Profile.Role.AGENT,
+                    agent_approved=True,
+                ).first() if user and user.is_authenticated else None
+                contact_phone = (agent_profile.phone if agent_profile else '').strip()
+            if not contact_phone:
+                raise serializers.ValidationError({
+                    'contact_phone': 'A phone number is required when registering a property.',
+                })
+            attrs['contact_phone'] = contact_phone
         status = attrs.get('status', self.instance.status if self.instance else Property.Status.AVAILABLE)
         if status == Property.Status.RENTED and listing_type != Property.ListingType.RENT:
             raise serializers.ValidationError({'status': 'Only rental listings can be marked rented.'})

@@ -169,6 +169,22 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         self.assertEqual(missing_consent.status_code, 400)
         self.assertEqual(Property.objects.count(), 0)
 
+    def test_owner_phone_is_required_and_cannot_be_blank(self):
+        self.client.force_authenticate(self.submitter)
+
+        for value in (None, '', '   '):
+            payload = dict(self.valid_payload)
+            if value is None:
+                payload.pop('owner_contact_phone')
+            else:
+                payload['owner_contact_phone'] = value
+            with self.subTest(owner_contact_phone=value):
+                response = self.client.post(self.submission_url, payload, format='json')
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('owner_contact_phone', response.data['error']['details'])
+
+        self.assertEqual(Property.objects.count(), 0)
+
     def test_city_administration_requires_a_configured_subcity(self):
         city_administration = Location.objects.create(
             name='Submission Test City Administration',

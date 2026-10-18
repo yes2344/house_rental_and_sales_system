@@ -1006,6 +1006,19 @@ class ManagedPropertyApiTests(APITestCase):
             ).exists()
         )
 
+    def test_property_registration_requires_a_phone_when_agent_profile_has_none(self):
+        self.client.force_authenticate(user=self.manager)
+
+        response = self.client.post(
+            reverse('api:managed-property-list'),
+            self.property_payload(contact_phone=''),
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('contact_phone', response.data['error']['details'])
+        self.assertFalse(Property.objects.filter(title='New owner listing').exists())
+
     def test_managed_listing_includes_images_for_agent_card_view(self):
         self.client.force_authenticate(user=self.manager)
 

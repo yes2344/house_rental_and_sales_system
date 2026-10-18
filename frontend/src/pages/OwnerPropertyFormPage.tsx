@@ -622,8 +622,8 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('contact_name')}
             </label>
             <label className="manager-field">
-              <span>{text('contactByPhone')}</span>
-              <input maxLength={50} value={values.contact_phone} onChange={(event) => updateValue('contact_phone', event.target.value)} />
+              <span>{text('contactByPhone')}{!isEditing ? ' *' : ''}</span>
+              <input required={!isEditing} type="tel" maxLength={50} value={values.contact_phone} onChange={(event) => updateValue('contact_phone', event.target.value)} />
               {fieldError('contact_phone')}
             </label>
             <label className="manager-field manager-field-wide">
