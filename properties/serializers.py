@@ -8,7 +8,7 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import Profile
-from properties.access import agent_city_location_ids, can_access_property_image_original
+from properties.access import can_access_property_image_original
 from properties.models import Amenity, Location, Property, PropertyAgentAssignment, PropertyImage
 from properties.search_terms import normalize_search_text
 
@@ -59,15 +59,6 @@ class LocationSerializer(serializers.ModelSerializer):
         allow_empty=True,
         max_length=20,
     )
-
-    def to_internal_value(self, data):
-        unsupported = {'latitude', 'longitude'}.intersection(data.keys())
-        if unsupported:
-            raise serializers.ValidationError({
-                field: 'GPS/map coordinates are no longer supported.'
-                for field in unsupported
-            })
-        return super().to_internal_value(data)
 
     def validate_parent(self, value):
         if value is not None and not value.is_active:
