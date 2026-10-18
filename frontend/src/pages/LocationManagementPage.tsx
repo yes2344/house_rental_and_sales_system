@@ -23,6 +23,7 @@ interface LocationFormValues {
   name: string;
   name_am: string;
   location_type: ManagedLocationType;
+  parent_id: string;
   is_active: boolean;
   display_order: string;
 }
@@ -31,6 +32,7 @@ const emptyForm: LocationFormValues = {
   name: '',
   name_am: '',
   location_type: 'city',
+  parent_id: '',
   is_active: true,
   display_order: '0',
 };
@@ -40,18 +42,28 @@ function fromLocation(location: MarketplaceLocation): LocationFormValues {
     name: location.name,
     name_am: location.name_am,
     location_type: location.location_type,
+    parent_id: location.parent_id === null ? '' : String(location.parent_id),
     is_active: location.is_active,
     display_order: String(location.display_order),
   };
 }
 
-function toPayload(values: LocationFormValues): ManagedLocationPayload {
-  return {
+function toPayload(
+  values: LocationFormValues,
+  isAgent: boolean,
+  isCreating: boolean,
+): ManagedLocationPayload {
+  const payload: ManagedLocationPayload = {
     name: values.name.trim(),
     name_am: values.name_am.trim(),
     is_active: values.is_active,
     display_order: Number(values.display_order) || 0,
   };
+  if (!isAgent && isCreating) {
+    payload.location_type = values.location_type;
+    if (values.location_type === 'subcity') payload.parent = Number(values.parent_id);
+  }
+  return payload;
 }
 
 export function LocationManagementPage({ locale, text }: LocationManagementPageProps) {
@@ -96,15 +108,23 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     [locations],
   );
   const editingLocation = editingId === null ? null : locationById.get(editingId) ?? null;
+  const selectedParentLocation = locationById.get(Number(values.parent_id));
   const hasActiveEthiopia = locations.some(
     (location) =>
       location.location_type === 'country'
       && location.name.trim().toLocaleLowerCase() === 'ethiopia'
       && location.is_active,
   );
+  const parentCityOptions = locations.filter(
+    (location) =>
+      location.is_active
+      && (location.location_type === 'city' || location.location_type === 'city_administration'),
+  );
   const canCreateLocation = isAgent
     ? Boolean(account?.assigned_city_id)
-    : hasActiveEthiopia;
+    : values.location_type === 'subcity'
+      ? parentCityOptions.some((location) => String(location.id) === values.parent_id)
+      : hasActiveEthiopia;
   const filteredLocations = useMemo(() => {
     const normalizedSearch = search.trim().toLocaleLowerCase();
     return locations.filter((location) => {
@@ -154,9 +174,9 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
     setFieldErrors({});
     try {
       if (editingId === null) {
-        await createManagedLocation(toPayload(values));
+        await createManagedLocation(toPayload(values, isAgent, true));
       } else {
-        await updateManagedLocation(editingId, toPayload(values));
+        await updateManagedLocation(editingId, toPayload(values, isAgent, false));
       }
       setLocations(await getManagedLocations());
       resetForm();
@@ -231,21 +251,74 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
               <input className="filter-input" maxLength={120} value={values.name_am} onChange={(event) => updateValue('name_am', event.target.value)} />
               {fieldErrors.name_am && <small role="alert">{fieldErrors.name_am}</small>}
             </label>
-            <div className="filter-label">
-              {text('locationLevelFixed')}
-              <div className="location-level-fixed" aria-live="polite">
-                <strong>{localizedLocationType(managedType)}</strong>
-                {isAgent && (
-                  <small>
-                    {locale === 'am'
-                      ? account?.assigned_city_name_am ?? account?.assigned_city_name ?? text('assignedCity')
-                      : account?.assigned_city_name ?? text('assignedCity')}
-                  </small>
-                )}
+            {isAgent || editingId !== null ? (
+              <div className="filter-label">
+                {text('locationLevelFixed')}
+                <div className="location-level-fixed" aria-live="polite">
+                  <strong>{localizedLocationType(isAgent ? managedType : values.location_type)}</strong>
+                  {isAgent && (
+                    <small>
+                      {locale === 'am'
+                        ? account?.assigned_city_name_am ?? account?.assigned_city_name ?? text('assignedCity')
+                        : account?.assigned_city_name ?? text('assignedCity')}
+                    </small>
+                  )}
+                </div>
               </div>
-            </div>
-            {!isAgent && editingId === null && !hasActiveEthiopia && (
+            ) : (
+              <label className="filter-label">{text('locationType')}
+                <select
+                  className="filter-select"
+                  value={values.location_type}
+                  onChange={(event) => {
+                    const locationType: ManagedLocationType =
+                      event.target.value === 'subcity' ? 'subcity' : 'city';
+                    setValues((current) => ({
+                      ...current,
+                      location_type: locationType,
+                      parent_id: locationType === 'subcity' ? current.parent_id : '',
+                    }));
+                    setFieldErrors((current) => ({ ...current, location_type: '', parent: '' }));
+                    setError('');
+                    setSuccess('');
+                  }}
+                >
+                  <option value="city">{localizedLocationType('city')}</option>
+                  <option value="subcity">{localizedLocationType('subcity')}</option>
+                </select>
+                {fieldErrors.location_type && <small role="alert">{fieldErrors.location_type}</small>}
+              </label>
+            )}
+            {!isAgent && editingId === null && values.location_type === 'city' && !hasActiveEthiopia && (
               <p className="manager-error location-form-message" role="alert">{text('locationCountryMissing')}</p>
+            )}
+            {!isAgent && values.location_type === 'subcity' && editingId === null && (
+              <label className="filter-label">{text('locationParent')}
+                <select
+                  className="filter-select"
+                  required
+                  value={values.parent_id}
+                  onChange={(event) => updateValue('parent_id', event.target.value)}
+                >
+                  <option value="">{text('chooseCity')}</option>
+                  {parentCityOptions.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {locale === 'am' && location.name_am ? location.name_am : location.name}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.parent && <small role="alert">{fieldErrors.parent}</small>}
+              </label>
+            )}
+            {!isAgent && values.location_type === 'subcity' && editingId !== null && (
+              <div className="filter-label">
+                {text('locationParent')}
+                <div className="location-level-fixed">
+                  {locale === 'am' && selectedParentLocation?.name_am
+                    ? selectedParentLocation.name_am
+                    : selectedParentLocation?.name ?? '—'}
+                </div>
+              </div>
             )}
             <label className="filter-label">{text('displayOrder')}
               <input
@@ -311,7 +384,9 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
                         {text(location.is_active ? 'available' : 'statusInactive')}
                       </span></td>
                       <td>
-                        {location.location_type === managedType && (
+                        {(isAgent
+                          ? location.location_type === managedType
+                          : location.location_type === 'city' || location.location_type === 'subcity') && (
                           <div className="location-row-actions">
                             <button className="button button-secondary location-edit-button" type="button" onClick={() => startEditing(location)}>
                               {text('editLocation')}

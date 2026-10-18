@@ -48,6 +48,8 @@ export interface ManagedLocationPayload {
   name_am: string;
   is_active: boolean;
   display_order: number;
+  location_type?: ManagedLocationType;
+  parent?: number;
 }
 
 export async function getManagedLocations(signal?: AbortSignal): Promise<MarketplaceLocation[]> {

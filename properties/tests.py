@@ -1619,8 +1619,14 @@ class ManagedLocationApiTests(APITestCase):
             2,
         )
 
-    def test_administrator_can_create_cities_but_not_subcities(self):
+    def test_administrator_can_create_cities_and_subcities(self):
         self.client.force_authenticate(user=self.location_admin)
+        city = Location.objects.create(
+            name='Parent City',
+            slug='parent-city-for-admin-subcity',
+            location_type=Location.Type.CITY,
+            parent=self.country,
+        )
 
         created_city = self.client.post(
             reverse('api:managed-location-list'),
@@ -1634,14 +1640,39 @@ class ManagedLocationApiTests(APITestCase):
             {
                 'name': 'Administrator-created Subcity',
                 'location_type': 'subcity',
+                'parent': city.pk,
             },
             format='json',
         )
 
         self.assertEqual(created_city.status_code, 201, created_city.data)
-        self.assertEqual(rejected_subcity.status_code, 400)
-        self.assertIn('location_type', rejected_subcity.data['error']['details'])
-        self.assertFalse(Location.objects.filter(name='Administrator-created Subcity').exists())
+        self.assertEqual(rejected_subcity.status_code, 201, rejected_subcity.data)
+        self.assertEqual(rejected_subcity.data['location_type'], Location.Type.SUBCITY)
+        self.assertEqual(rejected_subcity.data['parent_id'], city.pk)
+
+        missing_parent = self.client.post(
+            reverse('api:managed-location-list'),
+            {
+                'name': 'Subcity without parent',
+                'location_type': 'subcity',
+            },
+            format='json',
+        )
+        self.assertEqual(missing_parent.status_code, 400)
+        self.assertIn('parent', missing_parent.data['error']['details'])
+        self.assertFalse(Location.objects.filter(name='Subcity without parent').exists())
+
+        managed = self.client.get(reverse('api:managed-location-list'), {'all': '1'})
+        self.assertEqual(managed.status_code, 200)
+        self.assertIn(rejected_subcity.data['id'], {item['id'] for item in managed.data})
+
+        updated = self.client.patch(
+            reverse('api:managed-location-detail', kwargs={'pk': rejected_subcity.data['id']}),
+            {'display_order': 2},
+            format='json',
+        )
+        self.assertEqual(updated.status_code, 200, updated.data)
+        self.assertEqual(updated.data['display_order'], 2)
 
     def test_unused_city_can_be_deleted_and_audited(self):
         location = Location.objects.create(

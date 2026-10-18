@@ -83,8 +83,10 @@ class LocationSerializer(serializers.ModelSerializer):
         if not (is_admin or is_agent):
             return super().to_internal_value(data)
 
-        editable_fields = {'name', 'name_am', 'is_active', 'display_order'}
         if isinstance(data, dict):
+            editable_fields = {'name', 'name_am', 'is_active', 'display_order'}
+            if is_admin and self.instance is None:
+                editable_fields.update({'location_type', 'parent'})
             unsupported_fields = set(data) - editable_fields
             if unsupported_fields:
                 raise serializers.ValidationError({
@@ -100,24 +102,38 @@ class LocationSerializer(serializers.ModelSerializer):
                 data['location_type'] = Location.Type.SUBCITY
                 data['parent'] = profile.assigned_city_id
             elif self.instance is not None:
-                if self.instance.location_type != Location.Type.CITY:
+                if self.instance.location_type not in (Location.Type.CITY, Location.Type.SUBCITY):
                     raise serializers.ValidationError({
-                        'location_type': 'Administrators can manage marketplace cities only.',
+                        'location_type': 'Administrators can manage marketplace cities and sub-cities only.',
                     })
                 data['location_type'] = self.instance.location_type
                 data['parent'] = self.instance.parent_id
             else:
-                country = Location.objects.filter(
-                    location_type=Location.Type.COUNTRY,
-                    name__iexact='Ethiopia',
-                    is_active=True,
-                ).first()
-                if country is None:
+                location_type = data.get('location_type', Location.Type.CITY)
+                if location_type not in (Location.Type.CITY, Location.Type.SUBCITY):
                     raise serializers.ValidationError({
-                        'parent': 'An active Ethiopia country location is required before adding a city.',
+                        'location_type': 'Administrators can create marketplace cities or sub-cities only.',
                     })
-                data['location_type'] = Location.Type.CITY
-                data['parent'] = country.pk
+                data['location_type'] = location_type
+                if location_type == Location.Type.CITY:
+                    country = Location.objects.filter(
+                        location_type=Location.Type.COUNTRY,
+                        name__iexact='Ethiopia',
+                        is_active=True,
+                    ).first()
+                    if country is None:
+                        raise serializers.ValidationError({
+                            'parent': 'An active Ethiopia country location is required before adding a city.',
+                        })
+                    if data.get('parent') is not None and str(data['parent']) != str(country.pk):
+                        raise serializers.ValidationError({
+                            'parent': 'Marketplace cities must be placed directly under Ethiopia.',
+                        })
+                    data['parent'] = country.pk
+                elif data.get('parent') is None:
+                    raise serializers.ValidationError({
+                        'parent': 'Choose a city or city administration for this sub-city.',
+                    })
         return super().to_internal_value(data)
 
     @extend_schema_field(serializers.IntegerField(allow_null=True))
@@ -197,9 +213,9 @@ class LocationSerializer(serializers.ModelSerializer):
         elif (user and user.is_superuser) or (
             profile and profile.role == Profile.Role.ADMINISTRATOR
         ):
-            if location.location_type != Location.Type.CITY:
+            if location.location_type not in (Location.Type.CITY, Location.Type.SUBCITY):
                 raise serializers.ValidationError({
-                    'location_type': 'Administrators can manage marketplace cities only.',
+                    'location_type': 'Administrators can manage marketplace cities and sub-cities only.',
                 })
 
         query = Location.objects.filter(slug=candidate_slug)

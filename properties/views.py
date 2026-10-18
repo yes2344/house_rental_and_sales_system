@@ -197,7 +197,9 @@ class ManagedLocationDetailView(generics.RetrieveUpdateDestroyAPIView):
         elif self.request.user.is_superuser or (
             profile and profile.role == Profile.Role.ADMINISTRATOR
         ):
-            queryset = queryset.filter(location_type=Location.Type.CITY)
+            queryset = queryset.filter(
+                location_type__in=(Location.Type.CITY, Location.Type.SUBCITY)
+            )
         return queryset
 
     def perform_update(self, serializer):
