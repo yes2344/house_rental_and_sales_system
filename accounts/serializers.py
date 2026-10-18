@@ -113,15 +113,15 @@ class AccountSerializer(serializers.ModelSerializer):
         profile = getattr(obj, 'profile', None)
         return bool(profile and profile.agent_password_changed)
 
-    def get_assigned_city_id(self, obj):
+    def get_assigned_city_id(self, obj) -> int | None:
         profile = getattr(obj, 'profile', None)
         return profile.assigned_city_id if profile else None
 
-    def get_assigned_city_name(self, obj):
+    def get_assigned_city_name(self, obj) -> str | None:
         profile = getattr(obj, 'profile', None)
         return profile.assigned_city.name if profile and profile.assigned_city_id else None
 
-    def get_assigned_city_name_am(self, obj):
+    def get_assigned_city_name_am(self, obj) -> str | None:
         profile = getattr(obj, 'profile', None)
         return profile.assigned_city.name_am if profile and profile.assigned_city_id else None
 

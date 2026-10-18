@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import Profile
 from accounts.permissions import has_management_permission
@@ -207,13 +208,13 @@ class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
             'social_links',
         ]
 
-    def get_site_logo(self, obj):
+    def get_site_logo(self, obj) -> str:
         if not obj.site_logo:
             return ''
         request = self.context.get('request')
         return request.build_absolute_uri(obj.site_logo.url) if request else obj.site_logo.url
 
-    def get_homepage_hero_image(self, obj):
+    def get_homepage_hero_image(self, obj) -> str:
         if not obj.homepage_hero_image:
             return ''
         request = self.context.get('request')
@@ -223,6 +224,7 @@ class PublicBrokerageSettingsSerializer(BrokerageSettingsSerializer):
             else obj.homepage_hero_image.url
         )
 
+    @extend_schema_field(SocialMediaLinkSerializer(many=True))
     def get_social_links(self, obj):
         if not obj.pk:
             return []

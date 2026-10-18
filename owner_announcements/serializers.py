@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from owner_announcements.models import (
     InAppNotification,
@@ -32,12 +33,20 @@ class OwnerAnnouncementReviewerSerializer(serializers.ModelSerializer):
         model = get_user_model()
         fields = ['id', 'username', 'display_name']
 
-    def get_display_name(self, obj):
+    def get_display_name(self, obj) -> str:
         return ' '.join(part for part in (obj.first_name, obj.last_name) if part) or obj.username
 
 
 class OwnerAnnouncementAssignmentSerializer(serializers.Serializer):
     assigned_reviewer_id = serializers.IntegerField(required=True, allow_null=True)
+
+
+class OwnerAnnouncementDecisionSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=['approve', 'reject', 'request_corrections'])
+    feedback = serializers.CharField(required=False, allow_blank=True)
+    agreement_start_date = serializers.DateField(required=False)
+    agreement_duration_months = serializers.IntegerField(required=False, min_value=1, max_value=120)
+    agreement_terms = serializers.CharField(required=False, allow_blank=True)
 
 
 class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
@@ -136,12 +145,14 @@ class OwnerPropertySubmissionSerializer(PropertyManagementSerializer):
             })
         return attrs
 
-    def get_submission_status(self, obj):
+    @extend_schema_field(serializers.ChoiceField(choices=OwnerAnnouncement.Status.choices))
+    def get_submission_status(self, obj) -> str:
         return obj.owner_announcement.status
 
-    def get_review_feedback(self, obj):
+    def get_review_feedback(self, obj) -> str:
         return obj.owner_announcement.agent_feedback
 
+    @extend_schema_field(OwnerAnnouncementEventSerializer(many=True))
     def get_submission_events(self, obj):
         events = obj.owner_announcement.events.select_related('actor').all()
         return OwnerAnnouncementEventSerializer(events, many=True).data
@@ -265,7 +276,7 @@ class OwnerAnnouncementReviewSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_assigned_reviewer_name(self, obj):
+    def get_assigned_reviewer_name(self, obj) -> str | None:
         if obj.assigned_reviewer is None:
             return None
         return ' '.join(

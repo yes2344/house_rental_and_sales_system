@@ -22,6 +22,8 @@ PASSWORD_RESET_TIMEOUT_SECONDS=86400
 
 In Render, open the backend service's **Environment** settings and set `BREVO_API_KEY` to the secret API key from Brevo. Set `DEFAULT_FROM_EMAIL` to the sender address verified in Brevo, optionally with a display name. Do not commit the API key or paste it into chat. The Render Blueprint sets `EMAIL_BACKEND` to the Brevo backend and `PUBLIC_FRONTEND_URL` to the deployed frontend origin.
 
+When `DEBUG=False` and the Brevo backend is selected, Django refuses to start unless both the API key and an explicit sender address are configured. This prevents deployments from appearing healthy while verification and password-recovery email delivery is unusable.
+
 Use the frontend's HTTPS origin with no path, query, or fragment. Email links are rejected unless the configured public origin is HTTPS outside debug mode. The backend sends transactional messages to Brevo over HTTPS (port 443), avoiding Render's SMTP egress restriction. After setting the key and verified sender, redeploy and send real verification and reset messages to controlled mailboxes. Local tests mock the provider API; they do not prove external delivery.
 
 For deployments that are not subject to Render's SMTP egress restriction, Django's standard SMTP backend can still be selected with the appropriate provider-specific settings.

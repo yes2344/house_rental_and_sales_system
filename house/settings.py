@@ -16,10 +16,14 @@ if env_file.is_file():
     environ.Env.read_env(env_file, overwrite=False)
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-PRIVATE_MEDIA_ROOT = BASE_DIR / 'private-media'
+MEDIA_ROOT = Path(env('DJANGO_MEDIA_ROOT', default=str(BASE_DIR / 'media')))
+PRIVATE_MEDIA_ROOT = Path(env(
+    'DJANGO_PRIVATE_MEDIA_ROOT',
+    default=str(BASE_DIR / 'private-media'),
+))
 
 DEBUG = env.bool('DJANGO_DEBUG', default=False)
+SERVE_MEDIA_FILES = env.bool('DJANGO_SERVE_MEDIA', default=DEBUG)
 SECRET_KEY = env('DJANGO_SECRET_KEY', default='')
 if not SECRET_KEY:
     if not DEBUG:
@@ -31,7 +35,10 @@ ALLOWED_HOSTS = env.list(
     default=['localhost', '127.0.0.1', '[::1]'],
 )
 
-DEPLOYED_FRONTEND_URL = 'https://habeshapropertycenter.netlify.app'
+DEPLOYED_FRONTEND_URL = env(
+    'DEPLOYED_FRONTEND_URL',
+    default='https://habeshapropertycenter.netlify.app',
+)
 PUBLIC_FRONTEND_URL = env(
     'PUBLIC_FRONTEND_URL',
     default='http://127.0.0.1:5173' if DEBUG else DEPLOYED_FRONTEND_URL,
@@ -52,6 +59,10 @@ for frontend_url in (DEPLOYED_FRONTEND_URL, PUBLIC_FRONTEND_URL):
         frontend_origin = f'{parsed_frontend_url.scheme}://{parsed_frontend_url.netloc}'
         if frontend_origin not in CSRF_TRUSTED_ORIGINS:
             CSRF_TRUSTED_ORIGINS.append(frontend_origin)
+CORS_ALLOWED_ORIGINS = env.list(
+    'DJANGO_CORS_ALLOWED_ORIGINS',
+    default=[PUBLIC_FRONTEND_URL],
+)
 
 SECURE_SSL_REDIRECT = env.bool('DJANGO_SECURE_SSL_REDIRECT', default=not DEBUG)
 SECURE_HSTS_SECONDS = env.int(
@@ -93,10 +104,12 @@ if env('CLOUDINARY_URL', default=''):
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'accounts.middleware.ApiCorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'accounts.middleware.LocalInvitationCsrfViewMiddleware',
+    'accounts.middleware.LocalInvitationOriginMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'accounts.middleware.OwnerOnlyDjangoAdminMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -189,6 +202,10 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 CLOUDINARY_URL = env('CLOUDINARY_URL', default='')
+if not DEBUG and not (CLOUDINARY_URL or SERVE_MEDIA_FILES):
+    raise ImproperlyConfigured(
+        'Configure CLOUDINARY_URL or explicitly enable DJANGO_SERVE_MEDIA for persistent media storage.',
+    )
 STORAGES = {
     'default': {
         'BACKEND': (
@@ -251,6 +268,13 @@ EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT_SECONDS', default=10)
 BREVO_API_KEY = env('BREVO_API_KEY', default='')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='habeshapropertycenter <no-reply@example.com>')
+if not DEBUG and EMAIL_BACKEND == 'accounts.email_backend.BrevoEmailBackend':
+    if not BREVO_API_KEY.strip():
+        raise ImproperlyConfigured('BREVO_API_KEY must be set when using the Brevo email backend.')
+    if not env('DEFAULT_FROM_EMAIL', default='').strip():
+        raise ImproperlyConfigured(
+            'Set DEFAULT_FROM_EMAIL to the verified sender address configured in Brevo.',
+        )
 cache_backend = env(
     'DJANGO_CACHE_BACKEND',
     default=(
@@ -279,4 +303,10 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Versioned API for verified property listings and viewing requests.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'ENUM_NAME_OVERRIDES': {
+        'PropertyTypeEnum': 'properties.models.Property.PROPERTY_TYPES',
+        'PropertyStatusEnum': 'properties.models.Property.STATUS_CHOICES',
+        'ViewingRequestStatusEnum': 'viewings.models.ViewingRequest.STATUS_CHOICES',
+        'OwnerAnnouncementStatusEnum': 'owner_announcements.models.OwnerAnnouncement.Status',
+    },
 }

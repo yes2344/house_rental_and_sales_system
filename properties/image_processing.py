@@ -204,7 +204,7 @@ def watermark_image(image_file):
         (center_text_left, center_text_top),
         center_label,
         font=center_font,
-        fill=(255, 255, 255, 62),
+        fill=(243, 197, 201, 62),
         stroke_width=max(1, center_font.size // 20),
         stroke_fill=(0, 0, 0, 42),
     )

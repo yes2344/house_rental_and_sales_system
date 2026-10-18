@@ -1940,7 +1940,7 @@ class PropertyImageApiTests(APITestCase):
             kwargs={'property_id': self.property.pk},
         )
 
-    def test_watermark_places_low_opacity_handle_in_the_center(self):
+    def test_watermark_places_low_opacity_millennial_pink_handle_in_the_center(self):
         image_buffer = BytesIO()
         Image.new('RGB', (600, 400), color=(80, 120, 160)).save(image_buffer, format='PNG')
 
@@ -1952,12 +1952,21 @@ class PropertyImageApiTests(APITestCase):
 
         with Image.open(BytesIO(image_buffer.getvalue())) as original, Image.open(watermarked) as result:
             center = (100, 80, 500, 320)
-            difference = ImageChops.difference(
-                original.convert('RGB').crop(center),
-                result.convert('RGB').crop(center),
-            )
+            original_center = original.convert('RGB').crop(center)
+            result_center = result.convert('RGB').crop(center)
+            difference = ImageChops.difference(original_center, result_center)
             self.assertIsNotNone(difference.getbbox())
             self.assertLess(max(channel[1] for channel in difference.getextrema()), 100)
+            self.assertTrue(any(
+                result_pixel[0] - original_pixel[0]
+                > result_pixel[1] - original_pixel[1]
+                > result_pixel[2] - original_pixel[2]
+                > 0
+                for original_pixel, result_pixel in zip(
+                    original_center.getdata(),
+                    result_center.getdata(),
+                )
+            ))
 
     def test_upload_validates_image_and_sets_first_image_primary(self):
         response = self.client.post(

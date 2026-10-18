@@ -1,6 +1,6 @@
 # Free demo deployment
 
-This repository is prepared for a demo deployment with Netlify (React), Render (Django), Neon (PostgreSQL), and Cloudinary (uploaded media). Provider free plans have limits and may change; this setup is not intended for production workloads or guaranteed availability.
+This document describes the alternative demo deployment with Netlify (React), Render (Django), Neon (PostgreSQL), and Cloudinary (uploaded media). For the planned HahuCloud shared-hosting deployment, follow [hahucloud-deployment.md](./hahucloud-deployment.md) instead. Provider free plans have limits and may change; this setup is not intended for production workloads or guaranteed availability.
 
 ## 1. Create the hosted database
 
@@ -10,10 +10,11 @@ This repository is prepared for a demo deployment with Netlify (React), Render (
 ## 2. Deploy the API to Render
 
 1. In Render, create a Blueprint from this repository and confirm the `render.yaml` configuration.
-2. Enter the Neon connection string for `DATABASE_URL` and Cloudinary URL for `CLOUDINARY_URL`. For the not-yet-created Netlify site, enter a temporary HTTPS origin for `DJANGO_CSRF_TRUSTED_ORIGINS`; replace it after creating the site.
+2. Enter the Neon connection string for `DATABASE_URL` and Cloudinary URL for `CLOUDINARY_URL`. Production startup requires Cloudinary so uploads are not silently written to Render's ephemeral filesystem. For the not-yet-created Netlify site, enter a temporary HTTPS origin for `DJANGO_CSRF_TRUSTED_ORIGINS`; replace it after creating the site.
 3. Enter the initial administrator username, email, and a strong password for `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, and `DJANGO_SUPERUSER_PASSWORD`. These are server-side secrets/configuration; never use `VITE_*` for them.
-4. Deploy the `kefaleshabeshahome-api` service. The startup command runs migrations and creates that administrator only if it does not already exist. It does not reset the password on later restarts.
-5. Copy the backend origin shown in the Render dashboard. If Render assigned a different hostname than `kefaleshabeshahome-api.onrender.com`, update `DJANGO_ALLOWED_HOSTS` to match.
+4. Add a Brevo API key and a verified sender address for `BREVO_API_KEY` and `DEFAULT_FROM_EMAIL`. Production startup requires both when using the configured Brevo backend.
+5. Deploy the `kefaleshabeshahome-api` service. The startup command runs migrations and creates that administrator only if it does not already exist. It does not reset the password on later restarts.
+6. Copy the backend origin shown in the Render dashboard. If Render assigned a different hostname than `kefaleshabeshahome-api.onrender.com`, update `DJANGO_ALLOWED_HOSTS` to match.
 
 ## 3. Deploy the frontend to Netlify
 

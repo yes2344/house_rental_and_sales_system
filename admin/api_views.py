@@ -43,6 +43,7 @@ User = get_user_model()
 
 class BrokerageSettingsView(APIView):
     permission_classes = [AllowAny]
+    serializer_class = PublicBrokerageSettingsSerializer
 
     def get_permissions(self):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):

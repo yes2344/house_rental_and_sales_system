@@ -10,6 +10,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from accounts.models import Profile
 from accounts.permissions import HasManagementPermission, has_management_permission
@@ -22,6 +23,7 @@ from owner_announcements.models import (
 )
 from owner_announcements.serializers import (
     OwnerAnnouncementAssignmentSerializer,
+    OwnerAnnouncementDecisionSerializer,
     InAppNotificationSerializer,
     OwnerAnnouncementReviewerSerializer,
     OwnerAnnouncementReviewSerializer,
@@ -189,6 +191,7 @@ class AdminSubmissionBulkDeleteView(APIView):
 class OwnerSubmissionImageListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsPropertySubmitter]
     serializer_class = PropertyImageManagementSerializer
+    queryset = PropertyImage.objects.none()
 
     def get_property(self):
         return get_object_or_404(
@@ -202,6 +205,8 @@ class OwnerSubmissionImageListCreateView(generics.ListCreateAPIView):
         )
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return self.queryset
         return PropertyImage.objects.filter(property=self.get_property()).select_related('property')
 
     def perform_create(self, serializer):
@@ -270,6 +275,7 @@ class OwnerAnnouncementReviewerListView(generics.ListAPIView):
     required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN
     serializer_class = OwnerAnnouncementReviewerSerializer
     pagination_class = None
+    queryset = get_user_model().objects.none()
 
     def get_queryset(self):
         candidates = get_user_model().objects.filter(
@@ -277,6 +283,8 @@ class OwnerAnnouncementReviewerListView(generics.ListAPIView):
             profile__role=Profile.Role.AGENT,
             profile__agent_approved=True,
         ).select_related('profile').order_by('username')
+        if getattr(self, 'swagger_fake_view', False):
+            return candidates
         return [
             user
             for user in candidates
@@ -290,7 +298,12 @@ class OwnerAnnouncementReviewerListView(generics.ListAPIView):
 class OwnerAnnouncementAssignmentView(APIView):
     permission_classes = [HasManagementPermission]
     required_management_permission = Profile.Permission.OWNER_ANNOUNCEMENTS_ASSIGN
+    serializer_class = OwnerAnnouncementAssignmentSerializer
 
+    @extend_schema(
+        request=OwnerAnnouncementAssignmentSerializer,
+        responses=OwnerAnnouncementReviewSerializer,
+    )
     @transaction.atomic
     def post(self, request, pk):
         announcement = get_object_or_404(
@@ -380,7 +393,12 @@ class OwnerAnnouncementDecisionView(APIView):
         Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW,
         Profile.Permission.OWNER_ANNOUNCEMENTS_REVIEW_ASSIGNED,
     )
+    serializer_class = OwnerAnnouncementDecisionSerializer
 
+    @extend_schema(
+        request=OwnerAnnouncementDecisionSerializer,
+        responses=OwnerAnnouncementReviewSerializer,
+    )
     @transaction.atomic
     def post(self, request, pk):
         announcement = get_object_or_404(
@@ -537,7 +555,9 @@ class InAppNotificationListView(generics.ListAPIView):
 
 class InAppNotificationReadView(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = InAppNotificationSerializer
 
+    @extend_schema(request=None, responses=InAppNotificationSerializer)
     def post(self, request, pk):
         notification = get_object_or_404(InAppNotification, pk=pk, recipient=request.user)
         if notification.read_at is None:

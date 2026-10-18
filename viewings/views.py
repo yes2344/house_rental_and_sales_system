@@ -219,8 +219,11 @@ class CustomerViewingRequestListView(generics.ListAPIView):
     filterset_fields = ['status']
     ordering_fields = ['created_at', 'preferred_date', 'scheduled_date']
     ordering = ['-created_at']
+    queryset = ViewingRequest.objects.none()
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return self.queryset
         return (
             ViewingRequest.objects.filter(
                 requester=self.request.user,

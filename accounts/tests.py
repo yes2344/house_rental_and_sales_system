@@ -9,7 +9,7 @@ from django.core.cache import cache
 from django.core import mail
 from django.core.mail import EmailMessage
 from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
@@ -25,6 +25,51 @@ from accounts.permissions import (
 from favorites.models import Favorite
 from properties.models import Location, Property, PropertyAgentAssignment
 from viewings.models import ViewingRequest
+
+
+class ApiCorsMiddlewareTests(SimpleTestCase):
+    @override_settings(CORS_ALLOWED_ORIGINS=['https://frontend.example'])
+    def test_allows_credentialed_api_preflight_from_configured_origin(self):
+        response = self.client.options(
+            '/api/v1/properties/',
+            HTTP_ORIGIN='https://frontend.example',
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD='POST',
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS='authorization, x-csrftoken',
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response['Access-Control-Allow-Origin'], 'https://frontend.example')
+        self.assertEqual(response['Access-Control-Allow-Credentials'], 'true')
+        self.assertIn('POST', response['Access-Control-Allow-Methods'])
+        self.assertIn('authorization', response['Access-Control-Allow-Headers'])
+        self.assertIn('Origin', response['Vary'])
+
+    @override_settings(CORS_ALLOWED_ORIGINS=['https://frontend.example'])
+    def test_rejects_disallowed_preflight_methods_and_headers(self):
+        bad_method = self.client.options(
+            '/api/v1/properties/',
+            HTTP_ORIGIN='https://frontend.example',
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD='TRACE',
+        )
+        bad_header = self.client.options(
+            '/api/v1/properties/',
+            HTTP_ORIGIN='https://frontend.example',
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD='POST',
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS='x-unapproved-header',
+        )
+
+        self.assertEqual(bad_method.status_code, 403)
+        self.assertEqual(bad_header.status_code, 403)
+
+    @override_settings(CORS_ALLOWED_ORIGINS=['https://frontend.example'])
+    def test_does_not_grant_cors_to_unconfigured_origins(self):
+        response = self.client.get(
+            '/api/v1/cors-test-unknown-route/',
+            HTTP_ORIGIN='https://attacker.example',
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Access-Control-Allow-Origin', response)
 
 
 class ProfileConstraintTests(TestCase):

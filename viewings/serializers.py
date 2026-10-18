@@ -89,7 +89,7 @@ class GuestViewingRequestStatusSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_appointment_timezone(self, obj):
+    def get_appointment_timezone(self, obj) -> str:
         return settings.TIME_ZONE
 
 
@@ -114,7 +114,7 @@ class ViewingRequestEventSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_actor_name(self, obj):
+    def get_actor_name(self, obj) -> str | None:
         return obj.actor.get_username() if obj.actor_id else None
 
 
@@ -166,7 +166,7 @@ class ManagedViewingRequestSerializer(serializers.ModelSerializer):
             'created_at',
         ]
 
-    def get_appointment_timezone(self, obj):
+    def get_appointment_timezone(self, obj) -> str:
         return settings.TIME_ZONE
 
     def validate_proposed_date(self, value):
@@ -294,7 +294,7 @@ class CustomerViewingRequestSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_appointment_timezone(self, obj):
+    def get_appointment_timezone(self, obj) -> str:
         return settings.TIME_ZONE
 
 

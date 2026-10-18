@@ -2,7 +2,7 @@ from django.db import transaction
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiTypes, extend_schema
 from rest_framework import filters, generics
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -144,8 +144,11 @@ class ManagedLocationListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsLocationManager]
     serializer_class = LocationSerializer
     pagination_class = None
+    queryset = Location.objects.none()
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return self.queryset
         queryset = Location.objects.all()
         profile = Profile.objects.filter(user=self.request.user).select_related('assigned_city').first()
         if not self.request.user.is_superuser and profile and profile.role == Profile.Role.AGENT:
@@ -577,8 +580,10 @@ class ManagedPropertyImageDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class PropertyImageOriginalView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = PropertyImageManagementSerializer
     queryset = PropertyImage.objects.none()
 
+    @extend_schema(responses={200: OpenApiTypes.BINARY})
     def get(self, request, *args, **kwargs):
         image = get_object_or_404(
             PropertyImage.objects.select_related(

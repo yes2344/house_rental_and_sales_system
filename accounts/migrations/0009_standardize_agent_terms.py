@@ -40,6 +40,11 @@ class Migration(migrations.Migration):
             name='account_profile_valid_role',
         ),
         migrations.RunPython(rename_agent_role_data, migrations.RunPython.noop),
+        # Flush deferred PostgreSQL FK checks before the following profile DDL.
+        migrations.RunSQL(
+            'SET CONSTRAINTS ALL IMMEDIATE',
+            reverse_sql='SET CONSTRAINTS ALL DEFERRED',
+        ),
         migrations.RenameField(
             model_name='profile',
             old_name='broker_approved',

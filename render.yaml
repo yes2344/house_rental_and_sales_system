@@ -14,6 +14,10 @@ services:
         value: kefaleshabeshahome-api.onrender.com
       - key: DJANGO_TRUST_PROXY_SSL_HEADER
         value: "True"
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS
+        value: "True"
       - key: DJANGO_CACHE_BACKEND
         value: django.core.cache.backends.locmem.LocMemCache
       - key: PUBLIC_FRONTEND_URL
@@ -29,7 +33,7 @@ services:
       - key: CLOUDINARY_URL
         sync: false
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
-        value: https://habeshapropertycenter.netlify.app,http://127.0.0.1:4173,http://localhost:4173
+        value: https://habeshapropertycenter.netlify.app
       - key: DJANGO_SUPERUSER_USERNAME
         sync: false
       - key: DJANGO_SUPERUSER_EMAIL

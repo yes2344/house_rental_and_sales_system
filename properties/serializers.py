@@ -692,7 +692,7 @@ class PropertyImageManagementSerializer(serializers.ModelSerializer):
         fields = ['id', 'image', 'original_url', 'caption', 'is_primary', 'created_at']
         read_only_fields = ['id', 'original_url', 'created_at']
 
-    def get_original_url(self, obj):
+    def get_original_url(self, obj) -> str | None:
         request = self.context.get('request')
         if (
             not obj.original_image
