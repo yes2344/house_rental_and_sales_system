@@ -407,7 +407,11 @@ export function HomePage({ locale, text }: HomePageProps) {
               </div>
               {cityId && (
                 <label className="search-field search-field-subcity">
-                  <span>{text(childLocationLabelKey)}</span>
+                  <span>
+                    {text(childLocationLabelKey === 'locationSubcity'
+                      ? 'searchLocationSubcity'
+                      : childLocationLabelKey)}
+                  </span>
                   <select
                     value={locationId ?? ''}
                     onChange={(event) => {

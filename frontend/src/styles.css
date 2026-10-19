@@ -1528,9 +1528,9 @@ img { display: block; max-width: 100%; }
 .homepage-note-row .manager-badge { display: inline-flex; }
 .public-page-editor-fields .manager-field:nth-child(n + 3) { grid-column: 1 / -1; }
 .floating-contact-links { position: fixed; z-index: 18; top: 50%; right: 20px; display: grid; gap: 12px; transform: translateY(-50%); }
-.floating-contact-link { width: 72px; height: 72px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 5px 18px rgb(12 38 62 / 25%); color: #fff; transition: transform .18s ease, box-shadow .18s ease; }
+.floating-contact-link { width: 58px; height: 58px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 5px 18px rgb(12 38 62 / 25%); color: #fff; transition: transform .18s ease, box-shadow .18s ease; }
 .floating-contact-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgb(12 38 62 / 30%); }
-.floating-contact-link svg { width: 30px; height: 30px; }
+.floating-contact-link svg { width: 24px; height: 24px; }
 .floating-contact-phone { background: #e53935; }
 .floating-contact-whatsapp { background: #25d366; }
 .floating-contact-telegram { background: #1686c9; }
@@ -1547,7 +1547,7 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 740px) {
   .floating-contact-links { right: 12px; gap: 8px; }
-  .floating-contact-link { width: 56px; height: 56px; }
+  .floating-contact-link { width: 45px; height: 45px; }
   .homepage-notes-section { padding: 24px 0; }
   .homepage-note-card { padding: 14px; }
   .homepage-note-row { flex-direction: column; }
@@ -1570,6 +1570,8 @@ img { display: block; max-width: 100%; }
   .listing-type-toggle button { min-height: 33.6px; font-size: 21px; padding: 0 7px; }
   .search-input-wrap, .search-field select, .search-field > input, .search-submit { min-height: 39.2px; height: 39.2px; font-size: 21px; }
   .search-fields, .search-fields.has-subcity { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7.7px; }
+  .search-fields:not(.has-subcity) .search-field-ordering,
+  .search-fields.has-subcity .search-field-ordering { grid-column: 1 / -1; }
   .search-submit { min-width: 0; }
 }
 
