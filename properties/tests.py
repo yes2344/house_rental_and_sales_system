@@ -771,14 +771,24 @@ class PublicPropertyApiTests(APITestCase):
         self.assertEqual(response.data['error']['status_code'], 400)
         self.assertIn('min_price', response.data['error']['details'])
 
-    def test_public_list_hides_unavailable_or_unpublished_properties(self):
+    def test_public_list_includes_sold_and_rented_but_hides_inactive_or_unpublished(self):
         Property.objects.create(
             title='Sold listing',
             slug='sold-listing-api',
             location='Submitted location',
             price=100000,
-            description='Not available.',
+            description='Sold listing remains visible.',
             status=Property.Status.SOLD,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        Property.objects.create(
+            title='Rented listing',
+            slug='rented-listing-api',
+            location='Submitted location',
+            price=150000,
+            description='Rented listing remains visible.',
+            listing_type=Property.ListingType.RENT,
+            status=Property.Status.RENTED,
             publication_status=Property.PublicationStatus.PUBLISHED,
         )
         Property.objects.create(
@@ -829,8 +839,13 @@ class PublicPropertyApiTests(APITestCase):
 
         response = self.client.get(reverse('api:property-list'))
 
-        self.assertEqual(response.data['count'], 1)
-        self.assertEqual(response.data['results'][0]['slug'], self.property.slug)
+        self.assertEqual(response.data['count'], 3)
+        results_by_slug = {item['slug']: item for item in response.data['results']}
+        self.assertEqual(results_by_slug[self.property.slug]['status'], Property.Status.AVAILABLE)
+        self.assertEqual(results_by_slug['sold-listing-api']['status'], Property.Status.SOLD)
+        self.assertEqual(results_by_slug['rented-listing-api']['status'], Property.Status.RENTED)
+        self.assertNotIn('inactive-listing-api', results_by_slug)
+        self.assertNotIn('pending-listing-api', results_by_slug)
 
     def test_detail_never_exposes_property_contact_and_includes_localized_amenity_fields(self):
         self.property.contact_phone = '+251900000000'

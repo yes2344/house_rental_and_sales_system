@@ -31,7 +31,12 @@ def public_properties():
     return (
         Property.objects.filter(
             publication_status=Property.PublicationStatus.PUBLISHED,
-            status__in=[Property.Status.AVAILABLE, Property.Status.LEGACY_ACTIVE],
+            status__in=[
+                Property.Status.AVAILABLE,
+                Property.Status.LEGACY_ACTIVE,
+                Property.Status.RENTED,
+                Property.Status.SOLD,
+            ],
         ).filter(
             Q(service_type=Property.ServiceType.AGENT_MANAGED)
             | Q(

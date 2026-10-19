@@ -1733,3 +1733,76 @@ img { display: block; max-width: 100%; }
   .public-contact-option > span,
   .homepage-note-image-field > small { font-size: 18px; }
 }
+
+@media (max-width: 1280px) {
+  .app-shell:has(.hero-section) .floating-contact-links {
+    top: 50%;
+    right: 12px;
+    left: auto;
+    bottom: auto;
+    display: grid;
+    gap: 12px;
+    transform: translateY(-50%);
+  }
+  .app-shell:has(.hero-section) .site-header .brand-copy strong {
+    font-size: 22.68px;
+    font-weight: 800;
+  }
+  .app-shell:has(.hero-section) .hero-copy h1 {
+    font-size: clamp(4.875rem, 15.46875vw, 9.375rem);
+    line-height: .864;
+  }
+  .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
+    font-size: clamp(2.4375rem, 7.59375vw, 4.125rem);
+    line-height: 1;
+  }
+  .app-shell:has(.hero-section) .floating-contact-link {
+    width: 116px;
+    height: 116px;
+  }
+  .app-shell:has(.hero-section) .floating-contact-link svg {
+    width: 60px;
+    height: 60px;
+  }
+  .app-shell:has(.hero-section) .home-search-section .listing-type-toggle {
+    width: 100%;
+    overflow: hidden;
+  }
+  .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 0 4px;
+    font-size: clamp(16px, 5vw, 42px);
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .app-shell:has(.hero-section) .home-search-section .search-field > label,
+  .app-shell:has(.hero-section) .home-search-section .search-field > span {
+    font-size: 36px;
+    font-weight: 800;
+  }
+  .app-shell:has(.hero-section) .home-search-section .search-submit {
+    font-size: 42px;
+    line-height: .9;
+  }
+  .app-shell:has(.hero-section) .home-search-section .search-field select,
+  .app-shell:has(.hero-section) .home-search-section .search-field select option {
+    font-weight: 400;
+  }
+}
+
+@media (max-width: 740px) {
+  .app-shell:has(.hero-section) .floating-contact-links { gap: 8px; }
+  .app-shell:has(.hero-section) .floating-contact-link {
+    width: 90px;
+    height: 90px;
+  }
+  .app-shell:has(.hero-section) .hero-copy h1 {
+    font-size: 95.04px;
+    line-height: .8;
+  }
+  .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
+    font-size: 46.8px;
+    line-height: .92;
+  }
+}

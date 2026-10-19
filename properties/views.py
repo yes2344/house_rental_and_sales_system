@@ -305,7 +305,8 @@ class PublicPropertyListView(generics.ListAPIView):
             'amenity slugs. `ordering` accepts only `-created_at`, `created_at`, `-price`, or `price`. '
             'Price sorting groups sale listings first, followed by daily, weekly, monthly, then yearly '
             'rentals; numeric ETB prices are sorted within each group without converting rental periods. '
-            'Public results always exclude unpublished, rented, sold, and inactive listings.'
+            'Public results include published available, rented, and sold listings, '
+            'and exclude unpublished and inactive listings.'
         ),
         responses=PublicPropertyListSerializer(many=True),
     )
