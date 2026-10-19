@@ -10,6 +10,8 @@ from admin.api_views import (
     AdminListingReportListView,
     AdminPropertyDetailView,
     AdminPropertyListView,
+    AdminPublicAccountDetailView,
+    AdminPublicAccountListCreateView,
     AdminUserDetailView,
     AdminUserListView,
     BrokerageSettingsView,
@@ -214,6 +216,16 @@ urlpatterns = [
     ),
     path('admin/users/', AdminUserListView.as_view(), name='admin-user-list'),
     path('admin/users/<int:pk>/', AdminUserDetailView.as_view(), name='admin-user-detail'),
+    path(
+        'admin/public-accounts/',
+        AdminPublicAccountListCreateView.as_view(),
+        name='admin-public-account-list',
+    ),
+    path(
+        'admin/public-accounts/<int:pk>/',
+        AdminPublicAccountDetailView.as_view(),
+        name='admin-public-account-detail',
+    ),
     path(
         'admin/delegated-accounts/',
         AdminDelegatedAccountListCreateView.as_view(),

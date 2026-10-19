@@ -21,7 +21,8 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
       'properties.edit_all',
       'properties.manage_assigned',
     ].includes(permission));
-  const canViewRequests = permissions.some((permission) => permission.startsWith('viewings.'));
+  const canViewRequests = permissions.some((permission) => permission.startsWith('viewings.'))
+    || (account?.role === 'administrator' && canViewProperties);
   const canManageSubcities = isAuthorizedAgent && permissions.includes('locations.manage_subcities');
   const canManageAgents = account?.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account?.role === 'administrator' && permissions.includes('locations.manage_cities');

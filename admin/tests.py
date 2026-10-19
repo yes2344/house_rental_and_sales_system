@@ -11,7 +11,7 @@ from rest_framework.test import APITestCase
 from PIL import Image
 from PIL import Image
 
-from accounts.models import Profile
+from accounts.models import EmailVerificationToken, Profile, TabSessionToken
 from accounts.permissions import AGENT_WORK_PERMISSIONS
 from admin.models import AdminAuditEvent, BrokerageSettings, HomepageNote, SocialMediaLink
 from properties.models import Location, ListingReport, Property, PropertyAgentAssignment
@@ -153,6 +153,124 @@ class AdminApiTests(APITestCase):
         self.assertEqual(customer_update.status_code, 403)
         self.assertEqual(agent_user_update.status_code, 403)
         self.assertEqual(agent_update.status_code, 200)
+
+    def test_admin_created_public_account_is_active_without_email_verification(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse('api:admin-public-account-list'),
+            {
+                'username': 'admin-created-owner',
+                'email': 'new-owner@example.com',
+                'password': 'StrongPass789!value',
+                'first_name': 'New',
+                'last_name': 'Owner',
+                'phone': '+251900000000',
+                'role': Profile.Role.OWNER,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        account = User.objects.get(username='admin-created-owner')
+        self.assertTrue(account.is_active)
+        self.assertEqual(account.profile.role, Profile.Role.OWNER)
+        self.assertEqual(account.profile.phone, '+251900000000')
+        self.assertFalse(EmailVerificationToken.objects.filter(user=account).exists())
+
+    def test_admin_can_list_update_and_deactivate_public_accounts_without_deleting_history(self):
+        account = User.objects.create_user(
+            username='managed-public-customer',
+            password='SecurePass123!value',
+            email='managed-customer@example.com',
+        )
+        Profile.objects.create(user=account, role=Profile.Role.CUSTOMER)
+        session, _ = TabSessionToken.issue(account)
+        self.client.force_authenticate(user=self.admin_user)
+
+        listed = self.client.get(reverse('api:admin-public-account-list'))
+        updated = self.client.patch(
+            reverse('api:admin-public-account-detail', kwargs={'pk': account.pk}),
+            {
+                'first_name': 'Updated',
+                'role': Profile.Role.OWNER,
+                'password': 'AnotherStrongPass789!value',
+            },
+            format='json',
+        )
+        deleted = self.client.delete(
+            reverse('api:admin-public-account-detail', kwargs={'pk': account.pk}),
+        )
+
+        account.refresh_from_db()
+        account.profile.refresh_from_db()
+        session.refresh_from_db()
+        self.assertEqual(listed.status_code, 200)
+        self.assertIn(account.pk, [row['id'] for row in listed.data['results']])
+        self.assertEqual(updated.status_code, 200, updated.data)
+        self.assertEqual(account.first_name, 'Updated')
+        self.assertEqual(account.profile.role, Profile.Role.OWNER)
+        self.assertFalse(account.is_active)
+        self.assertIsNotNone(session.revoked_at)
+        self.assertTrue(Profile.objects.filter(pk=account.profile.pk).exists())
+        self.assertEqual(deleted.status_code, 204)
+
+    def test_public_account_management_rejects_ordinary_users_and_privileged_roles(self):
+        self.client.force_authenticate(user=self.customer)
+        denied = self.client.get(reverse('api:admin-public-account-list'))
+        self.assertEqual(denied.status_code, 403)
+
+        self.client.force_authenticate(user=self.admin_user)
+        agent_role = self.client.post(
+            reverse('api:admin-public-account-list'),
+            {
+                'username': 'blocked-agent-role',
+                'password': 'StrongPass789!value',
+                'role': Profile.Role.AGENT,
+            },
+            format='json',
+        )
+        staff_fields = self.client.post(
+            reverse('api:admin-public-account-list'),
+            {
+                'username': 'blocked-staff-flags',
+                'password': 'StrongPass789!value',
+                'role': Profile.Role.CUSTOMER,
+                'is_staff': True,
+            },
+            format='json',
+        )
+        self.assertEqual(agent_role.status_code, 400)
+        self.assertEqual(staff_fields.status_code, 400)
+        self.assertFalse(User.objects.filter(username__in=['blocked-agent-role', 'blocked-staff-flags']).exists())
+
+    def test_delegated_administrator_can_manage_public_accounts(self):
+        delegated_admin = User.objects.create_user(
+            username='public-account-manager',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=delegated_admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.STAFF_MANAGE],
+        )
+        self.client.force_authenticate(user=delegated_admin)
+
+        response = self.client.post(
+            reverse('api:admin-public-account-list'),
+            {
+                'username': 'delegated-created-customer',
+                'password': 'StrongPass789!value',
+                'role': Profile.Role.CUSTOMER,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        created = User.objects.get(username='delegated-created-customer')
+        self.assertTrue(created.is_active)
+        self.assertEqual(created.profile.role, Profile.Role.CUSTOMER)
+        self.assertFalse(EmailVerificationToken.objects.filter(user=created).exists())
 
     def test_platform_owner_can_grant_and_revoke_assigned_submission_review_permission(self):
         agent = self.create_agent('submission-review-permission-agent')

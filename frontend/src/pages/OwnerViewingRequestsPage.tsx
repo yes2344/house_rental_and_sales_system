@@ -60,6 +60,7 @@ function isViewingRequestStatus(value: string | null): value is ViewingRequestSt
 function eventMessage(eventType: string): MessageKey {
   if (eventType === 'proposal_sent') return 'appointmentProposedEvent';
   if (eventType === 'proposal_revised') return 'appointmentRevisedEvent';
+  if (eventType === 'request_updated') return 'viewingRequestUpdatedEvent';
   if (eventType === 'proposal_accepted') return 'appointmentAcceptedEvent';
   if (eventType === 'proposal_declined') return 'appointmentDeclinedEvent';
   if (eventType === 'rejected') return 'requestRejectedEvent';

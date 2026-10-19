@@ -53,6 +53,15 @@ class PublicViewingRequestCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        attrs = super().validate(attrs)
+        property_obj = attrs.get('property')
+        if property_obj and property_obj.status not in (
+            Property.Status.AVAILABLE,
+            Property.Status.LEGACY_ACTIVE,
+        ):
+            raise serializers.ValidationError({
+                'property_id': 'Viewing requests are only available for properties that are still available.'
+            })
         preferred_date = attrs.get('preferred_date')
         preferred_time = attrs.get('preferred_time')
         if preferred_date and preferred_time and appointment_is_in_past(preferred_date, preferred_time):
@@ -60,7 +69,6 @@ class PublicViewingRequestCreateSerializer(serializers.ModelSerializer):
                 'preferred_time': 'Preferred time cannot be in the past.'
             })
         return attrs
-
 
 class PublicViewingRequestReceiptSerializer(serializers.Serializer):
     id = serializers.IntegerField()
@@ -296,6 +304,33 @@ class CustomerViewingRequestSerializer(serializers.ModelSerializer):
 
     def get_appointment_timezone(self, obj) -> str:
         return settings.TIME_ZONE
+
+
+class CustomerViewingRequestUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ViewingRequest
+        fields = [
+            'full_name',
+            'email',
+            'phone',
+            'preferred_date',
+            'preferred_time',
+            'message',
+        ]
+
+    def validate_preferred_date(self, value):
+        if value < timezone.localdate():
+            raise serializers.ValidationError('Preferred date cannot be in the past.')
+        return value
+
+    def validate(self, attrs):
+        preferred_date = attrs.get('preferred_date', self.instance.preferred_date)
+        preferred_time = attrs.get('preferred_time', self.instance.preferred_time)
+        if appointment_is_in_past(preferred_date, preferred_time):
+            raise serializers.ValidationError({
+                'preferred_time': 'Preferred appointment time cannot be in the past.'
+            })
+        return attrs
 
 
 class ViewingRequestResponseSerializer(serializers.Serializer):

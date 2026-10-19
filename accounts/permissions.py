@@ -127,6 +127,32 @@ def has_management_permission(user, permission):
     return False
 
 
+def can_manage_published_property_viewings(user, property_obj=None):
+    if not user or not user.is_authenticated or not user.is_active:
+        return False
+    is_administrator = user.is_superuser or Profile.objects.filter(
+        user_id=user.pk,
+        role=Profile.Role.ADMINISTRATOR,
+    ).exists()
+    if not is_administrator:
+        return False
+    property_model = apps.get_model('properties', 'Property')
+    if property_obj is None:
+        if not property_model.objects.filter(submitted_by_id=user.pk).exists():
+            return False
+    elif property_obj.submitted_by_id != user.pk:
+        return False
+    return any(
+        has_management_permission(user, permission)
+        for permission in (
+            Profile.Permission.PROPERTY_VIEW_ALL,
+            Profile.Permission.PROPERTY_MODERATE,
+            Profile.Permission.PROPERTY_EDIT_ALL,
+            Profile.Permission.PROPERTY_MANAGE_ASSIGNED,
+        )
+    )
+
+
 def can_manage_agent_accounts(user):
     if not user or not user.is_authenticated or not user.is_active:
         return False
@@ -266,7 +292,7 @@ class IsViewingRequestManager(IsPropertyManagerOrAdministrator):
         user = request.user
         if not user or not user.is_authenticated or not user.is_active:
             return False
-        return any(
+        return can_manage_published_property_viewings(user) or any(
             has_management_permission(user, permission)
             for permission in (
                 Profile.Permission.VIEWING_VIEW_ALL,
@@ -276,6 +302,8 @@ class IsViewingRequestManager(IsPropertyManagerOrAdministrator):
         )
 
     def has_object_permission(self, request, view, obj):
+        if can_manage_published_property_viewings(request.user, obj.property):
+            return True
         request_method = getattr(request, 'method', 'GET')
         is_read = request_method in ('GET', 'HEAD', 'OPTIONS')
         if is_read and has_management_permission(

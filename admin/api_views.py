@@ -27,6 +27,7 @@ from admin.serializers import (
     AdminAgentAssignmentSerializer,
     AdminListingReportSerializer,
     AdminPropertySerializer,
+    AdminPublicAccountSerializer,
     AdminUserSerializer,
     BrokerageSettingsSerializer,
     HomepageNoteSerializer,
@@ -284,6 +285,114 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
     @extend_schema(    summary='View or update a customer, owner, or agent account')
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
+
+
+class AdminPublicAccountListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAgentAccountManager]
+    serializer_class = AdminPublicAccountSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+    ordering_fields = ['date_joined', 'username']
+    ordering = ['-date_joined']
+
+    def get_queryset(self):
+        return User.objects.filter(
+            is_staff=False,
+            is_superuser=False,
+            profile__role__in=[Profile.Role.CUSTOMER, Profile.Role.OWNER],
+        ).select_related('profile').order_by(*self.ordering)
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        record_admin_action(
+            request.user,
+            action='public_account_created',
+            object_type='user',
+            object_id=user.pk,
+            changes={'role': user.profile.role, 'is_active': user.is_active},
+        )
+        return Response(self.get_serializer(user).data, status=status.HTTP_201_CREATED)
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        if request.method == 'POST':
+            response['Cache-Control'] = 'no-store'
+            response['Pragma'] = 'no-cache'
+        return response
+
+
+class AdminPublicAccountDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAgentAccountManager]
+    serializer_class = AdminPublicAccountSerializer
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        return User.objects.filter(
+            is_staff=False,
+            is_superuser=False,
+            profile__role__in=[Profile.Role.CUSTOMER, Profile.Role.OWNER],
+        ).select_related('profile')
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        user = serializer.instance
+        before = {
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'phone': user.profile.phone,
+            'role': user.profile.role,
+            'is_active': user.is_active,
+        }
+        updated = serializer.save()
+        profile = updated.profile
+        changes = {}
+        for field in ('username', 'email', 'first_name', 'last_name', 'phone'):
+            if before[field] != (
+                getattr(updated, field) if field != 'phone' else profile.phone
+            ):
+                changes[f'{field}_changed'] = True
+        for field, value in (
+            ('role', profile.role),
+            ('is_active', updated.is_active),
+        ):
+            if before[field] != value:
+                changes[field] = {'from': before[field], 'to': value}
+        if changes:
+            record_admin_action(
+                self.request.user,
+                action='public_account_updated',
+                object_type='user',
+                object_id=updated.pk,
+                changes=changes,
+            )
+        if (before['is_active'] and not updated.is_active) or self.request.data.get('password'):
+            TabSessionToken.objects.filter(
+                user=updated,
+                revoked_at__isnull=True,
+            ).update(revoked_at=timezone.now())
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        was_active = instance.is_active
+        if instance.is_active:
+            instance.is_active = False
+            instance.save(update_fields=['is_active'])
+        TabSessionToken.objects.filter(
+            user=instance,
+            revoked_at__isnull=True,
+        ).update(revoked_at=timezone.now())
+        record_admin_action(
+            self.request.user,
+            action='public_account_deactivated',
+            object_type='user',
+            object_id=instance.pk,
+            changes={'is_active': {'from': was_active, 'to': False}},
+        )
 
 
 class AdminDelegatedAccountListCreateView(generics.ListCreateAPIView):

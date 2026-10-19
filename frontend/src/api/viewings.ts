@@ -74,6 +74,11 @@ export interface CustomerViewingRequest {
   created_at: string;
 }
 
+export type CustomerViewingRequestUpdate = Pick<
+  ViewingRequestPayload,
+  'full_name' | 'email' | 'phone' | 'preferred_date' | 'preferred_time' | 'message'
+>;
+
 export interface CustomerViewingRequestPage {
   count: number;
   next: string | null;
@@ -95,6 +100,17 @@ export async function getCustomerViewingRequests(
   const response = await apiClient.get<CustomerViewingRequestPage>('/viewing-requests/mine/', {
     params: { page, ...(status ? { status } : {}) },
   });
+  return response.data;
+}
+
+export async function updateCustomerViewingRequest(
+  id: number,
+  payload: Partial<CustomerViewingRequestUpdate>,
+): Promise<CustomerViewingRequest> {
+  const response = await apiClient.patch<CustomerViewingRequest>(
+    `/viewing-requests/mine/${id}/`,
+    payload,
+  );
   return response.data;
 }
 

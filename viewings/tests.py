@@ -302,6 +302,46 @@ class PublicViewingRequestApiTests(APITestCase):
         )
         self.assertEqual(InAppNotification.objects.filter(recipient=agent).count(), 1)
 
+    def test_submitting_request_notifies_admin_who_published_property(self):
+        admin = get_user_model().objects.create_user(
+            username='published-property-admin',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.PROPERTY_EDIT_ALL],
+        )
+        property_obj = Property.objects.create(
+            title='Admin published property',
+            slug='admin-published-viewing-property',
+            location='Submitted location',
+            price=450000,
+            description='A test listing.',
+            status=Property.Status.AVAILABLE,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+            submitted_by=admin,
+        )
+
+        response = self.client.post(
+            reverse('api:viewing-request-create'),
+            {
+                'property_id': property_obj.pk,
+                'full_name': 'Registered Visitor',
+                'email': 'registered@example.com',
+                'phone': '+251900000000',
+                'preferred_date': (timezone.localdate() + timedelta(days=1)).isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(
+            InAppNotification.objects.filter(
+                recipient=admin,
+                notification_type='viewing_request_updated',
+            ).exists()
+        )
+
     def test_active_duplicate_request_is_conflict_and_database_constraint_is_race_safe(self):
         payload = {
             'property_id': self.property.pk,
@@ -382,7 +422,18 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertEqual(request.events.count(), 1)
         self.assertEqual(request.events.get().message, 'My plans changed.')
 
-    def test_requester_can_hide_only_cancelled_requests_without_erasing_audit_history(self):
+    def test_requester_can_update_pending_request_and_managers_are_notified(self):
+        admin = get_user_model().objects.create_user(
+            username='viewing-request-update-admin',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.PROPERTY_EDIT_ALL],
+        )
+        self.property.submitted_by = admin
+        self.property.save(update_fields=['submitted_by'])
         request = ViewingRequest.objects.create(
             requester=self.customer,
             property=self.property,
@@ -390,13 +441,76 @@ class PublicViewingRequestApiTests(APITestCase):
             email='registered@example.com',
             phone='+251900000000',
             preferred_date=timezone.localdate() + timedelta(days=2),
-            status=ViewingRequest.Status.CANCELLED,
+        )
+        preferred_date = (timezone.localdate() + timedelta(days=4)).isoformat()
+
+        response = self.client.patch(
+            reverse('api:customer-viewing-detail', kwargs={'pk': request.pk}),
+            {
+                'full_name': 'Updated Visitor',
+                'preferred_date': preferred_date,
+                'preferred_time': '14:30',
+                'message': 'Please call before arriving.',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        request.refresh_from_db()
+        event = request.events.get()
+        self.assertEqual(request.full_name, 'Updated Visitor')
+        self.assertEqual(request.preferred_date.isoformat(), preferred_date)
+        self.assertEqual(request.preferred_time.strftime('%H:%M'), '14:30')
+        self.assertEqual(request.message, 'Please call before arriving.')
+        self.assertEqual(event.event_type, ViewingRequestEvent.Type.REQUEST_UPDATED)
+        self.assertEqual(event.proposed_date, request.preferred_date)
+        self.assertEqual(event.proposed_time, request.preferred_time)
+        self.assertTrue(
+            InAppNotification.objects.filter(
+                recipient=admin,
+                notification_type='viewing_request_updated',
+            ).exists()
+        )
+
+    def test_requester_cannot_update_after_a_manager_has_acted(self):
+        request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=self.property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=2),
+            status=ViewingRequest.Status.PROPOSED,
+            proposed_date=timezone.localdate() + timedelta(days=3),
+            proposed_time='10:30',
+        )
+
+        response = self.client.patch(
+            reverse('api:customer-viewing-detail', kwargs={'pk': request.pk}),
+            {'preferred_date': (timezone.localdate() + timedelta(days=4)).isoformat()},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 409)
+        request.refresh_from_db()
+        self.assertEqual(request.status, ViewingRequest.Status.PROPOSED)
+        self.assertFalse(request.events.exists())
+
+    def test_requester_can_hide_any_request_without_erasing_audit_history(self):
+        request = ViewingRequest.objects.create(
+            requester=self.customer,
+            property=self.property,
+            full_name='Registered Visitor',
+            email='registered@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=2),
+            status=ViewingRequest.Status.PENDING,
         )
         event = ViewingRequestEvent.objects.create(
             viewing_request=request,
             actor=self.customer,
-            event_type=ViewingRequestEvent.Type.CANCELLED,
-            to_status=ViewingRequest.Status.CANCELLED,
+            event_type=ViewingRequestEvent.Type.SUBMITTED,
+            to_status=ViewingRequest.Status.PENDING,
         )
 
         response = self.client.delete(
@@ -407,13 +521,33 @@ class PublicViewingRequestApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 204)
         self.assertIsNotNone(request.requester_deleted_at)
+        self.assertEqual(request.status, ViewingRequest.Status.CANCELLED)
         self.assertTrue(ViewingRequest.objects.filter(pk=request.pk).exists())
         self.assertTrue(ViewingRequestEvent.objects.filter(pk=event.pk).exists())
+        self.assertTrue(
+            ViewingRequestEvent.objects.filter(
+                viewing_request=request,
+                event_type=ViewingRequestEvent.Type.CANCELLED,
+                actor=self.customer,
+            ).exists()
+        )
         self.assertEqual(activity.data['count'], 0)
+        new_request = self.client.post(
+            reverse('api:viewing-request-create'),
+            {
+                'property_id': self.property.pk,
+                'full_name': 'Registered Visitor',
+                'email': 'registered@example.com',
+                'phone': '+251900000000',
+                'preferred_date': (timezone.localdate() + timedelta(days=3)).isoformat(),
+            },
+            format='json',
+        )
+        self.assertEqual(new_request.status_code, 201)
 
-    def test_requester_cannot_hide_a_non_cancelled_request(self):
+    def test_requester_cannot_hide_another_users_request(self):
         request = ViewingRequest.objects.create(
-            requester=self.customer,
+            requester=get_user_model().objects.create_user(username='another-viewing-requester'),
             property=self.property,
             full_name='Registered Visitor',
             email='registered@example.com',
@@ -427,7 +561,7 @@ class PublicViewingRequestApiTests(APITestCase):
         )
         request.refresh_from_db()
 
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 404)
         self.assertIsNone(request.requester_deleted_at)
         self.assertEqual(request.status, ViewingRequest.Status.PENDING)
 
@@ -521,6 +655,11 @@ class PublicViewingRequestApiTests(APITestCase):
         delete = self.client.delete(
             reverse('api:customer-viewing-detail', kwargs={'pk': request.pk}),
         )
+        update = self.client.patch(
+            reverse('api:customer-viewing-detail', kwargs={'pk': request.pk}),
+            {'full_name': 'Unauthorized update'},
+            format='json',
+        )
         request.refresh_from_db()
 
         self.assertEqual(listed.data['count'], 0)
@@ -528,6 +667,7 @@ class PublicViewingRequestApiTests(APITestCase):
         self.assertEqual(respond.status_code, 404)
         self.assertEqual(cancel.status_code, 404)
         self.assertEqual(delete.status_code, 404)
+        self.assertEqual(update.status_code, 404)
         self.assertEqual(request.status, ViewingRequest.Status.PENDING)
         self.assertFalse(request.events.exists())
 
@@ -955,6 +1095,51 @@ class ManagedViewingRequestApiTests(APITestCase):
 
         self.assertEqual(listed.status_code, 403)
         self.assertEqual(detail.status_code, 403)
+
+    def test_administrator_can_manage_requests_for_a_property_they_published(self):
+        admin = get_user_model().objects.create_user(
+            username='viewing-property-admin',
+            is_staff=True,
+        )
+        Profile.objects.create(
+            user=admin,
+            role=Profile.Role.ADMINISTRATOR,
+            management_permissions=[Profile.Permission.PROPERTY_EDIT_ALL],
+        )
+        property_obj = Property.objects.create(
+            title='Administrator published listing',
+            slug='administrator-published-listing',
+            location='Submitted location',
+            price=250000,
+            description='A listing published by an administrator.',
+            submitted_by=admin,
+            publication_status=Property.PublicationStatus.PUBLISHED,
+        )
+        viewing_request = ViewingRequest.objects.create(
+            property=property_obj,
+            full_name='Administrator Listing Visitor',
+            email='visitor@example.com',
+            phone='+251900000000',
+            preferred_date=timezone.localdate() + timedelta(days=3),
+        )
+        self.client.force_authenticate(user=admin)
+
+        listed = self.client.get(reverse('api:managed-viewing-list'))
+        detail = self.client.get(
+            reverse('api:managed-viewing-detail', kwargs={'pk': viewing_request.pk})
+        )
+        cancelled = self.client.post(
+            reverse('api:managed-viewing-action', kwargs={'pk': viewing_request.pk}),
+            {'action': 'cancel'},
+            format='json',
+        )
+
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual([item['id'] for item in listed.data['results']], [viewing_request.pk])
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(cancelled.status_code, 200)
+        viewing_request.refresh_from_db()
+        self.assertEqual(viewing_request.status, ViewingRequest.Status.CANCELLED)
 
     def test_approved_assigned_agent_can_manage_but_unapproved_agent_cannot(self):
         self.client.force_authenticate(user=self.agent)

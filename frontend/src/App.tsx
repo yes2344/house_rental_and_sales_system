@@ -187,6 +187,10 @@ export default function App() {
                 </Route>
                 <Route element={<RequireAgentAccountManager text={text} />}>
                   <Route path="management/agents" element={<AgentAccountManagementPage text={text} />} />
+                  <Route
+                    path="management/public-accounts"
+                    element={<AgentAccountManagementPage text={text} mode="public" />}
+                  />
                 </Route>
                 <Route element={<RequireListingManager text={text} />}>
                   <Route element={<OwnerDashboardLayout text={text} />}>

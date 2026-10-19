@@ -76,6 +76,7 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
   const [agreementTerms, setAgreementTerms] = useState<Record<number, string>>({});
   const [agreementStartDates, setAgreementStartDates] = useState<Record<number, string>>({});
   const [agreementDurations, setAgreementDurations] = useState<Record<number, string>>({});
+  const [customAgreementDurations, setCustomAgreementDurations] = useState<Record<number, string>>({});
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState('');
@@ -117,14 +118,29 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
   }, [statusFilter]);
 
   const act = async (review: OwnerSubmissionReview, action: 'approve' | 'reject' | 'request_corrections') => {
+    if (action === 'approve' && agreementDurations[review.id] === 'custom') {
+      const customDuration = Number(customAgreementDurations[review.id]);
+      if (!Number.isInteger(customDuration) || customDuration < 1 || customDuration > 120) {
+        setDecisionErrors((current) => ({
+          ...current,
+          [review.id]: text('agreementDurationValidation'),
+        }));
+        return;
+      }
+    }
     setActingId(review.id);
     setDecisionErrors((current) => ({ ...current, [review.id]: '' }));
     try {
       if (action === 'approve') {
+        const selectedDuration = agreementDurations[review.id] ?? '12';
         await decideSubmission(review.id, {
           action,
           agreement_start_date: agreementStartDates[review.id] || ethiopianCurrentDate(),
-          agreement_duration_months: Number(agreementDurations[review.id] || 12),
+          agreement_duration_months: Number(
+            selectedDuration === 'custom'
+              ? customAgreementDurations[review.id] ?? ''
+              : selectedDuration,
+          ),
           agreement_terms: agreementTerms[review.id]?.trim() ?? '',
         });
       } else {
@@ -261,6 +277,7 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
             {reviews.map((review) => {
               const property = review.property;
               const canDecide = review.status === 'pending_review' || review.status === 'corrections_requested';
+              const selectedDuration = agreementDurations[review.id] ?? '12';
               return (
                 <article className="submission-review-card" key={review.id}>
                   {canBulkDelete && (
@@ -389,14 +406,34 @@ export function SubmissionReviewPage({ locale, text }: SubmissionReviewPageProps
                           </label>
                           <label className="manager-field">
                             <span>{text('agreementDurationMonths')}</span>
-                            <input
-                              type="number"
-                              min="1"
-                              max="120"
-                              value={agreementDurations[review.id] ?? '12'}
+                            <select
+                              value={selectedDuration}
                               onChange={(event) => setAgreementDurations((current) => ({ ...current, [review.id]: event.target.value }))}
-                            />
+                            >
+                              {[3, 6, 12, 24, 36].map((months) => (
+                                <option key={months} value={months}>
+                                  {text('agreementMonthsOption').replace('{months}', String(months))}
+                                </option>
+                              ))}
+                              <option value="custom">{text('agreementCustomDuration')}</option>
+                            </select>
                           </label>
+                          {selectedDuration === 'custom' && (
+                            <label className="manager-field manager-field-wide">
+                              <span>{text('agreementCustomDuration')}</span>
+                              <input
+                                type="number"
+                                min="1"
+                                max="120"
+                                required
+                                value={customAgreementDurations[review.id] ?? ''}
+                                onChange={(event) => setCustomAgreementDurations((current) => ({
+                                  ...current,
+                                  [review.id]: event.target.value,
+                                }))}
+                              />
+                            </label>
+                          )}
                           <label className="manager-field manager-field-wide">
                             <span>{text('agreementTerms')}</span>
                             <textarea

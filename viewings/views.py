@@ -17,6 +17,7 @@ from accounts.models import Profile
 from accounts.permissions import (
     IsNotAgentAccount,
     IsViewingRequestManager,
+    can_manage_published_property_viewings,
     has_management_permission,
 )
 from properties.access import agent_city_location_ids
@@ -26,6 +27,7 @@ from viewings.serializers import (
     GuestViewingRequestDecisionSerializer,
     GuestViewingRequestStatusSerializer,
     CustomerViewingRequestSerializer,
+    CustomerViewingRequestUpdateSerializer,
     ManagedViewingRequestActionSerializer,
     ManagedViewingRequestSerializer,
     PublicViewingRequestCreateSerializer,
@@ -203,6 +205,8 @@ def manageable_viewing_requests(user):
         return ViewingRequest.objects.all()
 
     scope = Q(pk__in=[])
+    if can_manage_published_property_viewings(user):
+        scope |= Q(property__submitted_by=user)
     if has_management_permission(user, Profile.Permission.VIEWING_MANAGE_ASSIGNED):
         scope |= Q(
             property__assigned_agents=user,
@@ -250,6 +254,46 @@ class CustomerViewingRequestDetailView(generics.RetrieveAPIView):
         )
 
     @transaction.atomic
+    def patch(self, request, *args, **kwargs):
+        viewing_request = (
+            self.get_queryset()
+            .select_for_update()
+            .filter(pk=kwargs['pk'])
+            .first()
+        )
+        if viewing_request is None:
+            return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if viewing_request.status != ViewingRequest.Status.PENDING:
+            return Response(
+                {'detail': 'Only pending viewing requests can be edited.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = CustomerViewingRequestUpdateSerializer(
+            viewing_request,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        changed_fields = [
+            field
+            for field, value in serializer.validated_data.items()
+            if getattr(viewing_request, field) != value
+        ]
+        if changed_fields:
+            viewing_request = serializer.save()
+            event = ViewingRequestEvent.objects.create(
+                viewing_request=viewing_request,
+                actor=request.user,
+                event_type=ViewingRequestEvent.Type.REQUEST_UPDATED,
+                to_status=viewing_request.status,
+                proposed_date=viewing_request.preferred_date,
+                proposed_time=viewing_request.preferred_time,
+            )
+            notify_viewing_request_event(viewing_request, event, to_requester=False)
+        return Response(CustomerViewingRequestSerializer(viewing_request).data)
+
+    @transaction.atomic
     def delete(self, request, *args, **kwargs):
         viewing_request = (
             ViewingRequest.objects.select_for_update()
@@ -262,12 +306,19 @@ class CustomerViewingRequestDetailView(generics.RetrieveAPIView):
         )
         if viewing_request is None:
             return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
-        if viewing_request.status != ViewingRequest.Status.CANCELLED:
-            return Response(
-                {'detail': 'Only cancelled viewing requests can be removed.'},
-                status=status.HTTP_409_CONFLICT,
-            )
 
+        if viewing_request.status in PublicViewingRequestCreateView.active_statuses:
+            previous_status = viewing_request.status
+            viewing_request.status = ViewingRequest.Status.CANCELLED
+            viewing_request.save(update_fields=['status'])
+            event = ViewingRequestEvent.objects.create(
+                viewing_request=viewing_request,
+                actor=request.user,
+                event_type=ViewingRequestEvent.Type.CANCELLED,
+                from_status=previous_status,
+                to_status=viewing_request.status,
+            )
+            notify_viewing_request_event(viewing_request, event, to_requester=False)
         viewing_request.requester_deleted_at = timezone.now()
         viewing_request.save(update_fields=['requester_deleted_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)

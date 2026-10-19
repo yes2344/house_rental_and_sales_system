@@ -31,7 +31,8 @@ export function DashboardPage({ text }: DashboardPageProps) {
     'announcements.review',
     'announcements.review_assigned',
   ].includes(permission));
-  const canManageRequests = permissions.some((permission) => permission.startsWith('viewings.'));
+  const canManageRequests = permissions.some((permission) => permission.startsWith('viewings.'))
+    || (isAdministrator && canManageListings);
   const canManageSubcities = isAgent && permissions.includes('locations.manage_subcities');
   const canManageAgents = account.role === 'administrator' && permissions.includes('staff.manage');
   const canManageCities = account.role === 'administrator' && permissions.includes('locations.manage_cities');
@@ -47,6 +48,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
     ...(isAdministrator
       ? (canManageAgents ? [
         { href: '/management/agents', title: text('managerAgentAccounts'), icon: <Users aria-hidden="true" /> },
+        { href: '/management/public-accounts', title: text('publicAccountManagementTitle'), icon: <UserRound aria-hidden="true" /> },
       ] : []).concat(canManageCities ? [
         { href: '/management/locations', title: text('locationManagementTitle'), icon: <MapPinned aria-hidden="true" /> },
       ] : []).concat(canManageBranding ? [

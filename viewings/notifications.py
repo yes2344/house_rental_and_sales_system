@@ -1,5 +1,6 @@
 from owner_announcements.models import InAppNotification
 from accounts.models import Profile
+from accounts.permissions import can_manage_published_property_viewings
 
 
 def notify_viewing_request_event(viewing_request, event, *, to_requester):
@@ -16,6 +17,12 @@ def notify_viewing_request_event(viewing_request, event, *, to_requester):
                 user__is_active=True,
             ).select_related('user')
         )
+        publisher = viewing_request.property.submitted_by
+        if (
+            publisher is not None
+            and can_manage_published_property_viewings(publisher, viewing_request.property)
+        ):
+            recipients.append(publisher)
 
     if not recipients:
         return

@@ -41,6 +41,18 @@ export interface ManagedAgentAccount {
   date_joined: string;
 }
 
+export interface ManagedPublicAccount {
+  id: number;
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  role: 'customer' | 'owner';
+  is_active: boolean;
+  date_joined: string;
+}
+
 export type ManagedLocationType = LocationType;
 
 export interface ManagedLocationPayload {
@@ -110,6 +122,41 @@ export async function updateManagedAgentAccount(
 
 export async function deleteManagedAgentAccount(id: number): Promise<void> {
   await apiClient.delete(`/admin/delegated-accounts/${id}/`);
+}
+
+export async function getManagedPublicAccounts(signal?: AbortSignal): Promise<ManagedPublicAccount[]> {
+  const accounts: ManagedPublicAccount[] = [];
+  let nextPage: string | null = '/admin/public-accounts/';
+  while (nextPage) {
+    const currentPage: string = nextPage;
+    const pageResponse = await apiClient.get<PaginatedResponse<ManagedPublicAccount>>(
+      currentPage,
+      { signal },
+    );
+    accounts.push(...pageResponse.data.results);
+    nextPage = pageResponse.data.next;
+  }
+  return accounts;
+}
+
+export async function createManagedPublicAccount(
+  payload: Omit<ManagedPublicAccount, 'id' | 'date_joined' | 'is_active'> & { password: string },
+): Promise<ManagedPublicAccount> {
+  const response = await apiClient.post<ManagedPublicAccount>('/admin/public-accounts/', payload);
+  return response.data;
+}
+
+export async function updateManagedPublicAccount(
+  id: number,
+  payload: Partial<Pick<ManagedPublicAccount, 'username' | 'email' | 'first_name' | 'last_name' | 'phone' | 'role' | 'is_active'>>
+    & { password?: string },
+): Promise<ManagedPublicAccount> {
+  const response = await apiClient.patch<ManagedPublicAccount>(`/admin/public-accounts/${id}/`, payload);
+  return response.data;
+}
+
+export async function deleteManagedPublicAccount(id: number): Promise<void> {
+  await apiClient.delete(`/admin/public-accounts/${id}/`);
 }
 
 export async function actOnManagedViewingRequest(

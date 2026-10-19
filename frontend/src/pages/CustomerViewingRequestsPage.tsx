@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, CalendarClock, RotateCw, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { ArrowLeft, ArrowRight, CalendarClock, Pencil, RotateCw, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { getErrorMessage } from '../api/client';
@@ -8,7 +8,9 @@ import {
   deleteCustomerViewingRequest,
   getCustomerViewingRequests,
   respondToCustomerViewingRequest,
+  updateCustomerViewingRequest,
   type CustomerViewingRequest,
+  type CustomerViewingRequestUpdate,
   type ViewingRequestStatusValue,
 } from '../api/viewings';
 import type { Locale, MessageKey } from '../i18n';
@@ -38,6 +40,7 @@ function statusMessage(status: ViewingRequestStatusValue): MessageKey {
 function eventMessage(eventType: string): MessageKey {
   if (eventType === 'proposal_sent') return 'appointmentProposedEvent';
   if (eventType === 'proposal_revised') return 'appointmentRevisedEvent';
+  if (eventType === 'request_updated') return 'viewingRequestUpdatedEvent';
   if (eventType === 'proposal_accepted') return 'appointmentAcceptedEvent';
   if (eventType === 'proposal_declined') return 'appointmentDeclinedEvent';
   if (eventType === 'request_confirmed') return 'requestConfirmedEvent';
@@ -53,6 +56,10 @@ function formatDate(value: string, locale: Locale): string {
   }).format(new Date(`${value}T00:00:00`));
 }
 
+function localDateString(date: Date): string {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
 export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingRequestsPageProps) {
   const [requests, setRequests] = useState<CustomerViewingRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
@@ -64,6 +71,10 @@ export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingReq
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [busyRequest, setBusyRequest] = useState<number | null>(null);
+  const [editingRequest, setEditingRequest] = useState<number | null>(null);
+  const [editValues, setEditValues] = useState<
+    Partial<Record<keyof CustomerViewingRequestUpdate, string>>
+  >({});
   const [reload, setReload] = useState(0);
 
   const loadRequests = useCallback(async () => {
@@ -106,12 +117,53 @@ export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingReq
     }
   };
 
-  const deleteCancelledRequest = async (request: CustomerViewingRequest) => {
-    if (!window.confirm(text('confirmDeleteCancelledRequest'))) return;
+  const saveRequestChanges = async (event: FormEvent<HTMLFormElement>, request: CustomerViewingRequest) => {
+    event.preventDefault();
+    setBusyRequest(request.id);
+    setActionError('');
+    try {
+      await updateCustomerViewingRequest(request.id, {
+        full_name: editValues.full_name ?? request.full_name,
+        email: editValues.email ?? request.email,
+        phone: editValues.phone ?? request.phone,
+        preferred_date: editValues.preferred_date ?? request.preferred_date,
+        preferred_time: editValues.preferred_time || null,
+        message: editValues.message ?? request.message,
+      });
+      setEditingRequest(null);
+      setEditValues({});
+      await loadRequests();
+    } catch (saveError: unknown) {
+      setActionError(getErrorMessage(saveError));
+    } finally {
+      setBusyRequest(null);
+    }
+  };
+
+  const startEditing = (request: CustomerViewingRequest) => {
+    setEditingRequest(request.id);
+    setEditValues({
+      full_name: request.full_name,
+      email: request.email,
+      phone: request.phone,
+      preferred_date: request.preferred_date,
+      preferred_time: request.preferred_time?.slice(0, 5) ?? '',
+      message: request.message,
+    });
+    setActionError('');
+  };
+
+  const updateEditValue = (field: keyof CustomerViewingRequestUpdate, value: string) => {
+    setEditValues((current) => ({ ...current, [field]: value }));
+  };
+
+  const deleteViewingRequest = async (request: CustomerViewingRequest) => {
+    if (!window.confirm(text('confirmHideViewingRequest'))) return;
     setBusyRequest(request.id);
     setActionError('');
     try {
       await deleteCustomerViewingRequest(request.id);
+      if (editingRequest === request.id) setEditingRequest(null);
       if (requests.length === 1 && page > 1) {
         setPage((current) => current - 1);
       } else {
@@ -199,7 +251,89 @@ export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingReq
                       ))}
                     </ol>
                   </details>
+                  {editingRequest === request.id && (
+                    <form
+                      className="customer-request-edit-form"
+                      onSubmit={(event) => void saveRequestChanges(event, request)}
+                    >
+                      <label>
+                        <span>{text('fullName')}</span>
+                        <input
+                          autoComplete="name"
+                          maxLength={200}
+                          required
+                          value={editValues.full_name ?? ''}
+                          onChange={(event) => updateEditValue('full_name', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>{text('emailAddress')}</span>
+                        <input
+                          type="email"
+                          autoComplete="email"
+                          required
+                          value={editValues.email ?? ''}
+                          onChange={(event) => updateEditValue('email', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>{text('phoneNumber')}</span>
+                        <input
+                          type="tel"
+                          autoComplete="tel"
+                          maxLength={50}
+                          required
+                          value={editValues.phone ?? ''}
+                          onChange={(event) => updateEditValue('phone', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>{text('preferredDate')}</span>
+                        <input
+                          type="date"
+                          min={localDateString(new Date())}
+                          required
+                          value={editValues.preferred_date ?? ''}
+                          onChange={(event) => updateEditValue('preferred_date', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>{text('preferredTime')}</span>
+                        <input
+                          type="time"
+                          value={editValues.preferred_time ?? ''}
+                          onChange={(event) => updateEditValue('preferred_time', event.target.value)}
+                        />
+                      </label>
+                      <label className="customer-request-edit-message">
+                        <span>{text('optionalMessage')}</span>
+                        <textarea
+                          rows={3}
+                          value={editValues.message ?? ''}
+                          onChange={(event) => updateEditValue('message', event.target.value)}
+                        />
+                      </label>
+                      <div className="customer-request-edit-actions">
+                        <button className="button button-primary button-small" type="submit" disabled={busyRequest === request.id}>
+                          {busyRequest === request.id ? text('savingOwnViewingRequest') : text('saveRequestChanges')}
+                        </button>
+                        <button className="button button-outline button-small" type="button" onClick={() => setEditingRequest(null)}>
+                          {text('cancelRequestEdit')}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                   <div className="customer-request-actions">
+                    {request.status === 'pending' && (
+                      <button
+                        className="button button-outline button-small"
+                        type="button"
+                        disabled={busyRequest === request.id}
+                        onClick={() => editingRequest === request.id ? setEditingRequest(null) : startEditing(request)}
+                      >
+                        <Pencil size={14} aria-hidden="true" />{editingRequest === request.id ? text('cancelRequestEdit') : text('editViewingRequest')}
+                      </button>
+                    )}
                     {request.status === 'proposed' && (
                       <>
                         <button className="button button-primary button-small" type="button" disabled={busyRequest === request.id} onClick={() => void runAction(request, 'accept')}>
@@ -215,11 +349,9 @@ export function CustomerViewingRequestsPage({ locale, text }: CustomerViewingReq
                         {text('cancelViewingRequest')}
                       </button>
                     )}
-                    {request.status === 'cancelled' && (
-                      <button className="button button-outline button-small" type="button" disabled={busyRequest === request.id} onClick={() => void deleteCancelledRequest(request)}>
-                        <Trash2 size={14} aria-hidden="true" />{text('deleteCancelledRequest')}
-                      </button>
-                    )}
+                    <button className="button button-outline button-small" type="button" disabled={busyRequest === request.id} onClick={() => void deleteViewingRequest(request)}>
+                      <Trash2 size={14} aria-hidden="true" />{text('hideViewingRequest')}
+                    </button>
                   </div>
                 </article>
               ))}

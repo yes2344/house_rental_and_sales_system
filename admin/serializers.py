@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
@@ -6,7 +8,7 @@ from drf_spectacular.utils import extend_schema_field
 
 from accounts.models import Profile
 from accounts.permissions import has_management_permission
-from accounts.serializers import EffectiveManagementPermissionsField
+from accounts.serializers import EffectiveManagementPermissionsField, ProfilePhoneField
 from admin.models import (
     AdminAuditEvent,
     BrokerageSettings,
@@ -358,6 +360,110 @@ class AdminUserSerializer(serializers.ModelSerializer):
         for field, value in validated_data.items():
             setattr(instance, field, value)
         instance.save()
+        return instance
+
+
+class AdminPublicAccountSerializer(serializers.ModelSerializer):
+    role = serializers.ChoiceField(
+        choices=[Profile.Role.CUSTOMER, Profile.Role.OWNER],
+        required=False,
+    )
+    phone = ProfilePhoneField(required=False, allow_blank=True)
+    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    is_active = serializers.BooleanField(required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'phone',
+            'password',
+            'is_active',
+            'role',
+            'date_joined',
+        ]
+        read_only_fields = ['id', 'date_joined']
+
+    def to_internal_value(self, data):
+        privileged_fields = {
+            'is_staff',
+            'is_superuser',
+            'management_permissions',
+            'agent_approved',
+            'assigned_city_id',
+        } & data.keys()
+        if privileged_fields:
+            raise serializers.ValidationError({
+                field: 'Public accounts cannot be granted staff or agent permissions.'
+                for field in privileged_fields
+            })
+        return super().to_internal_value(data)
+
+    def validate_username(self, value):
+        users = User.objects.filter(username__iexact=value)
+        if self.instance:
+            users = users.exclude(pk=self.instance.pk)
+        if users.exists():
+            raise serializers.ValidationError('A user with this username already exists.')
+        return value
+
+    def validate_email(self, value):
+        users = User.objects.filter(email__iexact=value)
+        if self.instance:
+            users = users.exclude(pk=self.instance.pk)
+        if users.exists():
+            raise serializers.ValidationError('A user with this email already exists.')
+        return value
+
+    def validate_password(self, value):
+        candidate_user = User(
+            username=self.initial_data.get('username', getattr(self.instance, 'username', '')),
+            email=self.initial_data.get('email', getattr(self.instance, 'email', '')),
+        )
+        try:
+            password_validation.validate_password(value, user=candidate_user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+        return value
+
+    def validate(self, attrs):
+        if self.instance is None and not attrs.get('password'):
+            raise serializers.ValidationError({'password': 'This field is required.'})
+        if self.instance is None and not attrs.get('role'):
+            raise serializers.ValidationError({'role': 'This field is required.'})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        role = validated_data.pop('role')
+        phone = validated_data.pop('phone', '')
+        password = validated_data.pop('password')
+        validated_data['is_active'] = True
+        user = User.objects.create_user(password=password, **validated_data)
+        Profile.objects.create(user=user, role=role, phone=phone)
+        return user
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        role = validated_data.pop('role', None)
+        phone = validated_data.pop('phone', None)
+        password = validated_data.pop('password', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        profile = instance.profile
+        if role is not None:
+            profile.role = role
+        if phone is not None:
+            profile.phone = phone
+        if role is not None or phone is not None:
+            profile.save()
         return instance
 
 

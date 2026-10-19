@@ -65,6 +65,7 @@ class ViewingRequestEvent(models.Model):
         SUBMITTED = 'submitted', 'Submitted'
         PROPOSAL_SENT = 'proposal_sent', 'Appointment proposed'
         PROPOSAL_REVISED = 'proposal_revised', 'Appointment proposal revised'
+        REQUEST_UPDATED = 'request_updated', 'Viewing request updated'
         PROPOSAL_ACCEPTED = 'proposal_accepted', 'Appointment proposal accepted'
         PROPOSAL_DECLINED = 'proposal_declined', 'Appointment proposal declined'
         REJECTED = 'rejected', 'Request declined by property manager'
