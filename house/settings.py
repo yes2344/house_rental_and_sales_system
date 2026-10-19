@@ -35,14 +35,23 @@ ALLOWED_HOSTS = env.list(
     default=['localhost', '127.0.0.1', '[::1]'],
 )
 
-DEPLOYED_FRONTEND_URL = env(
-    'DEPLOYED_FRONTEND_URL',
-    default='https://habeshapropertycenter.netlify.app',
-)
 PUBLIC_FRONTEND_URL = env(
     'PUBLIC_FRONTEND_URL',
-    default='http://127.0.0.1:5173' if DEBUG else DEPLOYED_FRONTEND_URL,
+    default='http://127.0.0.1:5173' if DEBUG else '',
 )
+if not DEBUG and not PUBLIC_FRONTEND_URL.strip():
+    raise ImproperlyConfigured('PUBLIC_FRONTEND_URL must be set to the deployed frontend origin.')
+public_frontend_url = urlsplit(PUBLIC_FRONTEND_URL)
+if not DEBUG and (
+    public_frontend_url.scheme != 'https'
+    or not public_frontend_url.netloc
+    or public_frontend_url.username
+    or public_frontend_url.password
+    or public_frontend_url.path not in {'', '/'}
+    or public_frontend_url.query
+    or public_frontend_url.fragment
+):
+    raise ImproperlyConfigured('PUBLIC_FRONTEND_URL must be an HTTPS origin without a path.')
 
 CSRF_TRUSTED_ORIGINS = env.list(
     'DJANGO_CSRF_TRUSTED_ORIGINS',
@@ -53,15 +62,16 @@ CSRF_TRUSTED_ORIGINS = env.list(
         'http://localhost:4173',
     ] if DEBUG else [],
 )
-for frontend_url in (DEPLOYED_FRONTEND_URL, PUBLIC_FRONTEND_URL):
-    parsed_frontend_url = urlsplit(frontend_url)
-    if parsed_frontend_url.scheme in {'http', 'https'} and parsed_frontend_url.netloc:
-        frontend_origin = f'{parsed_frontend_url.scheme}://{parsed_frontend_url.netloc}'
-        if frontend_origin not in CSRF_TRUSTED_ORIGINS:
-            CSRF_TRUSTED_ORIGINS.append(frontend_origin)
+FRONTEND_ORIGIN = (
+    f'{public_frontend_url.scheme}://{public_frontend_url.netloc}'
+    if public_frontend_url.scheme in {'http', 'https'} and public_frontend_url.netloc
+    else ''
+)
+if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append(FRONTEND_ORIGIN)
 CORS_ALLOWED_ORIGINS = env.list(
     'DJANGO_CORS_ALLOWED_ORIGINS',
-    default=[PUBLIC_FRONTEND_URL],
+    default=[FRONTEND_ORIGIN] if FRONTEND_ORIGIN else [],
 )
 
 SECURE_SSL_REDIRECT = env.bool('DJANGO_SECURE_SSL_REDIRECT', default=not DEBUG)

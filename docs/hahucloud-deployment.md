@@ -30,7 +30,6 @@ DJANGO_SERVE_MEDIA=True
 DJANGO_MEDIA_ROOT=/home/CPANEL_USER/hpc-api/media
 DJANGO_PRIVATE_MEDIA_ROOT=/home/CPANEL_USER/hpc-private-media
 PUBLIC_FRONTEND_URL=https://example.com
-DEPLOYED_FRONTEND_URL=https://example.com
 DJANGO_CSRF_TRUSTED_ORIGINS=https://example.com,https://www.example.com
 DJANGO_CORS_ALLOWED_ORIGINS=https://example.com,https://www.example.com
 POSTGRES_DB=<database-name>

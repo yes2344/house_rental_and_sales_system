@@ -21,7 +21,7 @@ services:
       - key: DJANGO_CACHE_BACKEND
         value: django.core.cache.backends.locmem.LocMemCache
       - key: PUBLIC_FRONTEND_URL
-        value: https://habeshapropertycenter.netlify.app
+        sync: false
       - key: EMAIL_BACKEND
         value: accounts.email_backend.BrevoEmailBackend
       - key: BREVO_API_KEY
@@ -32,8 +32,6 @@ services:
         sync: false
       - key: CLOUDINARY_URL
         sync: false
-      - key: DJANGO_CSRF_TRUSTED_ORIGINS
-        value: https://habeshapropertycenter.netlify.app
       - key: DJANGO_SUPERUSER_USERNAME
         sync: false
       - key: DJANGO_SUPERUSER_EMAIL

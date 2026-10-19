@@ -1,6 +1,6 @@
 # Free demo deployment
 
-This document describes the alternative demo deployment with Netlify (React), Render (Django), Neon (PostgreSQL), and Cloudinary (uploaded media). For the planned HahuCloud shared-hosting deployment, follow [hahucloud-deployment.md](./hahucloud-deployment.md) instead. Provider free plans have limits and may change; this setup is not intended for production workloads or guaranteed availability.
+This guide describes a provider-neutral static frontend deployment with Render (Django), Neon (PostgreSQL), and Cloudinary (uploaded media). For the planned HahuCloud shared-hosting deployment, follow [hahucloud-deployment.md](./hahucloud-deployment.md) instead. Provider free plans have limits and may change; this setup is not intended for production workloads or guaranteed availability.
 
 ## 1. Create the hosted database
 
@@ -10,26 +10,28 @@ This document describes the alternative demo deployment with Netlify (React), Re
 ## 2. Deploy the API to Render
 
 1. In Render, create a Blueprint from this repository and confirm the `render.yaml` configuration.
-2. Enter the Neon connection string for `DATABASE_URL` and Cloudinary URL for `CLOUDINARY_URL`. Production startup requires Cloudinary so uploads are not silently written to Render's ephemeral filesystem. For the not-yet-created Netlify site, enter a temporary HTTPS origin for `DJANGO_CSRF_TRUSTED_ORIGINS`; replace it after creating the site.
-3. Enter the initial administrator username, email, and a strong password for `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, and `DJANGO_SUPERUSER_PASSWORD`. These are server-side secrets/configuration; never use `VITE_*` for them.
-4. Add a Brevo API key and a verified sender address for `BREVO_API_KEY` and `DEFAULT_FROM_EMAIL`. Production startup requires both when using the configured Brevo backend.
-5. Deploy the `kefaleshabeshahome-api` service. The startup command runs migrations and creates that administrator only if it does not already exist. It does not reset the password on later restarts.
-6. Copy the backend origin shown in the Render dashboard. If Render assigned a different hostname than `kefaleshabeshahome-api.onrender.com`, update `DJANGO_ALLOWED_HOSTS` to match.
+2. Enter the Neon connection string for `DATABASE_URL` and Cloudinary URL for `CLOUDINARY_URL`. Production startup requires Cloudinary so uploads are not silently written to Render's ephemeral filesystem.
+3. Enter the deployed frontend's HTTPS origin for `PUBLIC_FRONTEND_URL`. The backend uses it for verification and password-reset links, and adds it to the default CORS and CSRF trusted-origin settings.
+4. Enter the initial administrator username, email, and a strong password for `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, and `DJANGO_SUPERUSER_PASSWORD`. These are server-side secrets/configuration; never use `VITE_*` for them.
+5. Add a Brevo API key and a verified sender address for `BREVO_API_KEY` and `DEFAULT_FROM_EMAIL`. Production startup requires both when using the configured Brevo backend.
+6. Deploy the `kefaleshabeshahome-api` service. The startup command runs migrations and creates that administrator only if it does not already exist. It does not reset the password on later restarts.
+7. Copy the backend origin shown in the Render dashboard. If Render assigned a different hostname than `kefaleshabeshahome-api.onrender.com`, update `DJANGO_ALLOWED_HOSTS` to match.
 
-## 3. Deploy the frontend to Netlify
+## 3. Build and deploy the frontend
 
-1. Import this repository into Netlify. The root `netlify.toml` sets the base directory and build output.
-2. Set `VITE_API_PROXY_TARGET` to the backend origin from the Render dashboard (HTTPS, no trailing slash or path).
-3. Set the frontend's public API base URL to `/api/v1` if it is not already set.
-4. Deploy. The build creates Netlify proxy rules for `/api/*` and `/media/*`, followed by the single-page-app fallback. Netlify builds fail if the backend origin is missing.
-5. Copy the assigned Netlify site origin, such as `https://your-site.netlify.app`, and replace the temporary value in Render's `DJANGO_CSRF_TRUSTED_ORIGINS`. Include any additional frontend origins as a comma-separated list, then redeploy the API.
+1. Configure the static frontend host to build from `frontend` with `npm run build` and publish the `dist` directory.
+2. Set `VITE_API_BASE_URL` to the backend API origin followed by `/api/v1`, for example `https://your-api.example.com/api/v1`.
+3. Configure the host to serve `index.html` for unknown frontend routes, including `/verify-email`, `/forgot-password`, and `/reset-password`. This is required for direct navigation from account emails.
+4. Configure `/media/*` to reach the backend if the deployment serves media from its local media directory. Production uploads should use the configured Cloudinary storage.
+5. Set `PUBLIC_FRONTEND_URL` on the backend to the deployed frontend's exact HTTPS origin (no path, query, or fragment), then redeploy the backend.
 
 ## 4. Verify
 
-- Open the Netlify URL and test browsing, sign-in, listing images, and a viewing request.
-- Verify `/api/v1/auth/csrf/` through the Netlify URL.
+- Open the frontend URL and test browsing, sign-in, listing images, and a viewing request.
+- Verify the API's `/api/v1/auth/csrf/` endpoint from the deployed frontend.
+- Register with a controlled mailbox, open the verification email, and confirm its link uses the deployed frontend hostname and loads the verification page.
 - Test an image upload and confirm its URL is served from Cloudinary.
-- Check the Render and Netlify deploy logs for build or runtime errors.
+- Check the backend and frontend host logs for build or runtime errors.
 
 ## Notes
 

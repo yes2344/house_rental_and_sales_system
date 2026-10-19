@@ -901,7 +901,11 @@ class AccountApiTests(APITestCase):
         account_after_logout = client.get(reverse('api:me'))
         self.assertIn(account_after_logout.status_code, [401, 403])
 
-    def test_login_accepts_csrf_token_from_deployed_frontend_origin(self):
+    @override_settings(
+        PUBLIC_FRONTEND_URL='https://frontend.example',
+        CSRF_TRUSTED_ORIGINS=['https://frontend.example'],
+    )
+    def test_login_accepts_csrf_token_from_configured_frontend_origin(self):
         client = APIClient(enforce_csrf_checks=True)
         csrf_response = client.get(reverse('api:csrf-token'))
         token = csrf_response.data['csrf_token']
@@ -910,8 +914,8 @@ class AccountApiTests(APITestCase):
             reverse('api:login'),
             {'username': 'csrf-diagnostic-invalid-user', 'password': 'not-a-real-password'},
             format='json',
-            HTTP_ORIGIN='https://habeshapropertycenter.netlify.app',
-            HTTP_REFERER='https://habeshapropertycenter.netlify.app/login',
+            HTTP_ORIGIN='https://frontend.example',
+            HTTP_REFERER='https://frontend.example/login',
             HTTP_X_CSRFTOKEN=token,
         )
 
