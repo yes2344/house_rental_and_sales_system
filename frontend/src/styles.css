@@ -1749,20 +1749,20 @@ img { display: block; max-width: 100%; }
     font-weight: 800;
   }
   .app-shell:has(.hero-section) .hero-copy h1 {
-    font-size: clamp(4.875rem, 15.46875vw, 9.375rem);
+    font-size: clamp(3.65625rem, 11.6015625vw, 7.03125rem);
     line-height: .864;
   }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
-    font-size: clamp(2.4375rem, 7.59375vw, 4.125rem);
+    font-size: clamp(1.828125rem, 5.6953125vw, 3.09375rem);
     line-height: 1;
   }
   .app-shell:has(.hero-section) .floating-contact-link {
-    width: 87px;
-    height: 87px;
+    width: 65.25px;
+    height: 65.25px;
   }
   .app-shell:has(.hero-section) .floating-contact-link svg {
-    width: 45px;
-    height: 45px;
+    width: 33.75px;
+    height: 33.75px;
   }
   .app-shell:has(.hero-section) .home-search-section .listing-type-toggle {
     width: 100%;
@@ -1794,15 +1794,15 @@ img { display: block; max-width: 100%; }
 @media (max-width: 740px) {
   .app-shell:has(.hero-section) .floating-contact-links { gap: 8px; }
   .app-shell:has(.hero-section) .floating-contact-link {
-    width: 67.5px;
-    height: 67.5px;
+    width: 50.625px;
+    height: 50.625px;
   }
   .app-shell:has(.hero-section) .hero-copy h1 {
-    font-size: 95.04px;
+    font-size: 71.28px;
     line-height: .8;
   }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
-    font-size: 46.8px;
+    font-size: 35.1px;
     line-height: .92;
   }
 }
