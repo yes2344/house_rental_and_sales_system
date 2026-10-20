@@ -146,7 +146,6 @@ class RegistrationSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
     phone = serializers.CharField(max_length=50, required=False, allow_blank=True)
-    next_path = serializers.CharField(max_length=2048, required=False, default='/')
 
     def validate_username(self, value):
         if User.objects.filter(username__iexact=value).exists():
@@ -169,26 +168,11 @@ class RegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(exc.messages) from exc
         return value
 
-    def validate_next_path(self, value):
-        if (
-            not value.startswith('/')
-            or value.startswith('//')
-            or '\\' in value
-            or any(ord(char) < 32 for char in value)
-        ):
-            raise serializers.ValidationError('The return path must be a local application path.')
-        return value
-
     @transaction.atomic
     def create(self, validated_data):
-        from accounts.email_messages import send_verification_email
-
         phone = validated_data.pop('phone', '')
-        next_path = validated_data.pop('next_path', '/')
-        user = User.objects.create_user(is_active=False, **validated_data)
+        user = User.objects.create_user(**validated_data)
         Profile.objects.create(user=user, role=Profile.Role.CUSTOMER, phone=phone)
-        _, token = EmailVerificationToken.issue(user)
-        send_verification_email(user, token, next_path)
         return user
 
 

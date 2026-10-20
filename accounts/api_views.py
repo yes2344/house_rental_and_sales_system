@@ -64,13 +64,7 @@ class RegistrationView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            user = serializer.save()
-        except AccountEmailDeliveryError:
-            return Response(
-                {'detail': 'The verification email could not be sent. Please try again later.'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        user = serializer.save()
         return Response(AccountSerializer(user).data, status=status.HTTP_201_CREATED)
 
 

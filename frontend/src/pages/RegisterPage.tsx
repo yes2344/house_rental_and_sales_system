@@ -84,13 +84,12 @@ export function RegisterPage({ text }: RegisterPageProps) {
         email: values.email.trim(),
         phone: values.phone.trim(),
         password: values.password,
-        next_path: getSafeRedirectTarget(state?.from),
       });
-      navigate('/verify-email', {
+      navigate('/login', {
         replace: true,
         state: {
-          email: values.email.trim(),
-          next: getSafeRedirectTarget(state?.from),
+          registered: true,
+          from: getSafeRedirectTarget(state?.from),
         },
       });
     } catch (requestError: unknown) {

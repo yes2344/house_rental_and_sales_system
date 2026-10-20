@@ -1,6 +1,5 @@
 from datetime import timedelta
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
@@ -330,7 +329,7 @@ class AccountApiTests(APITestCase):
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         PUBLIC_FRONTEND_URL='https://frontend.example',
     )
-    def test_registration_creates_inactive_customer_and_ignores_client_role(self):
+    def test_registration_creates_active_customer_and_ignores_client_role(self):
         response = self.client.post(
             reverse('api:register'),
             {
@@ -347,64 +346,27 @@ class AccountApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         user = get_user_model().objects.get(username='new-customer')
         self.assertTrue(user.check_password('Evergreen!Place42'))
-        self.assertFalse(user.is_active)
+        self.assertTrue(user.is_active)
         self.assertEqual(user.profile.role, Profile.Role.CUSTOMER)
         self.assertFalse(user.profile.agent_approved)
         self.assertEqual(response.data['role'], Profile.Role.CUSTOMER)
-        self.assertEqual(len(mail.outbox), 1)
-
-    @override_settings(
-        EMAIL_BACKEND='accounts.email_backend.BrevoEmailBackend',
-        BREVO_API_KEY='test-brevo-key',
-        DEFAULT_FROM_EMAIL='Infinity House <verified@example.com>',
-        EMAIL_TIMEOUT=7,
-        PUBLIC_FRONTEND_URL='https://frontend.example',
-    )
-    def test_registration_sends_verification_email_through_brevo_https_api(self):
-        api_response = MagicMock()
-        api_response.status = 201
-        api_response.__enter__.return_value = api_response
-
-        with patch('accounts.email_backend.urlopen', return_value=api_response) as send_request:
-            response = self.client.post(
-                reverse('api:register'),
-                {
-                    'username': 'brevo-customer',
-                    'email': 'brevo-customer@example.com',
-                    'password': 'Evergreen!Place42',
-                },
-                format='json',
-            )
-
-        self.assertEqual(response.status_code, 201)
-        request = send_request.call_args.args[0]
-        payload = json.loads(request.data)
-        self.assertEqual(request.full_url, 'https://api.brevo.com/v3/smtp/email')
-        self.assertEqual(request.get_header('Api-key'), 'test-brevo-key')
-        self.assertEqual(payload['sender'], {
-            'email': 'verified@example.com',
-            'name': 'Infinity House',
-        })
-        self.assertEqual(payload['to'], [{'email': 'brevo-customer@example.com'}])
-        self.assertIn('https://frontend.example/verify-email?', payload['textContent'])
-        self.assertEqual(send_request.call_args.kwargs['timeout'], 7)
-
-    @override_settings(
-        EMAIL_BACKEND='accounts.email_backend.BrevoEmailBackend',
-        BREVO_API_KEY='test-brevo-key',
-        DEFAULT_FROM_EMAIL='verified@example.com',
-        PUBLIC_FRONTEND_URL='https://frontend.example',
-    )
-    def test_registration_rolls_back_when_brevo_rejects_email(self):
-        response_error = HTTPError(
-            'https://api.brevo.com/v3/smtp/email',
-            401,
-            'Unauthorized',
-            {},
-            None,
+        self.assertEqual(len(mail.outbox), 0)
+        login = self.client.post(
+            reverse('api:login'),
+            {'identifier': 'customer@example.com', 'password': 'Evergreen!Place42'},
+            format='json',
         )
+        self.assertEqual(login.status_code, 200)
 
-        with patch('accounts.email_backend.urlopen', side_effect=response_error):
+    @override_settings(
+        EMAIL_BACKEND='accounts.email_backend.BrevoEmailBackend',
+        BREVO_API_KEY='test-brevo-key',
+    )
+    def test_registration_succeeds_when_email_provider_is_unavailable(self):
+        with patch(
+            'accounts.email_backend.urlopen',
+            side_effect=OSError('Email provider is unavailable.'),
+        ) as send_request:
             response = self.client.post(
                 reverse('api:register'),
                 {
@@ -415,11 +377,11 @@ class AccountApiTests(APITestCase):
                 format='json',
             )
 
-        self.assertEqual(response.status_code, 503)
-        self.assertFalse(
-            get_user_model().objects.filter(username='brevo-rejected-customer').exists()
-        )
-        self.assertFalse(EmailVerificationToken.objects.exists())
+        self.assertEqual(response.status_code, 201)
+        user = get_user_model().objects.get(username='brevo-rejected-customer')
+        self.assertTrue(user.is_active)
+        self.assertFalse(EmailVerificationToken.objects.filter(user=user).exists())
+        send_request.assert_not_called()
 
     @override_settings(BREVO_API_KEY='test-brevo-key')
     def test_brevo_email_backend_reports_provider_http_status_without_leaking_key(self):
@@ -446,21 +408,6 @@ class AccountApiTests(APITestCase):
             ):
                 BrevoEmailBackend().send_messages([message])
 
-    @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
-    def test_registration_rejects_external_return_paths(self):
-        response = self.client.post(
-            reverse('api:register'),
-            {
-                'username': 'unsafe-return-customer',
-                'email': 'unsafe-return@example.com',
-                'password': 'Evergreen!Place42',
-                'next_path': '//outside.example/path',
-            },
-            format='json',
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(get_user_model().objects.filter(username='unsafe-return-customer').exists())
-
     @staticmethod
     def _last_email_query(path):
         link = next(
@@ -477,22 +424,22 @@ class AccountApiTests(APITestCase):
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         PUBLIC_FRONTEND_URL='https://frontend.example',
     )
-    def test_email_verification_activates_account_and_preserves_safe_return_path(self):
-        response = self.client.post(
-            reverse('api:register'),
-            {
-                'username': 'email-verified-customer',
-                'email': 'verified@example.com',
-                'password': 'Evergreen!Place42',
-                'phone': '+251900000001',
-                'next_path': '/submissions/new',
-            },
-            format='json',
-        )
-        self.assertEqual(response.status_code, 201)
-        user = get_user_model().objects.get(username='email-verified-customer')
-        self.assertFalse(user.is_active)
+    def test_legacy_email_verification_activates_pending_account(self):
+        from accounts.email_messages import send_verification_email
 
+        user = get_user_model().objects.create_user(
+            username='email-verified-customer',
+            email='verified@example.com',
+            password='Evergreen!Place42',
+            is_active=False,
+        )
+        Profile.objects.create(
+            user=user,
+            role=Profile.Role.CUSTOMER,
+            phone='+251900000001',
+        )
+        _, token = EmailVerificationToken.issue(user)
+        send_verification_email(user, token, '/submissions/new')
         params = self._last_email_query('/verify-email')
         self.assertEqual(params['next'], '/submissions/new')
         verified = self.client.post(reverse('api:verify-email'), params, format='json')
@@ -527,16 +474,17 @@ class AccountApiTests(APITestCase):
         PUBLIC_FRONTEND_URL='https://frontend.example',
     )
     def test_expired_verification_link_does_not_activate_account(self):
-        self.client.post(
-            reverse('api:register'),
-            {
-                'username': 'expired-verification-customer',
-                'email': 'expired@example.com',
-                'password': 'Evergreen!Place42',
-            },
-            format='json',
+        from accounts.email_messages import send_verification_email
+
+        user = get_user_model().objects.create_user(
+            username='expired-verification-customer',
+            email='expired@example.com',
+            password='Evergreen!Place42',
+            is_active=False,
         )
-        user = get_user_model().objects.get(username='expired-verification-customer')
+        Profile.objects.create(user=user, role=Profile.Role.CUSTOMER)
+        _, token = EmailVerificationToken.issue(user)
+        send_verification_email(user, token)
         EmailVerificationToken.objects.filter(user=user).update(
             expires_at=timezone.now() - timedelta(seconds=1),
         )
@@ -554,16 +502,17 @@ class AccountApiTests(APITestCase):
         PUBLIC_FRONTEND_URL='https://frontend.example',
     )
     def test_expired_verification_link_can_be_resent_and_replaced(self):
-        self.client.post(
-            reverse('api:register'),
-            {
-                'username': 'resend-verification-customer',
-                'email': 'resend-verification@example.com',
-                'password': 'Evergreen!Place42',
-            },
-            format='json',
+        from accounts.email_messages import send_verification_email
+
+        user = get_user_model().objects.create_user(
+            username='resend-verification-customer',
+            email='resend-verification@example.com',
+            password='Evergreen!Place42',
+            is_active=False,
         )
-        user = get_user_model().objects.get(username='resend-verification-customer')
+        Profile.objects.create(user=user, role=Profile.Role.CUSTOMER)
+        _, token = EmailVerificationToken.issue(user)
+        send_verification_email(user, token)
         old_link = self._last_email_query('/verify-email')
         EmailVerificationToken.objects.filter(user=user).update(
             expires_at=timezone.now() - timedelta(seconds=1),
@@ -710,17 +659,14 @@ class AccountApiTests(APITestCase):
         EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
         PUBLIC_FRONTEND_URL='https://frontend.example',
     )
-    def test_unverified_users_cannot_login_or_reuse_manually_issued_session_tokens(self):
-        self.client.post(
-            reverse('api:register'),
-            {
-                'username': 'unverified-customer',
-                'email': 'unverified@example.com',
-                'password': 'Evergreen!Place42',
-            },
-            format='json',
+    def test_inactive_users_cannot_login_or_reuse_manually_issued_session_tokens(self):
+        user = get_user_model().objects.create_user(
+            username='inactive-customer',
+            email='inactive@example.com',
+            password='Evergreen!Place42',
+            is_active=False,
         )
-        user = get_user_model().objects.get(username='unverified-customer')
+        Profile.objects.create(user=user, role=Profile.Role.CUSTOMER)
         login = self.client.post(
             reverse('api:login'),
             {'username': user.email, 'password': 'Evergreen!Place42'},
