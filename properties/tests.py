@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -47,6 +48,20 @@ class PropertyConstraintTests(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 self.make_property(price=-1)
+
+    def test_duplicate_root_location_slug_is_rejected_during_validation(self):
+        Location.objects.create(
+            name='First Root',
+            slug='duplicate-root-slug',
+            location_type=Location.Type.COUNTRY,
+        )
+
+        with self.assertRaises(ValidationError):
+            Location.objects.create(
+                name='Second Root',
+                slug='duplicate-root-slug',
+                location_type=Location.Type.COUNTRY,
+            )
 
     def test_sold_status_requires_sale_listing(self):
         with self.assertRaises(IntegrityError):
@@ -894,7 +909,7 @@ class PublicPropertyApiTests(APITestCase):
         self.assertNotIn('latitude', listed_location)
         self.assertNotIn('longitude', listed_location)
 
-    def test_detail_does_not_expose_unavailable_property(self):
+    def test_detail_exposes_published_rented_property_with_its_status(self):
         self.property.status = Property.Status.RENTED
         self.property.listing_type = Property.ListingType.RENT
         self.property.save()
@@ -903,7 +918,8 @@ class PublicPropertyApiTests(APITestCase):
             reverse('api:property-detail', kwargs={'slug': self.property.slug})
         )
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], Property.Status.RENTED)
 
     def test_pagination_can_be_changed_within_configured_limit(self):
         Property.objects.create(

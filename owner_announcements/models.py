@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import Case, F, Q, Value, When
 from django.utils import timezone
 
 from properties.models import Property
@@ -99,6 +99,14 @@ class OwnerAnnouncementAgreement(models.Model):
     renewal_conditions = models.TextField(max_length=2000, blank=True)
     public_contact_visible = models.BooleanField(default=False)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    active_announcement_key = models.GeneratedField(
+        expression=Case(
+            When(status='active', then=F('announcement_id')),
+            default=Value(None),
+        ),
+        output_field=models.BigIntegerField(),
+        db_persist=True,
+    )
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -121,9 +129,8 @@ class OwnerAnnouncementAgreement(models.Model):
                 name='owner_agreement_duration_range',
             ),
             models.UniqueConstraint(
-                fields=['announcement'],
-                condition=Q(status='active'),
-                name='owner_announcement_one_active_agreement',
+                fields=['active_announcement_key'],
+                name='owner_active_agreement_unique',
             ),
         ]
 

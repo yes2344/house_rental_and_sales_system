@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
+from django.db.models import Case, F, Value, When
 
 from properties.models import Property
 
@@ -40,6 +40,18 @@ class ViewingRequest(models.Model):
     message = models.TextField(blank=True)
     agent_notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=Status.PENDING)
+    active_requester_key = models.GeneratedField(
+        expression=Case(
+            When(
+                requester__isnull=False,
+                status__in=['pending', 'proposed', 'confirmed', 'declined'],
+                then=F('requester_id'),
+            ),
+            default=Value(None),
+        ),
+        output_field=models.BigIntegerField(),
+        db_persist=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -47,12 +59,8 @@ class ViewingRequest(models.Model):
         ordering = ['-created_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['requester', 'property'],
-                condition=(
-                    Q(requester__isnull=False)
-                    & Q(status__in=['pending', 'proposed', 'confirmed', 'declined'])
-                ),
-                name='viewing_one_active_request_per_user_property',
+                fields=['active_requester_key', 'property'],
+                name='viewing_active_request_property_unique',
             ),
         ]
 

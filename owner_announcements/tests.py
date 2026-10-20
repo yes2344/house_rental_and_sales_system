@@ -1,9 +1,11 @@
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError, transaction
 from django.test import override_settings
 from PIL import Image
 from django.urls import reverse
@@ -494,6 +496,28 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         )
         self.assertEqual(public_detail.status_code, 200)
         self.assertEqual(public_detail.data['public_contact_phone'], '+251900000001')
+
+    def test_only_one_active_agreement_per_announcement(self):
+        created = self.submit()
+        announcement = OwnerAnnouncement.objects.get(property_id=created.data['id'])
+        start_date = timezone.localdate()
+        agreement_data = {
+            'announcement': announcement,
+            'start_date': start_date,
+            'end_date': start_date + timedelta(days=365),
+            'duration_months': 12,
+            'terms': 'Agreement terms',
+            'approved_by': self.admin,
+        }
+        OwnerAnnouncementAgreement.objects.create(**agreement_data)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            OwnerAnnouncementAgreement.objects.create(**agreement_data)
+
+        OwnerAnnouncementAgreement.objects.create(
+            **agreement_data,
+            status=OwnerAnnouncementAgreement.Status.SUPERSEDED,
+        )
 
     def test_agent_rejection_requires_explanation_and_keeps_property_hidden(self):
         created = self.submit()

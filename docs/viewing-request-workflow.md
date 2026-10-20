@@ -8,7 +8,7 @@
 4. The customer can accept or decline a agent proposal, or cancel an active request. Accepting a proposal copies its date/time into the confirmed schedule. A declined proposal remains open for further scheduling negotiation.
 5. Every status and schedule change is retained in `ViewingRequestEvent`. Closed requests remain visible in the customer and agent histories.
 
-Only one active request per customer/property pair is allowed. `pending`, `proposed`, `confirmed`, and `declined` are active; `rejected`, `cancelled`, and `completed` are terminal and permit a later new request. A PostgreSQL conditional unique constraint enforces this rule under concurrent submissions. Before that constraint is created, migration `viewings.0004_viewingrequestevent_message_and_more` closes any pre-existing duplicate active requests without deleting them and records the migration action in each request's history.
+Only one active request per customer/property pair is allowed. `pending`, `proposed`, `confirmed`, and `declined` are active; `rejected`, `cancelled`, and `completed` are terminal and permit a later new request. A MySQL generated key and unique index enforce this rule under concurrent submissions. Migration `viewings.0004_viewingrequestevent_message_and_more` closes any pre-existing duplicate active requests without deleting them and records the migration action in each request's history; review this data-changing operation before applying migrations to any database containing existing requests.
 
 Appointment date/time values are local wall-clock values in `Africa/Addis_Ababa`. Request and proposal dates cannot be in the past, and a proposal cannot be accepted after its time has passed.
 
@@ -40,7 +40,7 @@ Submission and each subsequent customer/agent action create idempotent in-app no
 
 ## Migration and deployment
 
-Migration `viewings.0004_viewingrequestevent_message_and_more` adds cancellation/completion states, customer-visible event messages, and the race-safe active-request constraint. Apply it through the normal deployment migration process:
+Migration `viewings.0004_viewingrequestevent_message_and_more` adds cancellation/completion states and customer-visible event messages. The MySQL-enforced active-request key is added by `viewings.0006_mysql_active_request_key`. Review migration plans and back up the database before applying migrations:
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py migrate

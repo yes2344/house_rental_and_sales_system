@@ -41,11 +41,6 @@ const AccountPage = lazy(() =>
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then(({ DashboardPage }) => ({ default: DashboardPage })),
 );
-const DjangoAdminLoginPage = lazy(() =>
-  import('./pages/DjangoAdminLoginPage').then(({ DjangoAdminLoginPage }) => ({
-    default: DjangoAdminLoginPage,
-  })),
-);
 const FavoritesPage = lazy(() =>
   import('./pages/FavoritesPage').then(({ FavoritesPage }) => ({ default: FavoritesPage })),
 );
@@ -160,7 +155,6 @@ export default function App() {
               <Route path="verify-email" element={<VerifyEmailPage text={text} />} />
               <Route path="forgot-password" element={<ForgotPasswordPage text={text} />} />
               <Route path="reset-password" element={<ResetPasswordPage text={text} />} />
-              <Route path="admin/login" element={<DjangoAdminLoginPage />} />
               <Route path="accept-invitation" element={<InvitationAcceptPage text={text} />} />
               <Route path="register" element={<RegisterPage text={text} />} />
               <Route path="settings" element={<SettingsPage text={text} />} />

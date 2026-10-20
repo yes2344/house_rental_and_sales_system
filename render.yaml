@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
-    startCommand: python manage.py migrate --noinput && python manage.py ensure_demo_admin && gunicorn house.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --access-logfile - --error-logfile -
+    startCommand: gunicorn house.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --access-logfile - --error-logfile -
     envVars:
       - key: DJANGO_DEBUG
         value: "False"
@@ -28,13 +28,15 @@ services:
         sync: false
       - key: DEFAULT_FROM_EMAIL
         sync: false
-      - key: DATABASE_URL
+      - key: MYSQL_DATABASE
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
         sync: false
       - key: CLOUDINARY_URL
-        sync: false
-      - key: DJANGO_SUPERUSER_USERNAME
-        sync: false
-      - key: DJANGO_SUPERUSER_EMAIL
-        sync: false
-      - key: DJANGO_SUPERUSER_PASSWORD
         sync: false

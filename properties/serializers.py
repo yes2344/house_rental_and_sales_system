@@ -233,7 +233,7 @@ class LocationSerializer(serializers.ModelSerializer):
         if candidate_parent is not None and 'parent' not in attrs:
             attrs['parent'] = candidate_parent
         try:
-            location.full_clean()
+            location.full_clean(exclude=['root_slug_key'])
         except DjangoValidationError as error:
             raise serializers.ValidationError(error.message_dict if hasattr(error, 'message_dict') else error.messages) from error
         return attrs

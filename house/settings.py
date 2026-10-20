@@ -146,53 +146,56 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'house.wsgi.application'
 
-database_url = env('DATABASE_URL', default='')
-if DEBUG:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': env('POSTGRES_DB', default='house_db'),
-            'USER': env('POSTGRES_USER', default='postgres'),
-            'PASSWORD': env('POSTGRES_PASSWORD', default=''),
-            'HOST': env('POSTGRES_HOST', default='localhost'),
-            'PORT': env('POSTGRES_PORT', default='5432'),
-            'CONN_MAX_AGE': 60,
-            'CONN_HEALTH_CHECKS': True,
-            'TEST': {
-                'NAME': env('POSTGRES_TEST_DB', default=None),
-            },
-        }
-    }
-elif database_url:
-    database_config = env.db_url_config(database_url)
-    if database_config['ENGINE'] != 'django.db.backends.postgresql':
-        raise ImproperlyConfigured('DATABASE_URL must use PostgreSQL.')
-    DATABASES = {
-        'default': {
-            **database_config,
-            'CONN_MAX_AGE': 60,
-            'CONN_HEALTH_CHECKS': True,
-            'TEST': {
-                'NAME': env('POSTGRES_TEST_DB', default=None),
-            },
-        }
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': env('POSTGRES_DB'),
-            'USER': env('POSTGRES_USER'),
-            'PASSWORD': env('POSTGRES_PASSWORD'),
-            'HOST': env('POSTGRES_HOST', default='localhost'),
-            'PORT': env('POSTGRES_PORT', default='5432'),
-            'CONN_MAX_AGE': 60,
-            'CONN_HEALTH_CHECKS': True,
-            'TEST': {
-                'NAME': env('POSTGRES_TEST_DB', default=None),
-            },
-        }
-    }
+mysql_environment = {
+    'MYSQL_DATABASE': env('MYSQL_DATABASE', default=''),
+    'MYSQL_USER': env('MYSQL_USER', default=''),
+    'MYSQL_PASSWORD': env('MYSQL_PASSWORD', default=''),
+    'MYSQL_HOST': env('MYSQL_HOST', default=''),
+    'MYSQL_PORT': env('MYSQL_PORT', default=''),
+}
+missing_mysql_settings = [
+    name for name, value in mysql_environment.items() if not value
+]
+if missing_mysql_settings:
+    raise ImproperlyConfigured(
+        'Set the required MySQL environment variables: '
+        + ', '.join(missing_mysql_settings)
+    )
+
+try:
+    mysql_port = int(mysql_environment['MYSQL_PORT'])
+except ValueError as exc:
+    raise ImproperlyConfigured('MYSQL_PORT must be an integer between 1 and 65535.') from exc
+if not 1 <= mysql_port <= 65535:
+    raise ImproperlyConfigured('MYSQL_PORT must be an integer between 1 and 65535.')
+
+mysql_config = {
+    'NAME': mysql_environment['MYSQL_DATABASE'],
+    'USER': mysql_environment['MYSQL_USER'],
+    'PASSWORD': mysql_environment['MYSQL_PASSWORD'],
+    'HOST': mysql_environment['MYSQL_HOST'],
+}
+mysql_options = {
+    'charset': 'utf8mb4',
+    'isolation_level': 'read committed',
+}
+mysql_ssl_ca = env('MYSQL_SSL_CA', default='')
+if mysql_ssl_ca:
+    mysql_options['ssl'] = {'ca': mysql_ssl_ca}
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        **mysql_config,
+        'PORT': str(mysql_port),
+        'CONN_MAX_AGE': 60,
+        'CONN_HEALTH_CHECKS': True,
+        'OPTIONS': mysql_options,
+        'TEST': {
+            'NAME': env('MYSQL_TEST_DATABASE', default=None),
+        },
+    },
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},

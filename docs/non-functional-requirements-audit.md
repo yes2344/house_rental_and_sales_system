@@ -22,6 +22,10 @@ setting or feature.
 
 ## Baseline assessment
 
+> Historical audit: this document records the codebase and database setup at
+> the time of that audit. Its PostgreSQL and SQLite test references are not
+> current deployment instructions; Django is now configured for MySQL only.
+
 | Category | Weight | Rating / 5 | Weighted points | Evidence and main gap |
 |---|---:|---:|---:|---|
 | Security and privacy | 20% | 3.5 | 14.0 | Session authentication, role/object permissions, password validators, throttling, CSRF middleware subclass, upload validation, and opaque guest-request receipt tokens are present. The production check reports a CSRF-middleware warning because the configured middleware is a subclass rather than Django's exact built-in path; CSRF-specific tests and production proxy/TLS configuration still need explicit verification. No independent vulnerability scan was run. |

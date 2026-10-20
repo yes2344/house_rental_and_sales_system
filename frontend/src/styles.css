@@ -1786,14 +1786,6 @@ img { display: block; max-width: 100%; }
     font-size: clamp(1.828125rem, 5.6953125vw, 3.09375rem);
     line-height: 1;
   }
-  .app-shell:has(.hero-section) .floating-contact-link {
-    width: 65.25px;
-    height: 65.25px;
-  }
-  .app-shell:has(.hero-section) .floating-contact-link svg {
-    width: 33.75px;
-    height: 33.75px;
-  }
   .app-shell:has(.hero-section) .home-search-section .listing-type-toggle {
     width: 100%;
     overflow: hidden;
@@ -1823,10 +1815,6 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 740px) {
   .app-shell:has(.hero-section) .floating-contact-links { gap: 8px; }
-  .app-shell:has(.hero-section) .floating-contact-link {
-    width: 50.625px;
-    height: 50.625px;
-  }
   .app-shell:has(.hero-section) .hero-copy h1 {
     font-size: 71.28px;
     line-height: .8;
@@ -1837,48 +1825,35 @@ img { display: block; max-width: 100%; }
   }
 }
 
-.app-shell:has(.hero-section) .hero-copy h1 {
-  font-size: clamp(2.08rem, 6.6vw, 4rem);
-}
-.app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
-  font-size: clamp(1.04rem, 3.24vw, 1.76rem);
-}
+.app-shell:has(.hero-section) .floating-contact-link { width: 43.5px; height: 43.5px; }
+.app-shell:has(.hero-section) .floating-contact-link svg { width: 18px; height: 18px; }
 .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button {
-  font-size: clamp(33.6px, 3.12vw, 40.8px);
+  font-size: clamp(25.2px, 2.34vw, 30.6px);
 }
 .app-shell:has(.hero-section) .home-search-section .search-field > label,
 .app-shell:has(.hero-section) .home-search-section .search-field > span {
-  font-size: 28.8px;
+  font-size: 21.6px;
 }
+.app-shell:has(.hero-section) .home-search-section .search-submit { font-size: 31.5px; }
+.login-page .auth-card h1 { font-size: 33.75px; }
 
 @media (max-width: 980px) {
-  .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button {
-    font-size: 16.8px;
-  }
+  .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button { font-size: 12.6px; }
   .app-shell:has(.hero-section) .home-search-section .search-field > label,
-  .app-shell:has(.hero-section) .home-search-section .search-field > span {
-    font-size: 14.4px;
-  }
+  .app-shell:has(.hero-section) .home-search-section .search-field > span { font-size: 10.8px; }
+  .app-shell:has(.hero-section) .home-search-section .search-submit { font-size: 15.75px; }
 }
 
 @media (max-width: 740px) {
-  .app-shell:has(.hero-section) .hero-copy h1 {
-    font-size: 57.024px;
-  }
-  .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
-    font-size: 28.08px;
-  }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 33.75px; height: 33.75px; }
   .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button {
-    font-size: clamp(12.8px, 4vw, 33.6px);
+    font-size: clamp(9.6px, 3vw, 25.2px);
   }
   .app-shell:has(.hero-section) .home-search-section .search-field > label,
-  .app-shell:has(.hero-section) .home-search-section .search-field > span {
-    font-size: 28.8px;
-  }
+  .app-shell:has(.hero-section) .home-search-section .search-field > span { font-size: 21.6px; }
+  .app-shell:has(.hero-section) .home-search-section .search-submit { font-size: 31.5px; }
 }
 
 @media (max-width: 360px) {
-  .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button {
-    font-size: 12.8px;
-  }
+  .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button { font-size: 9.6px; }
 }

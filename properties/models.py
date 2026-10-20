@@ -9,7 +9,7 @@ from django.core.validators import (
     MinValueValidator,
 )
 from django.db import models, transaction
-from django.db.models import Q
+from django.db.models import Case, F, Q, Value, When
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.utils.text import slugify
@@ -41,6 +41,14 @@ class Location(models.Model):
         null=True,
         blank=True,
     )
+    root_slug_key = models.GeneratedField(
+        expression=Case(
+            When(parent__isnull=True, then=F('slug')),
+            default=Value(None),
+        ),
+        output_field=models.CharField(max_length=140),
+        db_persist=True,
+    )
     is_active = models.BooleanField(default=True)
     display_order = models.PositiveIntegerField(default=0)
     latitude = models.DecimalField(
@@ -65,11 +73,7 @@ class Location(models.Model):
                 fields=['parent', 'slug'],
                 name='location_unique_sibling_slug',
             ),
-            models.UniqueConstraint(
-                fields=['slug'],
-                condition=models.Q(parent__isnull=True),
-                name='location_unique_root_slug',
-            ),
+            models.UniqueConstraint(fields=['root_slug_key'], name='location_root_slug_unique'),
             models.CheckConstraint(
                 condition=(
                     models.Q(latitude__isnull=True, longitude__isnull=True)
@@ -107,11 +111,19 @@ class Location(models.Model):
             raise ValidationError({'location_type': 'Choose a supported location type.'})
         if parent_type not in allowed_types:
             raise ValidationError({'parent': 'Choose a parent location compatible with this location type.'})
+        if (
+            self.parent_id is None
+            and self.slug
+            and type(self).objects.filter(parent__isnull=True, slug=self.slug)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError({'slug': 'A root location with this slug already exists.'})
 
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
-        self.full_clean()
+        self.full_clean(exclude=['root_slug_key'])
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -407,6 +419,14 @@ class PropertyImage(models.Model):
     original_content_type = models.CharField(max_length=100, blank=True, editable=False)
     caption = models.CharField(max_length=200, blank=True)
     is_primary = models.BooleanField(default=False)
+    primary_property_key = models.GeneratedField(
+        expression=Case(
+            When(is_primary=True, then=F('property_id')),
+            default=Value(None),
+        ),
+        output_field=models.BigIntegerField(),
+        db_persist=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -414,9 +434,8 @@ class PropertyImage(models.Model):
         ordering = ['pk']
         constraints = [
             models.UniqueConstraint(
-                fields=['property'],
-                condition=Q(is_primary=True),
-                name='property_image_one_primary_per_property',
+                fields=['primary_property_key'],
+                name='property_image_primary_slot_unique',
             ),
         ]
 

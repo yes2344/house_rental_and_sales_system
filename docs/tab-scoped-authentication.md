@@ -2,7 +2,7 @@
 
 The React application uses an independent API session for each browser tab. A
 successful login issues a random bearer token, stores only its SHA-256 digest in
-PostgreSQL, and returns the plaintext token once to the browser. The SPA keeps
+the MySQL database, and returns the plaintext token once to the browser. The SPA keeps
 that token in `sessionStorage` and sends it as an `Authorization: Bearer` header.
 The token expires after 14 days; signing out revokes only the token for the
 current tab.

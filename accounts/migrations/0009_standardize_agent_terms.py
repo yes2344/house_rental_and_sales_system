@@ -22,6 +22,16 @@ def rename_agent_role_data(apps, schema_editor):
             Profile.objects.using(database).filter(pk=profile.pk).update(management_permissions=updated)
 
 
+def flush_deferred_foreign_key_checks(apps, schema_editor):
+    if schema_editor.connection.vendor == 'postgresql':
+        schema_editor.execute('SET CONSTRAINTS ALL IMMEDIATE')
+
+
+def restore_deferred_foreign_key_checks(apps, schema_editor):
+    if schema_editor.connection.vendor == 'postgresql':
+        schema_editor.execute('SET CONSTRAINTS ALL DEFERRED')
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -40,10 +50,10 @@ class Migration(migrations.Migration):
             name='account_profile_valid_role',
         ),
         migrations.RunPython(rename_agent_role_data, migrations.RunPython.noop),
-        # Flush deferred PostgreSQL FK checks before the following profile DDL.
-        migrations.RunSQL(
-            'SET CONSTRAINTS ALL IMMEDIATE',
-            reverse_sql='SET CONSTRAINTS ALL DEFERRED',
+        # Preserve historical PostgreSQL behavior; MySQL has no deferred FK checks.
+        migrations.RunPython(
+            flush_deferred_foreign_key_checks,
+            restore_deferred_foreign_key_checks,
         ),
         migrations.RenameField(
             model_name='profile',

@@ -47,7 +47,7 @@ export function LoginPage({ text }: LoginPageProps) {
   }
 
   return (
-    <main id="main-content" className="auth-page">
+    <main id="main-content" className="auth-page login-page">
       <section className="auth-card">
         <Link className="auth-back-home" to="/" aria-label={text('backHome')}>
           <ArrowLeft size={19} aria-hidden="true" />
