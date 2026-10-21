@@ -45,9 +45,9 @@ roots unless HahuCloud explicitly requires a different layout.
 - Django 6.1.1 requires Python 3.12 or newer, so Python 3.13.16 meets Django's
   minimum. Compatibility of the complete pinned `requirements.txt` set with
   the HahuCloud image has not been verified. Test it in a separate staging
-  application/database first. `django-cloudinary-storage==0.3.0` has old
-  compatibility metadata and deserves particular testing if Cloudinary is
-  used.
+  application/database first. Property media uses local filesystem storage;
+  provision and verify persistent public and private directories before
+  deployment.
 - This guide does not authorize copying data, migrating a production database,
   creating an administrator, changing DNS, or deploying. Do not assume any
   existing database or uploaded media has been deleted.
@@ -263,20 +263,8 @@ use `locmem` for correctness-sensitive shared state across multiple workers.
 
 ## 7. Configure public and private image storage
 
-Choose and test one media strategy before production:
-
-### Cloudinary
-
-Set `CLOUDINARY_URL` privately in cPanel. With it set, Django uses Cloudinary
-for public media and the project's custom private-image storage for private
-originals. Test normal property-image URLs and authorization-protected
-original-image retrieval. Verify outbound HTTPS and credentials without
-printing them.
-
-### Persistent HahuCloud filesystem
-
-If not using Cloudinary, configure persistent, backed-up directories outside
-any deploy-overwritten application release:
+Configure persistent, backed-up directories outside any deploy-overwritten
+application release:
 
 ```text
 DJANGO_SERVE_MEDIA=True
@@ -470,8 +458,8 @@ Before production cutover, test:
 6. Administrator account/property functions and agent onboarding, assigned
    work, and permission restrictions.
 7. Private original-image access is authorized and inaccessible publicly.
-8. Uploaded media survives an app restart if local storage is selected; test
-   Cloudinary operations if Cloudinary is selected.
+8. Public uploads and private originals survive an app restart on the
+   persistent local media volumes.
 9. Error logs are visible in cPanel and do not disclose secrets.
 10. A database and media backup can actually be restored to a non-production
     target.
@@ -497,7 +485,8 @@ Before production cutover, test:
 - **React refresh returns 404:** confirm `.htaccess` is honored or configure
   HahuCloud's equivalent SPA rewrite.
 - **Images disappear after deploy/restart:** confirm media paths are persistent
-  and not inside a replaced code release, or validate Cloudinary configuration.
+  and not inside a replaced code release; verify both public and private
+  directories are mounted and backed up.
 - **Email fails:** verify the backend selection, sender verification, provider
   credentials in cPanel, and outbound provider connectivity. Do not print
   environment values when diagnosing.
@@ -515,8 +504,8 @@ Core Django: `DJANGO_DEBUG`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
 MySQL: `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST`,
 `MYSQL_PORT`, optionally `MYSQL_SSL_CA` and `MYSQL_TEST_DATABASE`.
 
-Media and cache: `CLOUDINARY_URL`, `DJANGO_SERVE_MEDIA`,
-`DJANGO_MEDIA_ROOT`, `DJANGO_PRIVATE_MEDIA_ROOT`, `DJANGO_CACHE_BACKEND`,
+Media and cache: `DJANGO_SERVE_MEDIA`, `DJANGO_MEDIA_ROOT`,
+`DJANGO_PRIVATE_MEDIA_ROOT`, `DJANGO_CACHE_BACKEND`,
 `DJANGO_CACHE_LOCATION`.
 
 Email: `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`,
@@ -527,6 +516,6 @@ Email: `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`,
 
 Proceed only after HahuCloud confirms the WSGI manager and MySQL
 connection contract, pinned dependencies pass in staging, HTTPS/CORS/CSRF and
-SPA routing work, persistent/Cloudinary media is verified, and backups have
+SPA routing work, persistent local media is verified, and backups have
 been restored successfully. Keep any existing services, databases, and media
 untouched until a separate data-transfer and rollback plan is approved.

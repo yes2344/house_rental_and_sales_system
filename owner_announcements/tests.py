@@ -370,7 +370,6 @@ class OwnerSubmissionWorkflowTests(APITestCase):
         with TemporaryDirectory() as media_root, override_settings(
             MEDIA_ROOT=media_root,
             PRIVATE_MEDIA_ROOT=str(Path(media_root) / 'private'),
-            CLOUDINARY_URL='',
         ):
             self.client.force_authenticate(self.submitter)
             uploaded = self.client.post(

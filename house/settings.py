@@ -109,9 +109,6 @@ INSTALLED_APPS = [
     'owner_announcements.apps.OwnerAnnouncementsConfig',
 ]
 
-if env('CLOUDINARY_URL', default=''):
-    INSTALLED_APPS.extend(['cloudinary_storage', 'cloudinary'])
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'accounts.middleware.ApiCorsMiddleware',
@@ -214,18 +211,13 @@ CSRF_COOKIE_SECURE = not DEBUG
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-CLOUDINARY_URL = env('CLOUDINARY_URL', default='')
-if not DEBUG and not (CLOUDINARY_URL or SERVE_MEDIA_FILES):
+if not DEBUG and not SERVE_MEDIA_FILES:
     raise ImproperlyConfigured(
-        'Configure CLOUDINARY_URL or explicitly enable DJANGO_SERVE_MEDIA for persistent media storage.',
+        'Explicitly enable DJANGO_SERVE_MEDIA for the configured persistent local media storage.',
     )
 STORAGES = {
     'default': {
-        'BACKEND': (
-            'cloudinary_storage.storage.MediaCloudinaryStorage'
-            if CLOUDINARY_URL
-            else 'django.core.files.storage.FileSystemStorage'
-        ),
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',

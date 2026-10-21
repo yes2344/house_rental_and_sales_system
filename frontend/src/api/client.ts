@@ -1,10 +1,17 @@
 import axios from 'axios';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const nodeBaseURL = import.meta.env.VITE_NODE_API_BASE_URL || '/node-api/api/v1';
 
 export const apiClient = axios.create({
   baseURL,
   withCredentials: true,
+  headers: { Accept: 'application/json' },
+});
+
+export const nodePublicApiClient = axios.create({
+  baseURL: nodeBaseURL,
+  withCredentials: false,
   headers: { Accept: 'application/json' },
 });
 
@@ -104,7 +111,7 @@ export function getErrorMessage(error: unknown): string {
     const detail = error.response?.data?.detail;
     if (typeof detail === 'string') return detail;
     if (error.response) return `The server returned an error (${error.response.status}).`;
-    return 'The server could not be reached. Check that the Django API is running.';
+    return 'The server could not be reached. Check that the API service is running.';
   }
   return 'Something went wrong. Please try again.';
 }

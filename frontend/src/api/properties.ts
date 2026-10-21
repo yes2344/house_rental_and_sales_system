@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, nodePublicApiClient } from './client';
 
 export interface MarketplaceLocation {
   id: number;
@@ -48,7 +48,7 @@ export function getUniquePropertyTypeOptions(options: PropertyTypeOption[]): Pro
 }
 
 export async function getPropertyTypeOptions(signal?: AbortSignal): Promise<PropertyTypeOption[]> {
-  const response = await apiClient.get<PropertyTypeOption[]>('/property-types/', { signal });
+  const response = await nodePublicApiClient.get<PropertyTypeOption[]>('/property-types/', { signal });
   return response.data;
 }
 
@@ -147,7 +147,7 @@ export async function getProperties(
   filters: PropertyFilters,
   signal?: AbortSignal,
 ): Promise<PaginatedResponse<PropertySummary>> {
-  const response = await apiClient.get<PaginatedResponse<PropertySummary>>('/properties/', {
+  const response = await nodePublicApiClient.get<PaginatedResponse<PropertySummary>>('/properties/', {
     params: filters,
     signal,
   });
@@ -155,7 +155,7 @@ export async function getProperties(
 }
 
 export async function getProperty(slug: string, signal?: AbortSignal): Promise<PropertyDetail> {
-  const response = await apiClient.get<PropertyDetail>(
+  const response = await nodePublicApiClient.get<PropertyDetail>(
     `/properties/${encodeURIComponent(slug)}/`,
     { signal },
   );

@@ -1955,7 +1955,6 @@ class PropertyImageApiTests(APITestCase):
         settings_override = override_settings(
             MEDIA_ROOT=self.media_directory.name,
             PRIVATE_MEDIA_ROOT=str(Path(self.media_directory.name) / 'private'),
-            CLOUDINARY_URL='',
         )
         settings_override.enable()
         self.addCleanup(settings_override.disable)
