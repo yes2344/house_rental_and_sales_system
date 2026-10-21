@@ -1,12 +1,20 @@
 # Infinity House migration preparation
 
+> **Historical reference:** this report records the PostgreSQL schema and
+> Django models inspected before the Django source was removed. The tables
+> described here may still exist in an existing database, but this repository
+> no longer contains Django, its migrations, or an automatic schema bootstrap.
+> The Node backend requires a separately prepared compatible PostgreSQL
+> database; a new empty database is not ready to use.
+
 ## Preparation status
 
 The repository evidence and an approved, read-only inspection of a local
 PostgreSQL candidate are recorded here. No source-database writes or production
 cutover were performed.
 
-The checked-in Django configuration currently selects MySQL, not PostgreSQL:
+At the time of the original inspection, the Django configuration selected
+MySQL rather than PostgreSQL:
 
 - `house/settings.py` constructs `DATABASES` using required `MYSQL_*` values
   and the `django.db.backends.mysql` engine.
@@ -37,15 +45,14 @@ The checked-in Django configuration currently selects MySQL, not PostgreSQL:
 - The source server was PostgreSQL 18.6, so compatibility with PostgreSQL 13
   and restoration on PostgreSQL 13 remain unverified.
 
-## Repository and branch
+## Repository and branch at time of inspection
 
-The React SPA is in `frontend/`; Node backend preparation is in `backend/`.
-The backend is on branch `migration/node-postgres-preparation`, created from
-the original `main` HEAD `f454271`. `main` was not moved. Pre-existing
-uncommitted Node scaffold changes were carried onto the migration branch and
-were not discarded.
+The React SPA was in `frontend/`, and Node backend preparation was in
+`backend/`. This report was initially written on branch
+`migration/node-postgres-preparation`, based on the original `main` commit
+`f454271`. The current deployment source is Node/PostgreSQL only.
 
-## Current Django project apps
+## Django project apps present at time of inspection
 
 | Django app label | Source | Models |
 |---|---|---|
@@ -210,7 +217,8 @@ locally, and run `npm run inspect:database` from `backend/`. Do not start the
 write-capable Node application with a read-only role. Configure that separately
 with a least-privilege role only for an approved disposable test database or
 after explicit source approval. The local `.env` is ignored by Git. Do not
-copy or reuse the root Django `.env`.
+copy or reuse the ignored root `.env`; it may contain obsolete settings or
+credentials and is not the Node environment template.
 
 Backup:
 
@@ -227,15 +235,15 @@ Backup:
   separate inventory, backup, checksum, and restore test before cutover.
 
 This verified backup is a preparation artifact, not proof that the candidate
-database is production. Before migration writes or cutover, confirm the
+database is production. Before migration writes or deployment, confirm the
 authoritative source, arrange a current backup/retention policy, use a
-least-privilege role, and restore-test on the intended PostgreSQL 13 target.
-Do not point restore commands at production.
+least-privilege role, and restore-test on the intended PostgreSQL version. Do
+not point restore commands at production.
 
-If the actual source is MySQL, pause the PostgreSQL backup plan: use an
-appropriate MySQL backup and restore validation first, then obtain explicit
-approval for a separate MySQL-to-PostgreSQL conversion plan. Do not silently
-connect to a different database.
+The current Node service supports PostgreSQL only. If authoritative data is
+still held in MySQL, it must be backed up, converted, and verified through a
+separate, explicitly approved data-migration plan. Do not silently connect to
+a different database.
 
 ## Branch and rollback
 

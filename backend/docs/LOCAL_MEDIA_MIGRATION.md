@@ -39,8 +39,7 @@ Implemented image API paths:
 - `GET /api/v1/management/images/:imageId/original/`
 
 The PUT endpoint supports a managed image replacement while preserving its
-record ID, caption, and primary status. It is additive to Django's API, which
-currently supports metadata changes but not file replacement.
+record ID, caption, and primary status.
 
 The additive SQL migration
 [`../db/migrations/001_media_file_metadata.sql`](../db/migrations/001_media_file_metadata.sql)
@@ -80,9 +79,9 @@ homepage-note image records in the audited candidate schema. The difference
 between the files present and the references audited against this database is
 not treated as proof that files are disposable; no existing file was deleted.
 The candidate database has not been confirmed as the authoritative database
-for the still-active Django deployment. Django's checked-in settings currently
-use MySQL, so its active database may have a different set of image references.
-No attempt was made to fetch remote assets.
+for a previous deployment. The audit does not establish that this candidate
+database is authoritative for HahuCloud or any current deployment. No attempt
+was made to fetch remote assets.
 
 ## Backups and recovery
 
@@ -138,23 +137,16 @@ node scripts/clean-orphaned-images.js --delete
 The script refuses unrecognized/non-local database paths rather than
 silently treating them as missing files. Run it only with the intended
 database configured. It must not be used to remove source images while an
-alternate Django deployment may still refer to them.
+alternate deployment may still refer to them.
 
 ## Outstanding risks
 
-- The Django Cloudinary adapter and package dependency have been removed.
-  The still-active Django database settings nevertheless target MySQL, so the
-  Django application has not been switched to the PostgreSQL candidate and is
-  not ready for production cutover. Treat the candidate PostgreSQL media report
-  as authoritative; do not use the MySQL-configured Django runtime against
-  different data until its database configuration is migrated and tested.
+- The Django Cloudinary adapter and Python application have been removed.
 - Production media-volume provisioning, permissions, backup, and restore have
-  not been tested. The Node backend has not been pointed at a production
-  database, and no database writes were made during this work.
-- `render.yaml` still declares a free-tier web service without a persistent
-  disk. Do not enable uploads on that deployment until a persistent local
-  volume is provisioned; changing to a paid persistent disk requires a separate
-  deployment decision.
+  not been tested. The Node backend has not been verified against a HahuCloud
+  database, and no production database writes were made during this work.
+- `render.yaml` declares a free-tier Node web service without a persistent
+  disk. Do not enable uploads there until persistent storage is provisioned.
 - The automated upload tests use an isolated filesystem and mocked PostgreSQL
   responses. A disposable PostgreSQL restore test remains necessary before
   database-backed acceptance or cutover.

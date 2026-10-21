@@ -34,11 +34,10 @@
 
 No provider account, server shell, mount configuration, quota report, or
 deployment environment describing the advertised 128 GB was available to
-inspect. The checked-in [`render.yaml`](../../render.yaml) currently defines a
-**Render free web service using the Python/Django runtime and no persistent
-disk**. It does not show a 128 GB allocation and must not be treated as evidence
-that uploads will persist. Repository history also has no verified hosting
-mount path or per-account quota. Therefore:
+inspect. The checked-in [`render.yaml`](../../render.yaml) defines a **Render
+free Node web service and does not provision persistent media storage**. It
+must not be treated as evidence that uploads will persist. HahuCloud's storage
+capabilities and mount path are also unverified. Therefore:
 
 - The actual persistent media path is **not yet known or configured**.
 - Write permission, free/allocated quota, inode/file/bandwidth limits, and

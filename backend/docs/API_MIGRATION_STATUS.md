@@ -1,14 +1,14 @@
-# Django API replacement status
+# Node API coverage after Django removal
 
-The source defines 73 URL patterns in `house/api_urls.py`. The path patterns
-below are exact; methods listed for pending items are an initial mapping and
-still need verification against their Django view classes. The Node API is being added incrementally. The frontend currently uses Node
-only for public property type options, property list/search, property details,
-and their local public images; the other API consumers remain on Django.
+This inventory preserves the 73-route API surface from the previous Django
+application as a checklist; Django source and runtime configuration have been
+removed. The route list is historical, not an active fallback. Any row marked
+Pending is unavailable until implemented in Node. Methods for pending rows
+were captured from the prior API and still require behavior verification.
 "Implemented" means a Node handler and automated tests exist, not that
-production parity/cutover has been approved.
+production parity has been approved.
 
-| Django API path | Node path | Status |
+| Previous API path | Node path | Status |
 |---|---|---|
 | `homepage-notes/` | `GET /api/v1/homepage-notes/` | Pending |
 | `public-pages/<slug:page>/` | `GET /api/v1/public-pages/:page/` | Pending |
@@ -86,13 +86,15 @@ production parity/cutover has been approved.
 
 ## Current implementation scope and limitations
 
+- The frontend now sends all requests to Node. It no longer falls back to a
+  Django service; pending routes return 404.
 - Authentication/account handlers cover CSRF issuance, public registration,
   login, logout, current-account read/update, preferences, reset, and activity.
   Email verification, password reset, invitations, and agent onboarding remain
   pending.
 - Existing `pbkdf2_sha256` hashes are verified without changing them. New
-  registrations use the Django PBKDF2-SHA256 encoding and 1,000,000 rounds.
-  Existing-hash verification and encoding are unit tested. Django's common
+  registrations use the compatible PBKDF2-SHA256 encoding and 1,000,000
+  rounds. Existing-hash verification and encoding are unit tested. The common
   password list and all attribute-similarity edge cases have not yet been
   ported.
 - Public property SQL enforces the published/status and owner-agreement
@@ -104,9 +106,8 @@ production parity/cutover has been approved.
   persistence testing remains pending.
 - Rate-limit counters are process-local. A multi-instance deployment needs a
   shared store or an approved database-backed implementation before cutover.
-- The frontend's public property list and detail flows have been switched from
-  Django to Node. See [`../../docs/frontend-node-integration.md`](../../docs/frontend-node-integration.md)
-  for route-by-route status and browser findings.
+- See [`../../docs/frontend-node-integration.md`](../../docs/frontend-node-integration.md)
+  for the frontend's single Node API target and remaining route gaps.
 - Live SQL smoke checks were read-only against the local PostgreSQL 18.6
   candidate; its production authority is still unconfirmed. PostgreSQL 13,
   media availability, and all mutation flows remain unverified.

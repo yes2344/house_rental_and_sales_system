@@ -1,5 +1,11 @@
 # Viewing requests and appointment coordination
 
+> **Not yet available in the Node API.** This document records the previous
+> workflow and API contract for future implementation. The Django application
+> and its migrations have been removed, so the documented routes currently
+> return 404. See
+> [`../backend/docs/API_MIGRATION_STATUS.md`](../backend/docs/API_MIGRATION_STATUS.md).
+
 ## Lifecycle and duplicate policy
 
 1. A visitor signs in or creates an account before submitting a viewing request. The React client preserves the selected property through sign-in and registration.
@@ -8,7 +14,9 @@
 4. The customer can accept or decline a agent proposal, or cancel an active request. Accepting a proposal copies its date/time into the confirmed schedule. A declined proposal remains open for further scheduling negotiation.
 5. Every status and schedule change is retained in `ViewingRequestEvent`. Closed requests remain visible in the customer and agent histories.
 
-Only one active request per customer/property pair is allowed. `pending`, `proposed`, `confirmed`, and `declined` are active; `rejected`, `cancelled`, and `completed` are terminal and permit a later new request. A MySQL generated key and unique index enforce this rule under concurrent submissions. Migration `viewings.0004_viewingrequestevent_message_and_more` closes any pre-existing duplicate active requests without deleting them and records the migration action in each request's history; review this data-changing operation before applying migrations to any database containing existing requests.
+Only one active request per customer/property pair is allowed. `pending`, `proposed`, `confirmed`, and `declined` are active; `rejected`, `cancelled`, and `completed` are terminal and permit a later new request. A generated active-request key and unique index previously enforced this rule
+under concurrent submissions. Do not assume those constraints or the previous
+application migration history are present in a new PostgreSQL database.
 
 Appointment date/time values are local wall-clock values in `Africa/Addis_Ababa`. Request and proposal dates cannot be in the past, and a proposal cannot be accepted after its time has passed.
 
@@ -26,7 +34,9 @@ The protected React page is `/viewing-requests`; a sign-in redirect retains the 
 
 ## Legacy guest receipts
 
-New guest requests are not accepted. The legacy private-receipt endpoints remain available only for old records with a stored receipt-token digest. They do not expose new authenticated requests, and the raw token is never stored in the database or placed in a URL. The legacy Django request form also requires a Django-authenticated session. No email or SMS integration is configured.
+New guest requests are not accepted by the previous application. The legacy
+private-receipt endpoints are not currently available in Node. No email or SMS
+integration is configured.
 
 ## Agent access, history, and notifications
 
@@ -40,11 +50,6 @@ Submission and each subsequent customer/agent action create idempotent in-app no
 
 ## Migration and deployment
 
-Migration `viewings.0004_viewingrequestevent_message_and_more` adds cancellation/completion states and customer-visible event messages. The MySQL-enforced active-request key is added by `viewings.0006_mysql_active_request_key`. Review migration plans and back up the database before applying migrations:
-
-```powershell
-.\.venv\Scripts\python.exe manage.py migrate
-.\.venv\Scripts\python.exe manage.py check
-```
-
-Back up the database and review the migration plan before applying migrations to production.
+Implement the workflow in Node and add reviewed PostgreSQL schema changes
+before enabling these features. Do not use the previous Django migration
+commands; they are no longer in the repository.

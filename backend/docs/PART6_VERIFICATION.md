@@ -1,25 +1,24 @@
-# Part 6 system verification
+# System verification and current readiness
 
 ## Result
 
-**Migration verification is incomplete; Django must not be removed.** This
-branch is still a split application. The React frontend uses Node only for
-public property-type options, property search/listing, property details, and
-public property images. Many authentication, location, account, viewing,
-submission, dashboard, management, and branding operations still use Django.
-The complete 73-route replacement inventory is in
+**The deployable source is Node.js/PostgreSQL only, but feature migration and
+production readiness remain incomplete.** Django source and runtime
+configuration have been removed. The React frontend now sends requests to
+Node; routes without a Node handler return 404. The historical 73-route
+coverage inventory is in
 [`API_MIGRATION_STATUS.md`](./API_MIGRATION_STATUS.md); route-by-route UI
-evidence is in [`../../docs/frontend-node-integration.md`](../../docs/frontend-node-integration.md).
+notes are in [`../../docs/frontend-node-integration.md`](../../docs/frontend-node-integration.md).
 
 ## Executed checks
 
 | Area | Evidence | Result |
 |---|---|---|
-| Node automated tests | `npm test` in `backend/`; 36 tests passed, 0 failed. Tests include validators, mocked account/session flows, role serialization limits, public property query behavior, transaction helper commit/rollback, and isolated local-media tests. | **Pass for these unit tests.** They do not exercise all routes or a live database. |
-| React type check and production build | `npm run build` in `frontend/`; TypeScript and Vite completed successfully. | **Pass.** |
+| Node automated tests | Run `npm test` in `backend/` before release. Tests cover validators, mocked account/session flows, role serialization limits, public property query behavior, transaction helper commit/rollback, and isolated local-media tests. | **Unit tests only.** They do not exercise all routes or a live database. |
+| React type check and production build | Run `npm run build` in `frontend/` after frontend changes. | **Build does not establish API feature parity.** |
 | Browser property browsing | Prior local browser smoke check loaded the homepage and one property detail from the Node API. Detail gallery had 7 images; 8 page images loaded and 0 were broken. | **Partial pass.** This was not a full browser suite or cross-role test. |
-| Browser requests still assigned to Django | Vite logs showed requests to `homepage-notes`, `brokerage/contact`, `auth/me`, and `locations` refused at `127.0.0.1:8000`. | **Fail in the observed setup.** The Django service was not running; other routes were not tested. |
-| Django system check | `python manage.py check` with the repository virtual environment failed because Django's configured MySQL endpoint at `127.0.0.1` refused the connection (`MySQLdb.OperationalError`, error 2002). | **Blocked.** No Django test suite was run because it could create a test database against an unverified MySQL target. |
+| Previous browser/API gap evidence | Earlier Vite logs showed requests to `homepage-notes`, `brokerage/contact`, `auth/me`, and `locations` refused at `127.0.0.1:8000`. | **Historical.** Missing handlers must now be implemented in Node; Django is no longer available. |
+| Previous Python/Django system check | The prior check failed because the configured MySQL endpoint refused the connection. | **Not applicable to the current source tree.** There is no Python app or MySQL client requirement. |
 | PostgreSQL backup archive | The documented custom-format backup exists, is 166,644 bytes, has SHA-256 `e4dc4ff9bc0569037c5ac2c6279a72b617ccdaf4357f9d42f7dac681ab58d69d`; PostgreSQL 18 `pg_restore --list` succeeded and indexed 321 archive objects. Prior preparation documented a restore to a separate verification database with 34 tables and 955 aggregate rows matching the source. | **Archive verified; prior restore evidence available.** No restore was repeated during this verification. |
 | PostgreSQL compatibility | The inspected candidate is PostgreSQL 18.6. | **PostgreSQL 13 unverified.** |
 | Current DB/data reconciliation | The PostgreSQL candidate is not confirmed as the authoritative production database. No migration writes were run. | **Not verified.** Existing-user/property/viewing-request counts and relationships were not compared before and after a migration. |
@@ -27,9 +26,8 @@ evidence is in [`../../docs/frontend-node-integration.md`](../../docs/frontend-n
 | API roles and security | Unit tests cover session/CSRF rejection, permission serialization, image object access, invalid images, and validation cases. | **Partial.** No complete admin/agent/owner/customer allowed-and-denied API matrix was run against a live database. |
 | Full-stack restart and write flows | PostgreSQL credentials are not configured in `backend/.env`; the Node and Vite services are stopped. The candidate credentials are intentionally not reused for write-capable integration tests. | **Not run.** Create/update/delete, duplicate submissions, concurrent updates, persistence after restart, and endpoint-level rollback remain unverified. |
 
-The initial `npm` invocation from the repository root failed because the root
-has no `package.json`; rerunning the commands from `backend/` and `frontend/`
-produced the passing results above.
+The root has no `package.json`; run Node and frontend commands from their
+respective package directories.
 
 ## Node endpoint and module inventory
 
@@ -53,14 +51,14 @@ Current route groups include:
 
 The backend is organized under `backend/src/` into routes, controllers,
 services, validators, middleware, configuration, and PostgreSQL access. This
-route list is not feature parity: numerous Django routes have no Node
-replacement, and several mounted operations lack live database integration
-tests.
+route list is not feature parity: numerous routes from the previous API have
+no Node replacement, and several mounted operations lack live database
+integration tests.
 
 ## Page, role, and test coverage
 
 See the detailed route table in
-[`../../docs/frontend-node-integration.md`](../../docs/frontend-node-integration.md).
+[`API_MIGRATION_STATUS.md`](./API_MIGRATION_STATUS.md).
 Only the public home/property browse and one property detail have browser smoke
 evidence. Login, registration, logout, account settings, submission flows,
 viewings, favorites, all management pages, and protected actions have not had
@@ -77,9 +75,9 @@ not proof of backend authorization.
   files, or authority of the candidate as production.
 - No destructive schema changes or source-database writes were made for this
   verification.
-- Follow [`ROLLBACK.md`](./ROLLBACK.md) for recovery. Keep Django, its
-  migrations, the original deployment configuration, and backups until
-  parity, reconciliation, and an approved cutover have passed.
+- Follow [`ROLLBACK.md`](./ROLLBACK.md) for application-release recovery.
+  Django is no longer included. Keep verified database/media backups and do
+  not confuse a code rollback with a data restore.
 
 ## Local commands
 
@@ -113,8 +111,9 @@ settings. The React production validation command is `npm run build`.
 
 ## Cutover blockers
 
-1. Implement and test every frontend-used Django operation in Node. The browser
-   integration map and 73-route inventory enumerate the outstanding areas.
+1. Implement and test every frontend-used API operation that is still pending
+   in Node. The 73-route inventory enumerates the outstanding areas; there is
+   no Django fallback.
 2. Confirm the authoritative source database, establish a least-privilege Node
    role, and run reconciliation against a disposable restored copy.
 3. Validate schema/migration behavior and restore compatibility on PostgreSQL
@@ -134,5 +133,5 @@ settings. The React production validation command is `npm run build`.
    deployment target. The configured deployment must not lose uploads on
    restart.
 
-Until these blockers are cleared and the results documented, Django removal
-and production cutover are unsafe and are not performed.
+Until these blockers are cleared and the results documented, production
+deployment is unsafe.

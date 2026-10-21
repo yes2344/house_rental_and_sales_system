@@ -1,12 +1,13 @@
-# Retired free-demo deployment instructions
+# Free-demo deployment notes
 
-The former demo instructions described a deployment backed by an external
-PostgreSQL service. They are no longer applicable: the Django project now
-requires MySQL and does not support PostgreSQL or SQLite as a fallback.
+The previous demo instructions are retired. The deployable source is now a
+Node.js API with a React frontend and PostgreSQL connection configuration.
+There is no one-click free-demo configuration or complete schema-creation
+migration for an empty PostgreSQL database.
 
-Use the current [HahuCloud deployment guide](../DEPLOY_HAHUCLOUD.md) for the
-MySQL environment variables, staging and migration safeguards, media storage,
-and frontend deployment steps.
+See the [HahuCloud deployment guide](../DEPLOY_HAHUCLOUD.md) for provider
+requirements, environment variables, database readiness, media storage, and
+frontend deployment. Those hosting capabilities have not been verified.
 
 If an older demo deployment still exists, do not delete or reconfigure its
 database or uploaded media as part of this code change. Identify which service

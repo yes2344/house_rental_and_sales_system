@@ -1,7 +1,6 @@
 import axios from 'axios';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
-const nodeBaseURL = import.meta.env.VITE_NODE_API_BASE_URL || '/node-api/api/v1';
 
 export const apiClient = axios.create({
   baseURL,
@@ -10,7 +9,7 @@ export const apiClient = axios.create({
 });
 
 export const nodePublicApiClient = axios.create({
-  baseURL: nodeBaseURL,
+  baseURL,
   withCredentials: false,
   headers: { Accept: 'application/json' },
 });

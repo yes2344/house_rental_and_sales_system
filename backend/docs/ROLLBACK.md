@@ -1,40 +1,34 @@
-# Migration rollback plan
+# Node deployment rollback plan
 
-This plan is preparatory. No production routing, database, or deployment
-changes have been made.
+This plan covers application releases only. It does not authorize changes to
+production routing, database contents, media, DNS, or hosting configuration.
 
-## Before any future cutover
+## Before a release
 
-1. Preserve the current `main` ref and keep Django deployment artifacts
-   available until Node parity is approved.
-2. Verify a full, restorable database backup and a separate restore test.
-   Preserve the media tree independently and verify checksums.
-3. Keep the Node release and any schema changes additive and backward
-   compatible. No destructive table operations are allowed in the cutover.
-4. Record the current frontend/API deployment versions, environment variable
-   names (not secret values), database schema version, and media snapshot.
-5. Define a maintenance window and measurable rollback triggers, such as
-   authentication failures, API error rate, data reconciliation mismatch, or
-   missing media.
+1. Record the deployed Node commit, frontend build, environment variable names
+   (not their values), database schema state, and media snapshot.
+2. Verify a restorable PostgreSQL backup and a separate restore test.
+3. Back up public and private media independently and verify the copies.
+4. Keep schema changes additive and backward compatible. Do not run schema
+   changes automatically at web-process startup.
+5. Define measurable rollback triggers, such as API error rates, failed
+   authentication, data reconciliation mismatches, or inaccessible media.
 
-## Rollback sequence
+## Roll back an application release
 
-1. Stop directing frontend/API traffic to Node and restore the prior API target
-   and Django deployment configuration.
-2. Keep PostgreSQL changes and newly written data intact. Do not restore a
-   backup over a live database as a routine rollback.
-3. If Node wrote data before rollback, stop writes, compare affected rows and
-   audit/workflow events, and plan a reviewed reconciliation. Never discard
-   those writes silently.
-4. Restore media routing to the previous storage only if files are verified
-   and a complete media copy exists. Do not delete Node-local media during
-   rollback.
-5. Run the original Django health and smoke tests, then verify login, listing
-   browse/detail, favorites, viewing requests, admin access, and media.
-6. Preserve logs and the failed Node release for diagnosis; do not remove
-   migration files or database artifacts until the incident is resolved.
+1. Stop or redirect traffic from the affected Node release and redeploy the
+   previously verified Node application and matching frontend build.
+2. Keep PostgreSQL changes and new writes intact. Do not restore a backup over
+   a live database as a routine code rollback.
+3. If the failed release wrote data, stop writes, compare affected rows and
+   audit events, and prepare a reviewed reconciliation. Never discard writes
+   silently.
+4. Restore media routing only when the corresponding files have been verified.
+   Do not delete files created by the failed release during rollback.
+5. Run Node health checks and verify the API workflows supported by that
+   release.
+6. Preserve logs and the failed release for diagnosis.
 
-The new migration branch is based on `main` at `f454271`; returning the
-application code to the original version can be done by deploying that
-existing `main` revision. This does not roll back database or uploaded-file
-changes, which require their own approved recovery plan.
+There is no Django runtime in the current deployable source tree. Reverting
+application code does not roll back database or media changes; those require
+their own approved recovery plan.
