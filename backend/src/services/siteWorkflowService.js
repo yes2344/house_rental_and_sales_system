@@ -637,6 +637,34 @@ export async function getManagedLocation(pool, userId, locationId) {
   return asLocation(result.rows[0]);
 }
 
+async function ensureEthiopiaCountry(pool) {
+  const result = await pool.query(
+    `SELECT id, is_active
+     FROM properties_location
+     WHERE location_type = 'country' AND name ILIKE 'Ethiopia'
+     ORDER BY id LIMIT 1`,
+  );
+  if (result.rowCount) {
+    const countryId = Number(result.rows[0].id);
+    if (result.rows[0].is_active === false) {
+      await pool.query(
+        `UPDATE properties_location SET is_active = TRUE WHERE id = $1`,
+        [countryId],
+      );
+    }
+    return countryId;
+  }
+  const created = await pool.query(
+    `INSERT INTO properties_location
+       (name, name_am, slug, location_type, is_active, display_order,
+        latitude, longitude, parent_id, aliases_am, aliases_en)
+     VALUES ($1, $2, $3, 'country', TRUE, 0, NULL, NULL, NULL, '[]'::jsonb, '[]'::jsonb)
+     RETURNING id`,
+    ['Ethiopia', 'ኢትዮጵያ', 'ethiopia'],
+  );
+  return Number(created.rows[0].id);
+}
+
 async function validateLocationWrite(pool, access, data, creating, locationId) {
   assertEditableFields(data, access, creating);
   if (access.role === 'agent' && access.assignedCityId === null) {
@@ -655,22 +683,13 @@ async function validateLocationWrite(pool, access, data, creating, locationId) {
     });
   }
   if (access.role === 'administrator' && type === 'city') {
-    const country = await pool.query(
-      `SELECT id FROM properties_location
-       WHERE location_type = 'country' AND name ILIKE 'Ethiopia' AND is_active = TRUE
-       ORDER BY id LIMIT 1`,
-    );
-    if (!country.rowCount) {
-      throw new ApiError(400, 'Request validation failed.', {
-        parent: ['An active Ethiopia country location is required before adding a city.'],
-      });
-    }
-    if (parentId !== null && Number(parentId) !== Number(country.rows[0].id)) {
+    const countryId = await ensureEthiopiaCountry(pool);
+    if (parentId !== null && Number(parentId) !== countryId) {
       throw new ApiError(400, 'Request validation failed.', {
         parent: ['Marketplace cities must be placed directly under Ethiopia.'],
       });
     }
-    parentId = Number(country.rows[0].id);
+    parentId = countryId;
   }
   if (parentId === null) {
     throw new ApiError(400, 'Request validation failed.', {
