@@ -14,9 +14,23 @@ longer included. Do not assume that dashboard visibility provides
 authorization; each replacement Node route must enforce permissions on the
 server.
 
-No Node administrator bootstrap or account-management CLI is currently
-provided. Do not create privileged accounts by editing production database
-rows without a separately reviewed procedure.
+The deployment-only `npm run bootstrap:siteadmin` command can promote the
+existing active `siteadmin` account. It does not create a missing account or
+activate an inactive account. The command changes its email and password,
+sets its administrator flags and profile role, and revokes existing sessions.
+It does not change the configured platform owner.
+
+Set `SITEADMIN_BOOTSTRAP_EMAIL` and a newly generated
+`SITEADMIN_BOOTSTRAP_PASSWORD` (at least 16 characters) through the deployment
+secret manager, and run the command once without flags for a read-only
+preflight. For the actual promotion, also set
+`SITEADMIN_BOOTSTRAP_CONFIRM=promote-existing-siteadmin` and run
+`npm run bootstrap:siteadmin -- --apply`. Do not reuse a password previously
+shared in chat, commit secrets, or pass secrets as command-line arguments.
+Remove the bootstrap secrets from the deployment environment after successful
+promotion. The resulting superuser can manage their own profile through the
+account profile interface; they are not the platform owner and do not receive
+owner-only brokerage settings access.
 
 ## Manage agents
 
