@@ -280,8 +280,10 @@ async function requireBrokerageSettingsAccess(pool, userId) {
   );
   const hasAdministratorBrandingPermission = Boolean(
     account?.is_active
-    && account.is_staff
-    && account.role === 'administrator',
+    && (
+      account.is_superuser
+      || (account.is_staff && account.role === 'administrator')
+    ),
   );
   const permissions = Array.isArray(account?.management_permissions)
     ? account.management_permissions

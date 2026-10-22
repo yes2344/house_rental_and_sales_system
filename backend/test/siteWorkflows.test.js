@@ -215,15 +215,16 @@ test('public locations use parameterized search and return the Django location s
   assert.ok(!calls.some(({ text }) => text.includes("Bole%' OR TRUE")));
 });
 
-test('brokerage PATCH requires an active platform owner or explicitly authorized agent', async () => {
+test('brokerage PATCH denies active customers without settings permissions', async () => {
   const denied = {
     async query(text) {
       assert.match(text, /effective_platform_owner_id/);
       return {
         rows: [{
           is_active: true,
-          is_superuser: true,
-          role: 'administrator',
+          is_staff: false,
+          is_superuser: false,
+          role: 'customer',
           agent_approved: false,
           effective_platform_owner_id: '8',
         }],
@@ -237,7 +238,7 @@ test('brokerage PATCH requires an active platform owner or explicitly authorized
   );
 });
 
-test('authorized brokerage PATCH persists contact and social fields and returns serializer shape', async () => {
+test('non-owner superuser brokerage PATCH persists fields and returns serializer shape', async () => {
   const calls = [];
   const responseRow = {
     site_name: 'Infinity House',
@@ -262,11 +263,11 @@ test('authorized brokerage PATCH persists contact and social fields and returns 
         return {
           rows: [{
             is_active: true,
-            is_staff: true,
-            is_superuser: false,
-            role: 'administrator',
+            is_staff: false,
+            is_superuser: true,
+            role: null,
             agent_approved: false,
-            effective_platform_owner_id: '7',
+            effective_platform_owner_id: '8',
           }],
           rowCount: 1,
         };
