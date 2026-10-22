@@ -369,7 +369,7 @@ img { display: block; max-width: 100%; }
 .closing-inner h2 { margin-top: 7px; font-size: clamp(34.500px, 4.500vw, 48px); line-height: 1.25; letter-spacing: -1.1px; }
 .closing-inner p { margin: 7px 0 0; color: var(--ink-soft); font-size: 18px; }
 
-.site-footer { min-width: 0; padding: 37px 0 16px; background: var(--chrome-bg); color: var(--chrome-text); font-size: 2em; }
+.site-footer { min-width: 0; padding: 37px 0 0; background: var(--chrome-bg); color: var(--chrome-text); font-size: 2em; }
 .site-footer .brand-copy strong { font-size: 54px; }
 .footer-main { display: grid; grid-template-columns: minmax(220px, 1.1fr) minmax(230px, 1fr) minmax(180px, .8fr); align-items: start; gap: 34px; padding-bottom: 28px; }
 .footer-brand, .footer-links, .footer-contact, .brand-footer, .brand-footer .brand-copy { min-width: 0; }
@@ -394,6 +394,7 @@ img { display: block; max-width: 100%; }
 .footer-socials svg { width: 15px; height: 15px; }
 .footer-contact-error { margin: 0; color: #f1b9ae; font-size: 27px; line-height: 1.5; overflow-wrap: anywhere; }
 .footer-bottom { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding-top: 14px; border-top: 1px solid rgb(255 255 255 / 15%); color: #b4c6d9; font-size: 36px; overflow-wrap: anywhere; }
+.footer-developer-credit { font-size: 50%; }
 
 .notice-page { min-height: 62vh; display: grid; place-items: center; padding: 60px 24px; background: var(--cream); }
 .notice-card { width: min(570px, 100%); padding: 42px; border: 1px solid var(--line); background: var(--paper); box-shadow: var(--shadow-card); }
@@ -1589,7 +1590,7 @@ img { display: block; max-width: 100%; }
   .footer-main { display: grid; grid-template-columns: 1fr; gap: 24px; }
   .footer-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .footer-contact { min-width: 0; }
-  .site-footer { padding-bottom: 105px; }
+  .site-footer { padding-bottom: 0; }
   .site-footer .brand-copy strong { font-size: 27px; }
   .footer-brand p, .footer-links h2, .footer-links a, .footer-contact h2,
   .footer-contact > a, .footer-socials > span, .footer-bottom { font-size: 18px; }
