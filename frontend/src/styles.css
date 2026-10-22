@@ -393,7 +393,7 @@ img { display: block; max-width: 100%; }
 .footer-socials a:hover { border-color: #9ecdf5; color: #9ecdf5; }
 .footer-socials svg { width: 15px; height: 15px; }
 .footer-contact-error { margin: 0; color: #f1b9ae; font-size: 27px; line-height: 1.5; overflow-wrap: anywhere; }
-.footer-bottom { display: flex; justify-content: space-between; gap: 20px; padding-top: 14px; border-top: 1px solid rgb(255 255 255 / 15%); color: #b4c6d9; font-size: 36px; overflow-wrap: anywhere; }
+.footer-bottom { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding-top: 14px; border-top: 1px solid rgb(255 255 255 / 15%); color: #b4c6d9; font-size: 36px; overflow-wrap: anywhere; }
 
 .notice-page { min-height: 62vh; display: grid; place-items: center; padding: 60px 24px; background: var(--cream); }
 .notice-card { width: min(570px, 100%); padding: 42px; border: 1px solid var(--line); background: var(--paper); box-shadow: var(--shadow-card); }
@@ -1555,9 +1555,9 @@ img { display: block; max-width: 100%; }
 .homepage-note-row .manager-badge { display: inline-flex; }
 .public-page-editor-fields .manager-field:nth-child(n + 3) { grid-column: 1 / -1; }
 .floating-contact-links { position: fixed; z-index: 18; top: 50%; right: 20px; display: grid; gap: 12px; transform: translateY(-50%); }
-.floating-contact-link { width: 50px; height: 50px; display: grid; place-items: center; border: 1.5px solid #fff; border-radius: 50%; box-shadow: 0 5px 18px rgb(12 38 62 / 25%); color: #fff; transition: transform .18s ease, box-shadow .18s ease; }
+.floating-contact-link { width: 55px; height: 55px; display: grid; place-items: center; border: 1.5px solid #fff; border-radius: 50%; box-shadow: 0 5px 18px rgb(12 38 62 / 25%); color: #fff; transition: transform .18s ease, box-shadow .18s ease; }
 .floating-contact-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgb(12 38 62 / 30%); }
-.floating-contact-link svg { width: 20px; height: 20px; }
+.floating-contact-link svg { width: 22px; height: 22px; }
 .floating-contact-phone { background: #e53935; }
 .floating-contact-whatsapp { background: #25d366; }
 .floating-contact-telegram { background: #1686c9; }
@@ -1577,7 +1577,7 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 740px) {
   .floating-contact-links { right: 12px; gap: 8px; }
-  .floating-contact-link { width: 38.75px; height: 38.75px; }
+  .floating-contact-link { width: 42.625px; height: 42.625px; }
   .homepage-notes-section { padding: 24px 0; }
   .homepage-note-card { padding: 14px; }
   .homepage-note-row { flex-direction: column; }
@@ -1823,7 +1823,7 @@ img { display: block; max-width: 100%; }
       font-size: 35.1px;
       line-height: .92;
     }
-    .app-shell:has(.hero-section) .floating-contact-link { width: 43.5px; height: 43.5px; }
+    .app-shell:has(.hero-section) .floating-contact-link { width: 47.85px; height: 47.85px; }
     .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button {
       font-size: clamp(15px, 3vw, 19px);
     }
@@ -1832,8 +1832,8 @@ img { display: block; max-width: 100%; }
     .app-shell:has(.hero-section) .home-search-section .search-submit { font-size: 26px; }
   }
 
-  .app-shell:has(.hero-section) .floating-contact-link { width: 50px; height: 50px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 20px; height: 20px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 55px; height: 55px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 22px; height: 22px; }
   .login-page .auth-card h1 { font-size: 25px; }
 
   @media (max-width: 980px) {
@@ -1853,8 +1853,8 @@ img { display: block; max-width: 100%; }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
     font-size: clamp(1.04rem, 3.24vw, 1.76rem);
   }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 40px; height: 40px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 16px; height: 16px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 44px; height: 44px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 17.6px; height: 17.6px; }
   .app-shell:has(.hero-section) .home-search-section .search-field select,
   .app-shell:has(.hero-section) .home-search-section .search-field select option {
     font-size: 33.6px;
@@ -1871,8 +1871,8 @@ img { display: block; max-width: 100%; }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
     font-size: clamp(1.4625rem, 4.55625vw, 2.475rem);
   }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 40px; height: 40px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 16px; height: 16px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 44px; height: 44px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 17.6px; height: 17.6px; }
   .app-shell:has(.hero-section) .home-search-section .search-field select,
   .app-shell:has(.hero-section) .home-search-section .search-field select option {
     font-size: 33.6px;
@@ -1906,8 +1906,8 @@ img { display: block; max-width: 100%; }
   .app-shell:has(.hero-section) .site-header .brand-copy strong { font-size: 15.42px; }
   .app-shell:has(.hero-section) .hero-copy h1 { font-size: 48.4704px; }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) { font-size: 23.868px; }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 34px; height: 34px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 13.6px; height: 13.6px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 37.4px; height: 37.4px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 14.96px; height: 14.96px; }
   .app-shell:has(.hero-section) .mobile-header-actions .mobile-account-link {
     width: 35.7px;
     height: 35.7px;

@@ -68,6 +68,11 @@ export function Footer({ contact, contactError, text }: FooterProps) {
       </div>
       <div className="container footer-bottom">
         <span>{footerCopyright}</span>
+        <span className="footer-developer-credit">
+          Developed by Shumet · <a href="mailto:shumetyeserah8@gmail.com">shumetyeserah8@gmail.com</a>
+          {' · '}
+          <a href="tel:0923442839">0923442839</a>
+        </span>
       </div>
     </footer>
   );
