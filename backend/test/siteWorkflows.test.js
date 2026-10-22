@@ -262,7 +262,8 @@ test('authorized brokerage PATCH persists contact and social fields and returns 
         return {
           rows: [{
             is_active: true,
-            is_superuser: true,
+            is_staff: true,
+            is_superuser: false,
             role: 'administrator',
             agent_approved: false,
             effective_platform_owner_id: '7',

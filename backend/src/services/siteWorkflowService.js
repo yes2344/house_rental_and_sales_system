@@ -253,7 +253,7 @@ export async function getBrokerageContact(pool, request) {
 
 async function requireBrokerageSettingsAccess(pool, userId) {
   const result = await pool.query(
-    `SELECT account.is_active, account.is_superuser, profile.role,
+    `SELECT account.is_active, account.is_staff, account.is_superuser, profile.role,
             profile.agent_approved, profile.management_permissions,
             COALESCE(
               (SELECT owner.id
@@ -278,6 +278,11 @@ async function requireBrokerageSettingsAccess(pool, userId) {
     && account.is_superuser
     && Number(account.effective_platform_owner_id) === Number(userId),
   );
+  const hasAdministratorBrandingPermission = Boolean(
+    account?.is_active
+    && account.is_staff
+    && account.role === 'administrator',
+  );
   const permissions = Array.isArray(account?.management_permissions)
     ? account.management_permissions
     : [];
@@ -287,7 +292,7 @@ async function requireBrokerageSettingsAccess(pool, userId) {
     && account.agent_approved
     && permissions.includes('settings.manage'),
   );
-  if (!isPlatformOwner && !hasAgentSettingsPermission) {
+  if (!isPlatformOwner && !hasAdministratorBrandingPermission && !hasAgentSettingsPermission) {
     throw new ApiError(403, 'Settings management access is required.');
   }
   return {
