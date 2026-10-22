@@ -11,7 +11,11 @@ const administratorPermissions = [
   'properties.manage_assigned',
   'branding.manage',
   'locations.manage_cities',
+  'users.manage',
   'staff.manage',
+  'reports.review',
+  'audit.view',
+  'agents.assign',
   'announcements.review',
   'announcements.assign',
 ];

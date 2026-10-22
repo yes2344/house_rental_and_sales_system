@@ -14,23 +14,33 @@ longer included. Do not assume that dashboard visibility provides
 authorization; each replacement Node route must enforce permissions on the
 server.
 
-The deployment-only `npm run bootstrap:siteadmin` command can promote the
-existing active `siteadmin` account. It does not create a missing account or
-activate an inactive account. The command changes its email and password,
-sets its administrator flags and profile role, and revokes existing sessions.
-It does not change the configured platform owner.
+The one-time `npm run bootstrap:platform-owner` command creates the designated
+Platform Owner account using the existing Node authentication schema and
+password hashing. It requires `PLATFORM_OWNER_USERNAME`, `PLATFORM_OWNER_EMAIL`,
+and `PLATFORM_OWNER_PASSWORD` in the private deployment environment. The
+password must be at least 16 characters. Never commit these values, put them
+in frontend files, or pass secrets as command-line arguments.
 
-Set `SITEADMIN_BOOTSTRAP_EMAIL` and a newly generated
-`SITEADMIN_BOOTSTRAP_PASSWORD` (at least 16 characters) through the deployment
-secret manager, and run the command once without flags for a read-only
-preflight. For the actual promotion, also set
-`SITEADMIN_BOOTSTRAP_CONFIRM=promote-existing-siteadmin` and run
-`npm run bootstrap:siteadmin -- --apply`. Do not reuse a password previously
-shared in chat, commit secrets, or pass secrets as command-line arguments.
-Remove the bootstrap secrets from the deployment environment after successful
-promotion. The resulting superuser can manage their own profile through the
-account profile interface; they are not the platform owner and do not receive
-owner-only brokerage settings access.
+Run the command with no flags first; this performs a read-only preflight. It
+will refuse to create an account if the username or email already belongs to
+an account, if an active superuser or configured owner already exists, or if
+the schema state is inconsistent. It never promotes an existing ordinary
+account, resets a password, or transfers an existing owner. For the approved
+initial setup only, set
+`PLATFORM_OWNER_BOOTSTRAP_CONFIRM=create-platform-owner` in the private
+environment and run `npm run bootstrap:platform-owner -- --apply`. The
+transaction creates the active administrator/superuser profile and, when the
+brokerage settings row already exists, assigns the owner pointer only when it
+is empty. If the settings row is absent, the backend's existing active
+superuser fallback identifies the new sole superuser as owner. Running the
+setup again is a no-op only when the same account is already fully configured
+as owner; otherwise it stops with a conflict.
+
+Remove the temporary owner setup variables after successful initialization.
+Choose a fresh, unique password through the secret manager; never reuse a
+password exposed in a message or committed to source. The Platform Owner also
+receives the existing administrator management privileges and can manage
+their own profile through the account profile interface.
 
 ## Manage agents
 
