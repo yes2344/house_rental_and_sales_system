@@ -143,12 +143,10 @@ export async function checkDeploymentReadiness({
   const version = Number(database.server_version_num);
   if (!Number.isInteger(version) || version < 130000) {
     blockers.push('PostgreSQL 13 or newer is required by this deployment configuration.');
-  } else if (version < 150000) {
-    blockers.push('PostgreSQL 15 or newer is required for a supported production database.');
   }
   if (Number.isInteger(version) && version >= 130000 && version < 140000) {
-    blockers.push(
-      'PostgreSQL 13 is end-of-life upstream; upgrade to a supported major version before production.',
+    warnings.push(
+      'PostgreSQL 13 is end-of-life upstream. Its use is a temporary HahuCloud compatibility exception, not confirmed support; verify against an isolated PostgreSQL 13.23 instance and upgrade to a supported major version as soon as possible.',
     );
   }
   if (database.transaction_read_only === 'on') {

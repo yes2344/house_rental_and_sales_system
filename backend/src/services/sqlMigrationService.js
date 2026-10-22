@@ -1,4 +1,4 @@
-const minimumSupportedVersion = 150000;
+const minimumSupportedVersion = 130000;
 const metadataTable = 'public.backend_media_file_metadata';
 const historyTable = 'public.backend_schema_migrations';
 
@@ -19,7 +19,7 @@ async function inspectTarget(client, migrationName, checksum, { requireWritable 
   const target = connection.rows[0];
   if (!target) throw new Error('Unable to inspect the connected PostgreSQL role.');
   if (target.server_version_num < minimumSupportedVersion) {
-    throw new Error('PostgreSQL 15 or newer is required; upgrade the target before migrating.');
+    throw new Error('PostgreSQL 13 or newer is required; upgrade the target before migrating.');
   }
   if (requireWritable && target.transaction_read_only === 'on') {
     throw new Error('The connected role is read-only and cannot apply schema migrations.');

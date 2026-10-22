@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runMediaMetadataMigration } from '../src/services/sqlMigrationService.js';
 
-function migrationClient({ version = 150000, readOnly = 'off', isSuperuser = false, failOnSql = false } = {}) {
+function migrationClient({ version = 130023, readOnly = 'off', isSuperuser = false, failOnSql = false } = {}) {
   const calls = [];
   return {
     calls,
@@ -70,12 +70,23 @@ test('migration apply is transactional and records the checksum', async () => {
   assert.equal(client.calls.at(-1).sql, 'COMMIT');
 });
 
-test('migration refuses PostgreSQL 13 before issuing DDL', async () => {
-  const client = migrationClient({ version: 130012 });
+test('migration permits PostgreSQL 13.23 for the temporary compatibility exception', async () => {
+  const client = migrationClient({ version: 130023 });
+
+  const result = await runMediaMetadataMigration(client, { ...migration, apply: true });
+
+  assert.equal(result.status, 'applied');
+  assert.equal(result.target.server_version_num, 130023);
+  assert.ok(client.calls.some(({ sql }) => sql === migration.sql));
+  assert.equal(client.calls.at(-1).sql, 'COMMIT');
+});
+
+test('migration refuses PostgreSQL 12 before issuing DDL', async () => {
+  const client = migrationClient({ version: 120022 });
 
   await assert.rejects(
     runMediaMetadataMigration(client, { ...migration, apply: true }),
-    /PostgreSQL 15 or newer/,
+    /PostgreSQL 13 or newer/,
   );
   assert.equal(client.calls.some(({ sql }) => sql === migration.sql), false);
   assert.equal(client.calls.at(-1).sql, 'ROLLBACK');

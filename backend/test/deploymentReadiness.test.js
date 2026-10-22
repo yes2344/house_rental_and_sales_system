@@ -28,7 +28,7 @@ async function makeMediaRoots(root) {
 }
 
 function makePool({
-  version = 130012,
+  version = 130023,
   readOnly = 'off',
   isSuperuser = false,
   tables = requiredTables,
@@ -54,7 +54,7 @@ function makePool({
   };
 }
 
-test('deployment preflight checks database and media and flags unsupported PostgreSQL 13', async () => {
+test('deployment preflight permits PostgreSQL 13.23 as a temporary EOL compatibility exception', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'deployment-readiness-'));
   try {
     const mediaConfig = await makeMediaRoots(root);
@@ -62,15 +62,46 @@ test('deployment preflight checks database and media and flags unsupported Postg
       pool: makePool(),
       mediaConfig: { ...mediaConfig, capacityBytes: 1000 },
       applicationRoot: path.join(root, 'application'),
-      environment: { NODE_ENV: 'production', PGSCHEMA: 'public' },
+      environment: {
+        NODE_ENV: 'production',
+        PGSCHEMA: 'public',
+        SMTP_HOST: 'smtp.example.test',
+        SMTP_PORT: '587',
+        SMTP_USER: 'mailer',
+        SMTP_PASS: 'secret',
+        EMAIL_FROM: 'noreply@example.test',
+        FRONTEND_URL: 'https://example.test',
+      },
     });
 
-    assert.equal(report.ready, false);
-    assert.ok(report.blockers.some((blocker) => blocker.includes('PostgreSQL 13 is end-of-life')));
+    assert.equal(report.ready, true);
+    assert.equal(report.database.server_version_num, 130023);
+    assert.ok(report.warnings.some((warning) =>
+      warning.includes('PostgreSQL 13 is end-of-life upstream')
+      && warning.includes('temporary HahuCloud compatibility exception')
+      && warning.includes('isolated PostgreSQL 13.23 instance')));
     assert.deepEqual(report.database.missing_required_tables, []);
     assert.equal(report.media.public.writable, true);
     assert.equal(report.media.private.writable, true);
     assert.ok(report.warnings.some((warning) => warning.includes('cannot prove persistence')));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('deployment preflight rejects PostgreSQL versions below 13', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'deployment-readiness-'));
+  try {
+    const mediaConfig = await makeMediaRoots(root);
+    const report = await checkDeploymentReadiness({
+      pool: makePool({ version: 120022 }),
+      mediaConfig: { ...mediaConfig, capacityBytes: 1000 },
+      applicationRoot: path.join(root, 'application'),
+      environment: { NODE_ENV: 'production' },
+    });
+
+    assert.equal(report.ready, false);
+    assert.ok(report.blockers.some((blocker) => blocker.includes('PostgreSQL 13 or newer')));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

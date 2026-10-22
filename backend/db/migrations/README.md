@@ -10,11 +10,17 @@ The deployment target is an existing database. Node expects the established
 application tables and does not initialize an empty database; a new empty
 database is not a supported deployment target. The repository's PostgreSQL 18
 catalog snapshot is from a separate local candidate, not the confirmed
-HahuCloud database. The intended HahuCloud database was reported as PostgreSQL
-13.12, which is end-of-life upstream; production must use a provider-supported
-PostgreSQL 15+ major version. Compare and verify the actual target catalog
-before connecting the application. Run `npm run check:deployment` from
-`backend/` to perform a read-only schema/runtime/media preflight.
+HahuCloud database. HahuCloud's PostgreSQL 13.23
+availability is treated as a temporary compatibility exception because the
+reviewed application SQL showed no obvious PostgreSQL 14/15-only feature.
+PostgreSQL 13 reached upstream end-of-life on November 13, 2025, and no
+isolated PostgreSQL 13.23 integration test has been completed. This exception
+is not an upstream support statement or a full compatibility claim. Verify
+against an isolated PostgreSQL 13.23 instance and upgrade to an
+upstream-supported major version as soon as the hosting provider permits.
+Compare and verify the actual target catalog before connecting the
+application. Run `npm run check:deployment` from `backend/` to perform a
+read-only schema/runtime/media preflight.
 
 The only checked-in migration adds media-file metadata to the existing
 `user_propertyimage` table. It is not applied automatically and must first be

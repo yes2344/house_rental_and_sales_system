@@ -107,10 +107,13 @@ PostgreSQL and do not certify behavior against the HahuCloud database.
   shared store or an approved database-backed implementation before cutover.
 - See [`../../docs/frontend-node-integration.md`](../../docs/frontend-node-integration.md)
   for the frontend's single Node API target and remaining route gaps.
-- The requested HahuCloud database was reported as PostgreSQL 13.12, which is
-  end-of-life and blocked by the production preflight. Production requires an
-  upgrade to PostgreSQL 15 or newer and a successful preflight against the
-  actual target database.
+- HahuCloud PostgreSQL 13.23 is permitted by the version gates as a temporary
+  compatibility exception after source review found no obvious PostgreSQL
+  14/15-only application SQL. PostgreSQL 13 is end-of-life upstream, and the
+  backend has not been integration-tested on PostgreSQL 13.23. Do not consider
+  this full compatibility certification; verify on an isolated 13.23 instance
+  and upgrade to an upstream-supported PostgreSQL major version as soon as the
+  provider permits.
 - The deployment target is an existing Django-derived schema; there is no
   empty-database bootstrap migration. The local PostgreSQL 18.6 catalog is not
   evidence about HahuCloud's schema. The additive Node migration is tested

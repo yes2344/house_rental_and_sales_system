@@ -5,11 +5,15 @@ frontend in `frontend/`. The Django/Python application has been removed.
 HahuCloud must provide a supported Node.js application runtime, PostgreSQL
 connectivity, and persistent writable storage before this project can run
 there. These provider capabilities have not been verified from this workspace.
-The intended existing HahuCloud database was reported as PostgreSQL 13.12.
-PostgreSQL 13 reached upstream end-of-life on November 13, 2025. The deployment
-preflight will block that version; arrange a provider-supported PostgreSQL
-upgrade (15 or newer) before production. A major-version upgrade must follow
-HahuCloud's documented procedure and a verified backup/restore plan.
+HahuCloud currently supports PostgreSQL 13.23 for this deployment. PostgreSQL
+13 reached upstream end-of-life on November 13, 2025. The backend version gate
+therefore allows PostgreSQL 13 as a temporary hosting compatibility exception;
+this is not upstream support and does not establish full application
+compatibility. No isolated PostgreSQL 13.23 integration test has been completed.
+Treat PostgreSQL 13.23 as an unverified staging workaround and upgrade to a
+provider-supported, upstream-supported major version before relying on it for
+production. Any major-version upgrade must follow HahuCloud's documented
+procedure and a verified backup/restore plan.
 See the upstream [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/).
 
 ## Check with HahuCloud first
@@ -84,7 +88,11 @@ role with the required core table privileges, required existing tables,
 complete SMTP configuration, and that the separate public/private media
 directories exist, are writable, and are outside the release directory. It
 does not change the database, send mail, or prove that provider volumes survive
-a restart; confirm persistence with HahuCloud and a staging restart test.
+a restart; confirm persistence with HahuCloud and a staging restart test. A
+PostgreSQL 13 result includes an end-of-life and unverified-compatibility
+warning; readiness does not mean PostgreSQL 13.23 compatibility has been
+certified. Run the application and full test suite against an isolated
+PostgreSQL 13.23 database before considering the exception validated.
 
 The additive `001_media_file_metadata.sql` migration depends on the existing
 `user_propertyimage` table and creates `backend_media_file_metadata`. It is not
