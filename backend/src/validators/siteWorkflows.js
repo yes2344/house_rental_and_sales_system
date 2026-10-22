@@ -69,7 +69,16 @@ const socialLinkSchema = z.object({
   display_order: z.number().int().nonnegative().max(2_147_483_647).default(0),
 }).strict();
 
+const multipartBoolean = z.preprocess((value) => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+}, z.boolean());
+
 export const brokerageContactPatchSchema = z.object({
+  site_name: z.string().trim().min(1).max(100).optional(),
+  clear_site_logo: multipartBoolean.optional(),
+  clear_homepage_hero_image: multipartBoolean.optional(),
   business_name: z.string().max(160).optional(),
   phone: z.string().max(50).optional(),
   email: z.union([z.literal(''), z.string().email().max(254)]).optional(),

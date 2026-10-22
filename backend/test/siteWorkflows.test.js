@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { access, mkdtemp, rm } from 'node:fs/promises';
 import express from 'express';
+import os from 'node:os';
+import path from 'node:path';
+import sharp from 'sharp';
 import { test } from 'node:test';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { siteWorkflowsRouter } from '../src/routes/siteWorkflows.js';
@@ -84,10 +88,10 @@ function administratorRow() {
   };
 }
 
-function startRouter(pool) {
+function startRouter(pool, mediaConfig) {
   const app = express();
   app.use(express.json());
-  app.use('/api/v1', siteWorkflowsRouter({ pool }));
+  app.use('/api/v1', siteWorkflowsRouter({ pool, mediaConfig }));
   app.use(errorHandler({ logger: { error() {} } }));
   const server = app.listen(0, '127.0.0.1');
   return new Promise((resolve) => {
@@ -136,7 +140,19 @@ test('brokerage PATCH validation follows frontend payload fields and nested soci
       display_order: 0,
     }],
   }).success, true);
-  assert.equal(brokerageContactPatchSchema.safeParse({ site_name: 'Unapproved field' }).success, false);
+  assert.deepEqual(
+    brokerageContactPatchSchema.parse({
+      site_name: '  New Website  ',
+      clear_site_logo: 'true',
+      clear_homepage_hero_image: 'false',
+    }),
+    {
+      site_name: 'New Website',
+      clear_site_logo: true,
+      clear_homepage_hero_image: false,
+    },
+  );
+  assert.equal(brokerageContactPatchSchema.safeParse({ unexpected: 'field' }).success, false);
   assert.equal(brokerageContactPatchSchema.safeParse({
     social_links: [
       { platform: 'facebook', url: 'https://example.test/a' },
@@ -647,6 +663,8 @@ test('dedicated router exposes the public information endpoint and protects mana
 test('brokerage contact PATCH is mounted behind bearer authentication and returns updated settings', async () => {
   const token = 'brokerage-patch-token';
   const digest = createHash('sha256').update(token, 'utf8').digest('hex');
+  const brandingUpdates = [];
+  const mediaRoot = await mkdtemp(path.join(os.tmpdir(), 'site-branding-test-'));
   const pool = {
     async query(text, values = []) {
       if (text.includes('FROM accounts_tabsessiontoken AS session')) {
@@ -693,9 +711,12 @@ test('brokerage contact PATCH is mounted behind bearer authentication and return
     },
     async connect() {
       return {
-        async query(text) {
+        async query(text, values = []) {
           if (text.includes('SELECT platform_owner_id FROM portal_admin_brokeragesettings')) {
             return { rows: [{ platform_owner_id: 7 }], rowCount: 1 };
+          }
+          if (text.includes('UPDATE portal_admin_brokeragesettings')) {
+            brandingUpdates.push({ text, values });
           }
           return { rows: [], rowCount: 1 };
         },
@@ -703,7 +724,7 @@ test('brokerage contact PATCH is mounted behind bearer authentication and return
       };
     },
   };
-  const server = await startRouter(pool);
+  const server = await startRouter(pool, { publicRoot: mediaRoot });
   try {
     const response = await fetch(`${server.baseUrl}/brokerage/contact/`, {
       method: 'PATCH',
@@ -716,6 +737,31 @@ test('brokerage contact PATCH is mounted behind bearer authentication and return
     assert.equal(response.status, 200);
     assert.equal((await response.json()).business_name, 'Updated Brokerage');
 
+    const branding = new FormData();
+    branding.append('site_name', 'New Website Name');
+    const logoBuffer = await sharp({
+      create: {
+        width: 32,
+        height: 32,
+        channels: 3,
+        background: '#345678',
+      },
+    }).png().toBuffer();
+    branding.append('site_logo', new Blob([logoBuffer], { type: 'image/png' }), 'logo.png');
+    const brandingResponse = await fetch(`${server.baseUrl}/brokerage/contact/`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${token}` },
+      body: branding,
+    });
+    assert.equal(brandingResponse.status, 200);
+    assert.ok(brandingUpdates.some(({ text, values }) =>
+      text.includes('SET site_name = $1') && values.includes('New Website Name')));
+    const storedLogo = brandingUpdates
+      .flatMap(({ values }) => values)
+      .find((value) => typeof value === 'string' && /^site-branding\/[a-f\d-]+\.png$/.test(value));
+    assert.ok(storedLogo);
+    await access(path.join(mediaRoot, storedLogo));
+
     const denied = await fetch(`${server.baseUrl}/brokerage/contact/`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
@@ -724,5 +770,6 @@ test('brokerage contact PATCH is mounted behind bearer authentication and return
     assert.equal(denied.status, 401);
   } finally {
     await server.close();
+    await rm(mediaRoot, { recursive: true, force: true });
   }
 });

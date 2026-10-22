@@ -22,7 +22,7 @@ function parseId(value) {
   return id;
 }
 
-export function siteWorkflowController({ pool }) {
+export function siteWorkflowController({ pool, mediaConfig, logger }) {
   return {
     homepageNotes: async (request, response, next) => {
       try {
@@ -52,6 +52,11 @@ export function siteWorkflowController({ pool }) {
           request,
           request.userId,
           request.validated.body,
+          {
+            files: request.files,
+            mediaConfig,
+            logger,
+          },
         ));
       } catch (error) {
         next(error);

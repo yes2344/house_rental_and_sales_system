@@ -1,6 +1,19 @@
+import { randomUUID } from 'node:crypto';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import sharp from 'sharp';
 import { ApiError } from '../errors.js';
 import { withTransaction } from '../db.js';
+import { storedMediaPath } from './propertyImageService.js';
 import { getPublicProperty } from './publicPropertyService.js';
+
+const MAX_BRANDING_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_BRANDING_IMAGE_PIXELS = 50_000_000;
+const brandingImageFormats = new Map([
+  ['jpeg', 'jpg'],
+  ['png', 'png'],
+  ['webp', 'webp'],
+]);
 
 const publicPropertyFilter = `p.publication_status = 'published'
   AND p.status IN ('available', 'active', 'rented', 'sold')
@@ -345,7 +358,13 @@ async function readManagedBrokerageContact(pool, request) {
   };
 }
 
-export async function patchBrokerageContact(pool, request, userId, data) {
+export async function patchBrokerageContact(
+  pool,
+  request,
+  userId,
+  data,
+  { files = {}, mediaConfig, logger = console } = {},
+) {
   const access = await requireBrokerageSettingsAccess(pool, userId);
   if (access.platformOwnerId === null) {
     throw new ApiError(400, 'Request validation failed.', {
@@ -355,7 +374,76 @@ export async function patchBrokerageContact(pool, request, userId, data) {
     });
   }
 
-  await withTransaction(pool, async (client) => {
+  const siteLogoFile = files.site_logo?.[0];
+  const homepageHeroImageFile = files.homepage_hero_image?.[0];
+  if (
+    (siteLogoFile && data.clear_site_logo)
+    || (homepageHeroImageFile && data.clear_homepage_hero_image)
+  ) {
+    throw new ApiError(400, 'Request validation failed.', {
+      non_field_errors: ['Choose a replacement image or remove the current image, not both.'],
+    });
+  }
+
+  const newImages = [];
+  const removeImage = async (storedName, context) => {
+    if (!mediaConfig || !storedName) return;
+    try {
+      await unlink(storedMediaPath(mediaConfig.publicRoot, storedName, 'site-branding'));
+    } catch (error) {
+      if (error.code === 'ENOENT' || error.statusCode === 404) return;
+      logger.error(`Failed to remove ${context} branding image.`, error.code || error.name);
+    }
+  };
+  const storeImage = async (file) => {
+    if (!mediaConfig) {
+      throw new ApiError(503, 'Branding image storage is not configured.');
+    }
+    if (!file?.buffer || file.size > MAX_BRANDING_IMAGE_SIZE_BYTES) {
+      throw new ApiError(413, 'Branding images must be 5 MB or smaller.');
+    }
+
+    let extension;
+    let imageBuffer;
+    try {
+      const image = sharp(file.buffer, {
+        failOn: 'error',
+        limitInputPixels: MAX_BRANDING_IMAGE_PIXELS,
+      });
+      const metadata = await image.metadata();
+      extension = brandingImageFormats.get(metadata.format);
+      if (!extension || !metadata.width || !metadata.height) {
+        throw new Error('Unsupported branding image format.');
+      }
+      imageBuffer = await sharp(file.buffer, {
+        failOn: 'error',
+        limitInputPixels: MAX_BRANDING_IMAGE_PIXELS,
+      }).rotate().toFormat(metadata.format).toBuffer();
+    } catch {
+      throw new ApiError(400, 'Choose a valid JPEG, PNG, or WebP branding image.');
+    }
+
+    const storedName = `site-branding/${randomUUID()}.${extension}`;
+    const destination = path.resolve(mediaConfig.publicRoot, storedName);
+    await mkdir(path.dirname(destination), { recursive: true });
+    newImages.push(storedName);
+    await writeFile(destination, imageBuffer, { flag: 'wx', mode: 0o644 });
+    return storedName;
+  };
+
+  let newSiteLogo = '';
+  let newHomepageHeroImage = '';
+  try {
+    if (siteLogoFile) newSiteLogo = await storeImage(siteLogoFile);
+    if (homepageHeroImageFile) newHomepageHeroImage = await storeImage(homepageHeroImageFile);
+  } catch (error) {
+    await Promise.all(newImages.map((image) => removeImage(image, 'new')));
+    throw error;
+  }
+
+  let replacedImages;
+  try {
+    replacedImages = await withTransaction(pool, async (client) => {
     await client.query(
       `INSERT INTO portal_admin_brokeragesettings
          (id, business_name, site_name, footer_copyright, site_logo, homepage_hero_image,
@@ -378,6 +466,11 @@ export async function patchBrokerageContact(pool, request, userId, data) {
         [access.platformOwnerId],
       );
     }
+    const currentSettings = await client.query(
+      `SELECT site_logo, homepage_hero_image
+       FROM portal_admin_brokeragesettings WHERE id = 1`,
+    );
+    const previous = currentSettings.rows[0] || {};
 
     const updates = [];
     const values = [];
@@ -385,6 +478,11 @@ export async function patchBrokerageContact(pool, request, userId, data) {
       values.push(value);
       updates.push(`${column} = $${values.length}`);
     };
+    if (Object.hasOwn(data, 'site_name')) appendField('site_name', data.site_name);
+    if (siteLogoFile) appendField('site_logo', newSiteLogo);
+    else if (data.clear_site_logo) appendField('site_logo', '');
+    if (homepageHeroImageFile) appendField('homepage_hero_image', newHomepageHeroImage);
+    else if (data.clear_homepage_hero_image) appendField('homepage_hero_image', '');
     for (const column of ['business_name', 'phone', 'email', 'footer_copyright']) {
       if (Object.hasOwn(data, column)) appendField(column, data[column]);
     }
@@ -412,7 +510,28 @@ export async function patchBrokerageContact(pool, request, userId, data) {
         [link.platform, link.url, link.is_enabled, link.display_order],
       );
     }
+    return {
+      site_logo: previous.site_logo,
+      homepage_hero_image: previous.homepage_hero_image,
+    };
   });
+  } catch (error) {
+    await Promise.all(newImages.map((image) => removeImage(image, 'new')));
+    throw error;
+  }
+
+  const replaced = [
+    ['site_logo', replacedImages.site_logo],
+    ['homepage_hero_image', replacedImages.homepage_hero_image],
+  ];
+  await Promise.all(replaced.map(([field, oldImage]) => {
+    const currentImage = field === 'site_logo'
+      ? (newSiteLogo || (data.clear_site_logo ? '' : oldImage))
+      : (newHomepageHeroImage || (data.clear_homepage_hero_image ? '' : oldImage));
+    return oldImage && oldImage !== currentImage
+      ? removeImage(oldImage, 'old')
+      : Promise.resolve();
+  }));
   return readManagedBrokerageContact(pool, request);
 }
 
