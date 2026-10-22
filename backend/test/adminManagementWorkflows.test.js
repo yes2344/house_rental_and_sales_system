@@ -14,6 +14,24 @@ const digest = createHash('sha256').update(token, 'utf8').digest('hex');
 const csrf = 'same-origin-csrf-test-token';
 let server;
 let origin;
+const transactionQueries = [];
+const agentAccount = {
+  id: 42,
+  username: 'managed-agent',
+  email: 'agent@example.test',
+  first_name: 'Managed',
+  last_name: 'Agent',
+  is_active: true,
+  is_staff: false,
+  is_superuser: false,
+  date_joined: '2026-01-01T00:00:00.000Z',
+  role: 'agent',
+  phone: '0911000000',
+  assigned_city_id: 7,
+  agent_approved: true,
+  agent_onboarding_required: false,
+  management_permissions: [],
+};
 
 const pool = {
   async query(sql, values = []) {
@@ -37,6 +55,15 @@ const pool = {
         }],
       };
     }
+    if (sql.includes('FROM auth_user u JOIN accounts_profile p')) {
+      return { rowCount: 1, rows: [{ ...agentAccount }] };
+    }
+    if (sql.includes('SELECT id FROM auth_user WHERE lower(username)')) {
+      return { rowCount: 0, rows: [] };
+    }
+    if (sql.includes('FROM properties_location')) {
+      return { rowCount: 1, rows: [{ id: 7 }] };
+    }
     if (sql.includes('FROM portal_admin_publicinformationpage ORDER BY page')) {
       return {
         rowCount: 1,
@@ -53,6 +80,18 @@ const pool = {
       };
     }
     throw new Error(`Unexpected test SQL: ${sql}`);
+  },
+  async connect() {
+    return {
+      async query(sql, values = []) {
+        transactionQueries.push({ sql, values });
+        if (sql.includes('FROM auth_user u JOIN accounts_profile p')) {
+          return { rowCount: 1, rows: [{ ...agentAccount }] };
+        }
+        return { rowCount: 1, rows: [] };
+      },
+      release() {},
+    };
   },
 };
 
@@ -72,7 +111,7 @@ after(async () => {
 
 test('management public pages list uses the authenticated workflow route', async () => {
   const response = await fetch(`${origin}/management/public-pages/`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: ['Bearer', token].join(' ') },
   });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).results.map((page) => page.page), ['about']);
@@ -82,7 +121,7 @@ test('management homepage note creation rejects invalid content before database 
   const response = await fetch(`${origin}/management/homepage-notes/`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: ['Bearer', token].join(' '),
       Cookie: `csrftoken=${csrf}`,
       'X-CSRFToken': csrf,
       'Content-Type': 'application/json',
@@ -91,6 +130,36 @@ test('management homepage note creation rejects invalid content before database 
   });
   assert.equal(response.status, 400);
   assert.match((await response.json()).error.message, /validation/i);
+});
+
+test('saving a managed agent serializes management permissions as JSONB', async () => {
+  transactionQueries.length = 0;
+  const response = await fetch(`${origin}/admin/delegated-accounts/42/`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: ['Bearer', token].join(' '),
+      Cookie: `csrftoken=${csrf}`,
+      'X-CSRFToken': csrf,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      username: 'managed-agent',
+      email: 'agent@example.test',
+      first_name: 'Managed',
+      last_name: 'Agent',
+      phone: '0911000000',
+      is_active: true,
+      assigned_city_id: 7,
+      management_permissions: ['announcements.review_assigned'],
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const profileUpdate = transactionQueries.find(({ sql }) =>
+    sql.includes('UPDATE accounts_profile SET') && sql.includes('management_permissions ='));
+  assert.ok(profileUpdate);
+  assert.match(profileUpdate.sql, /management_permissions = \$3::jsonb/);
+  assert.equal(profileUpdate.values[2], '["announcements.review_assigned"]');
 });
 
 test('admin management workflow router requires an authenticated account', async () => {

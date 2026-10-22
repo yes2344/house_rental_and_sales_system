@@ -707,10 +707,14 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
           }
           const profileChanges = Object.keys(input).filter((key) => profileFields.includes(key));
           if (profileChanges.length) {
-            const profileValues = profileChanges.map((key) => input[key]);
+            const profileValues = profileChanges.map((key) => key === 'management_permissions'
+              ? JSON.stringify(input[key])
+              : input[key]);
             profileValues.push(id);
+            const profileAssignments = profileChanges.map((key, index) =>
+              `${key} = $${index + 1}${key === 'management_permissions' ? '::jsonb' : ''}`).join(', ');
             await client.query(
-              `UPDATE accounts_profile SET ${profileChanges.map((key, index) => `${key} = $${index + 1}`).join(', ')},
+              `UPDATE accounts_profile SET ${profileAssignments},
                  updated_at = CURRENT_TIMESTAMP WHERE user_id = $${profileValues.length}`,
               profileValues,
             );
