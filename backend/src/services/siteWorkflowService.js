@@ -474,7 +474,13 @@ export async function listFavorites(pool, request, userId) {
       throw error;
     }
   }));
-  return results.filter(Boolean);
+  const visibleFavorites = results.filter(Boolean);
+  return {
+    count: visibleFavorites.length,
+    next: null,
+    previous: null,
+    results: visibleFavorites,
+  };
 }
 
 export async function createFavorite(pool, request, userId, propertyId) {

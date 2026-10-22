@@ -457,10 +457,14 @@ test('favorite creation is idempotent and favorites return the public property l
 
   assert.equal(created.id, 22);
   assert.match(queries.find(({ text }) => text.includes('INSERT INTO favorites_favorite')).text, /ON CONFLICT/);
-  assert.equal(listed.length, 1);
-  assert.equal(listed[0].property.title, 'Sunny home');
-  assert.equal('description' in listed[0].property, false);
-  assert.equal('amenities' in listed[0].property, false);
+  assert.deepEqual(Object.keys(listed), ['count', 'next', 'previous', 'results']);
+  assert.equal(listed.count, 1);
+  assert.equal(listed.next, null);
+  assert.equal(listed.previous, null);
+  assert.equal(listed.results.length, 1);
+  assert.equal(listed.results[0].property.title, 'Sunny home');
+  assert.equal('description' in listed.results[0].property, false);
+  assert.equal('amenities' in listed.results[0].property, false);
   assert.ok(queries.every(({ values }) => values.length > 0));
 });
 
