@@ -38,6 +38,69 @@ test('health endpoint confirms PostgreSQL connectivity', async () => {
   assert.deepEqual(await response.json(), { status: 'ok', database: 'ok' });
 });
 
+test('production frontend origin can call the API with credentials', async () => {
+  const response = await fetch(`${baseUrl}/api/v1/health/`, {
+    headers: { Origin: 'https://infinityhouseproperties.com' },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('access-control-allow-origin'), 'https://infinityhouseproperties.com');
+  assert.equal(response.headers.get('access-control-allow-credentials'), 'true');
+});
+
+test('production frontend preflight allows only the API methods and headers', async () => {
+  const response = await fetch(`${baseUrl}/api/v1/locations/`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://infinityhouseproperties.com',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'authorization,content-type',
+    },
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('access-control-allow-origin'), 'https://infinityhouseproperties.com');
+  assert.equal(response.headers.get('access-control-allow-credentials'), 'true');
+  assert.equal(response.headers.get('access-control-allow-methods'), 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS');
+  assert.equal(response.headers.get('access-control-allow-headers'), 'Authorization, Content-Type, X-CSRFToken');
+});
+
+test('unconfigured origins remain rejected', async () => {
+  const response = await fetch(`${baseUrl}/api/v1/health/`, {
+    headers: { Origin: 'https://untrusted.example' },
+  });
+  assert.equal(response.status, 403);
+  assert.equal(response.headers.get('access-control-allow-origin'), null);
+  assert.deepEqual(await response.json(), {
+    error: {
+      status_code: 403,
+      message: 'Origin is not allowed.',
+      details: {},
+    },
+  });
+});
+
+test('authenticated endpoints retain their authentication requirement for the production origin', async () => {
+  const response = await fetch(`${baseUrl}/api/v1/auth/me/`, {
+    headers: { Origin: 'https://infinityhouseproperties.com' },
+  });
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get('access-control-allow-origin'), 'https://infinityhouseproperties.com');
+});
+
+test('production CSRF cookies support the cross-site frontend with Secure protection', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
+    const response = await fetch(`${baseUrl}/api/v1/auth/csrf/`, {
+      headers: { Origin: 'https://infinityhouseproperties.com' },
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('set-cookie') ?? '', /SameSite=None; Secure/);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
 test('health endpoint reports database outages without claiming success', async () => {
   const errors = [];
   const app = createApp({

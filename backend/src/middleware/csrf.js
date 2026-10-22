@@ -24,8 +24,9 @@ function cookieValue(request, name) {
 }
 
 function setCsrfCookie(response, token) {
-  const flags = ['Path=/', 'SameSite=Lax'];
-  if (process.env.NODE_ENV === 'production') flags.push('Secure');
+  const production = process.env.NODE_ENV === 'production';
+  const flags = ['Path=/', `SameSite=${production ? 'None' : 'Lax'}`];
+  if (production) flags.push('Secure');
   response.append('Set-Cookie', `${cookieName}=${encodeURIComponent(token)}; ${flags.join('; ')}`);
 }
 

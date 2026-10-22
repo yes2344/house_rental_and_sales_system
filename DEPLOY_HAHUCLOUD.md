@@ -54,6 +54,19 @@ never publish credentials in the frontend document root:
 | `EMAIL_FROM` | Verified sender address. |
 | `FRONTEND_URL` | Exact HTTPS frontend origin used to create email links. |
 
+For this deployment, configure `FRONTEND_ORIGINS` and
+`CSRF_TRUSTED_ORIGINS` to include the exact origin
+`https://infinityhouseproperties.com` (no path or trailing slash). If either
+variable already contains other origins that are still in use, preserve them
+when adding this origin. The CORS middleware also explicitly allows this
+production frontend origin; unrelated origins remain rejected.
+
+The frontend and API use different registrable domains, so production CSRF
+cookies use `SameSite=None; Secure` for credentialed cross-site requests.
+State-changing requests still require a matching CSRF cookie and header and a
+trusted origin. Browser privacy settings that block third-party cookies can
+still interfere with this cross-site cookie flow.
+
 Production startup requires `MEDIA_ROOT` and `PRIVATE_MEDIA_ROOT`; the paths
 must be separate, writable, outside the application release directory, and
 persistent across restarts and deployments. `npm run check:deployment`
