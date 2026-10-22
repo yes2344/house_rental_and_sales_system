@@ -17,12 +17,15 @@ import { propertyImageController } from '../controllers/propertyImageController.
 import { propertyImageUpload } from '../middleware/propertyImageUpload.js';
 import { requireAdministrator } from '../middleware/requireAdministrator.js';
 import { mediaStorageController } from '../controllers/mediaStorageController.js';
+import { managedPropertyController } from '../controllers/managedPropertyController.js';
+import { managedPropertyQuerySchema } from '../validators/managedProperties.js';
 
 export function apiRouter({ pool, logger, mediaConfig }) {
   const router = Router();
   const accounts = accountController({ pool });
   const publicProperties = publicPropertyController({ pool });
   const images = propertyImageController({ pool, mediaConfig });
+  const managedProperties = managedPropertyController({ pool });
   const storage = mediaStorageController({ pool, mediaConfig });
   const imageUploadRateLimit = rateLimit({
     limit: 30,
@@ -39,6 +42,12 @@ export function apiRouter({ pool, logger, mediaConfig }) {
   );
   router.get('/amenities/', publicProperties.amenities);
   router.get('/property-types/', publicProperties.propertyTypes);
+  router.get(
+    '/management/properties/',
+    authenticate({ pool }),
+    validateRequest(managedPropertyQuerySchema, 'query'),
+    managedProperties.list,
+  );
   router.get(
     '/properties/',
     validateRequest(publicPropertyQuerySchema, 'query'),

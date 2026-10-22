@@ -122,6 +122,8 @@ const publicationMessage: Record<ManagedProperty['publication_status'], MessageK
   published: 'publicationPublished',
   rejected: 'publicationRejected',
   suspended: 'publicationSuspended',
+  expired: 'publicationExpired',
+  withdrawn: 'publicationWithdrawn',
 };
 
 export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPageProps) {

@@ -30,6 +30,8 @@ const publicationMessage: Record<PublicationStatus, MessageKey> = {
   published: 'publicationPublished',
   rejected: 'publicationRejected',
   suspended: 'publicationSuspended',
+  expired: 'publicationExpired',
+  withdrawn: 'publicationWithdrawn',
 };
 
 function propertyStatusMessage(status: ManagedProperty['status']): MessageKey {
@@ -79,7 +81,8 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
         : undefined,
       publication_status: rawPublicationStatus === 'draft' || rawPublicationStatus === 'pending_review'
         || rawPublicationStatus === 'published' || rawPublicationStatus === 'rejected'
-        || rawPublicationStatus === 'suspended'
+        || rawPublicationStatus === 'suspended' || rawPublicationStatus === 'expired'
+        || rawPublicationStatus === 'withdrawn'
         ? rawPublicationStatus
         : undefined,
       page,
@@ -227,6 +230,8 @@ export function OwnerListingsPage({ locale, text }: OwnerListingsPageProps) {
             <option value="published">{text('publicationPublished')}</option>
             <option value="rejected">{text('publicationRejected')}</option>
             <option value="suspended">{text('publicationSuspended')}</option>
+            <option value="expired">{text('publicationExpired')}</option>
+            <option value="withdrawn">{text('publicationWithdrawn')}</option>
           </select>
         </label>
         <button className="button button-outline" type="submit">{text('applyFilters')}</button>

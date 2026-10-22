@@ -1879,6 +1879,11 @@ img { display: block; max-width: 100%; }
   }
   .app-shell:has(.hero-section) .home-search-section .search-field > label,
   .app-shell:has(.hero-section) .home-search-section .search-field > span { font-size: 18.4px; }
+  .app-shell:has(.hero-section) .mobile-header-actions .menu-toggle,
+  .app-shell:has(.hero-section) .mobile-header-actions .mobile-account-link {
+    padding: 0;
+    border: 0;
+  }
 }
 
 @media (max-width: 980px) {
@@ -1895,4 +1900,20 @@ img { display: block; max-width: 100%; }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) { font-size: 28.08px; }
   .app-shell:has(.hero-section) .home-search-section .search-field > label,
   .app-shell:has(.hero-section) .home-search-section .search-field > span { font-size: 18.4px; }
+}
+
+@media (max-width: 740px) {
+  .app-shell:has(.hero-section) .site-header .brand-copy strong { font-size: 15.42px; }
+  .app-shell:has(.hero-section) .hero-copy h1 { font-size: 48.4704px; }
+  .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) { font-size: 23.868px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 34px; height: 34px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 13.6px; height: 13.6px; }
+  .app-shell:has(.hero-section) .mobile-header-actions .mobile-account-link {
+    width: 35.7px;
+    height: 35.7px;
+  }
+  .app-shell:has(.hero-section) .mobile-header-actions .mobile-account-link svg {
+    width: 17.85px;
+    height: 17.85px;
+  }
 }

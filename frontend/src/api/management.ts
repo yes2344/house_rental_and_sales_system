@@ -6,7 +6,8 @@ export type ManagedPropertyType =
   | 'house' | 'villa' | 'apartment' | 'condominium' | 'land'
   | 'office' | 'shop' | 'warehouse' | 'commercial' | 'other';
 export type ManagedPropertyStatus = 'available' | 'rented' | 'sold' | 'inactive';
-export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended';
+export type PublicationStatus =
+  | 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended' | 'expired' | 'withdrawn';
 export type ManagedAreaUnit = 'sqm' | 'sqft' | '';
 export type ManagedRentalFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
 export type ViewingRequestStatus =

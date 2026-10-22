@@ -56,7 +56,8 @@ production parity has been approved.
 | `viewing-requests/mine/<int:pk>/` | `GET /api/v1/viewing-requests/mine/:pk/` | Pending |
 | `viewing-requests/mine/<int:pk>/respond/` | `POST /api/v1/viewing-requests/mine/:pk/respond/` | Pending |
 | `viewing-requests/mine/<int:pk>/cancel/` | `POST /api/v1/viewing-requests/mine/:pk/cancel/` | Pending |
-| `management/properties/` | `GET, POST /api/v1/management/properties/` | Pending |
+| `management/properties/` | `GET /api/v1/management/properties/` | Implemented; listing and authorization tested |
+| `management/properties/` | `POST /api/v1/management/properties/` | Pending |
 | `management/properties/bulk-delete/` | `POST /api/v1/management/properties/bulk-delete/` | Pending |
 | `management/homepage-notes/` | `GET, POST /api/v1/management/homepage-notes/` | Pending |
 | `management/homepage-notes/<int:pk>/` | `GET, PATCH, DELETE /api/v1/management/homepage-notes/:pk/` | Pending |
