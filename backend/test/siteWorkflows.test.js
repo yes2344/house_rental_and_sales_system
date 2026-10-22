@@ -362,8 +362,12 @@ test('homepage notes and brokerage contact expose only their public serializer f
   const notes = await listHomepageNotes(pool, request);
   const contact = await getBrokerageContact(pool, request);
 
-  assert.equal(notes[0].image, 'https://homes.example.test/media/notes/update.jpg');
-  assert.equal(notes[0].id, 4);
+  assert.deepEqual(Object.keys(notes), ['count', 'next', 'previous', 'results']);
+  assert.equal(notes.count, 1);
+  assert.equal(notes.next, null);
+  assert.equal(notes.previous, null);
+  assert.equal(notes.results[0].image, 'https://homes.example.test/media/notes/update.jpg');
+  assert.equal(notes.results[0].id, 4);
   assert.equal(contact.site_name, 'Infinity House');
   assert.equal(contact.homepage_hero_image, 'https://homes.example.test/media/site-branding/hero.webp');
   assert.deepEqual(contact.social_links, [{

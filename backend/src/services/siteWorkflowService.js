@@ -165,11 +165,16 @@ export async function listHomepageNotes(pool, request) {
      WHERE is_published = TRUE
      ORDER BY display_order, created_at DESC`,
   );
-  return result.rows.map((row) => ({
-    ...row,
-    id: Number(row.id),
-    image: absoluteUrl(request, row.image),
-  }));
+  return {
+    count: result.rowCount,
+    next: null,
+    previous: null,
+    results: result.rows.map((row) => ({
+      ...row,
+      id: Number(row.id),
+      image: absoluteUrl(request, row.image),
+    })),
+  };
 }
 
 export async function getPublicInformationPage(pool, page) {
