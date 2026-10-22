@@ -1,16 +1,24 @@
 # Account email features
 
-> **Email delivery is not implemented in the current Node API.** Password
-> recovery, email verification, and resend endpoints are listed as pending in
-> [`../backend/docs/API_MIGRATION_STATUS.md`](../backend/docs/API_MIGRATION_STATUS.md).
-> The previous Django email configuration and environment variables have been
-> removed; do not configure the old provider settings expecting them to work.
+The Node API supports email verification, verification resend, and password
+reset through SMTP. Configure these values only in the private backend
+environment:
 
-When implementing email in Node, use a provider-supported HTTPS API or a
-verified SMTP service, keep credentials in the private server environment, and
-test provider errors, token expiration, rate limits, and account-enumeration
-behavior. Do not return a success response when delivery fails.
+| Variable | Purpose |
+| --- | --- |
+| `SMTP_HOST` | Provider SMTP hostname. |
+| `SMTP_PORT` | SMTP port; defaults to 587. |
+| `SMTP_SECURE` | `true` for direct TLS (commonly port 465); otherwise STARTTLS is used where supported. |
+| `SMTP_USER`, `SMTP_PASS` | Provider credentials. |
+| `EMAIL_FROM` | Verified sender address. |
+| `FRONTEND_URL` | Exact HTTPS frontend origin for verification/reset links. |
 
-The frontend still contains password recovery and verification screens, but
-they cannot complete their API requests until the corresponding Node routes
-and email service are implemented and tested.
+Provider failures return an error rather than a success-shaped response, and
+the issued one-time token is removed if delivery fails. Email addresses that
+do not match an eligible account receive the same API response as matching
+addresses. Tokens are stored as digests in PostgreSQL.
+
+`npm run check:deployment` validates that SMTP configuration is present and
+well-formed but does not send a message. Verify SMTP TLS, sender/domain
+authorization, delivery, and spam handling in staging before enabling these
+flows. Never put SMTP credentials in the frontend build or source control.

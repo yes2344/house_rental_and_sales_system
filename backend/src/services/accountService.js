@@ -183,6 +183,351 @@ export async function register(pool, data) {
   });
 }
 
+function accountUid(userId) {
+  return Buffer.from(String(userId), 'utf8').toString('base64url');
+}
+
+function userIdFromUid(uid) {
+  try {
+    const decoded = Buffer.from(uid, 'base64url').toString('utf8');
+    if (!/^[1-9]\d*$/.test(decoded) || accountUid(decoded) !== uid) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function invalidToken(message) {
+  return new ApiError(400, message);
+}
+
+function validatePasswordForAccount(password, account) {
+  const candidate = password.toLocaleLowerCase();
+  const identifiers = [
+    account.username,
+    account.email?.split('@')[0],
+  ].filter((value) => typeof value === 'string' && value.length >= 3);
+  if (/^\d+$/.test(password)) {
+    throw new ApiError(400, 'Request validation failed.', {
+      password: ['The password cannot be entirely numeric.'],
+    });
+  }
+  if (identifiers.some((value) => candidate.includes(value.toLocaleLowerCase()))) {
+    throw new ApiError(400, 'Request validation failed.', {
+      password: ['The password is too similar to account information.'],
+    });
+  }
+}
+
+export async function requestAccountEmail(pool, email, purpose, sendEmail) {
+  if (typeof sendEmail !== 'function') {
+    throw new ApiError(503, 'Email delivery is not configured.');
+  }
+
+  const message = await withTransaction(pool, async (client) => {
+    const result = purpose === 'verification'
+      ? await client.query(
+        `SELECT account.id, account.email
+         FROM auth_user AS account
+         JOIN accounts_profile AS profile ON profile.user_id = account.id
+         WHERE lower(account.email) = lower($1)
+           AND account.is_active = FALSE
+           AND account.is_staff = FALSE
+           AND account.is_superuser = FALSE
+           AND profile.role = 'customer'
+           AND EXISTS (
+             SELECT 1 FROM accounts_emailverificationtoken AS existing
+             WHERE existing.user_id = account.id
+           )
+         ORDER BY account.id LIMIT 1`,
+        [email],
+      )
+      : await client.query(
+        `SELECT id, email FROM auth_user
+         WHERE lower(email) = lower($1) AND is_active = TRUE
+         ORDER BY id LIMIT 1`,
+        [email],
+      );
+    const account = result.rows[0];
+    if (!account) return { to: email, purpose, uid: null, token: null, digest: null };
+
+    const token = randomBytes(32).toString('base64url');
+    const digest = createHash('sha256').update(token, 'utf8').digest('hex');
+    await client.query(
+      'DELETE FROM accounts_emailverificationtoken WHERE user_id = $1',
+      [account.id],
+    );
+    await client.query(
+      `INSERT INTO accounts_emailverificationtoken
+         (user_id, email, token_digest, created_at, expires_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP,
+               CURRENT_TIMESTAMP + $4::interval)`,
+      [
+        account.id,
+        account.email,
+        digest,
+        purpose === 'verification' ? '1 day' : '1 hour',
+      ],
+    );
+    return {
+      to: email,
+      purpose,
+      uid: accountUid(account.id),
+      token,
+      digest,
+    };
+  });
+
+  try {
+    await sendEmail({
+      to: message.to,
+      purpose: message.purpose,
+      uid: message.uid,
+      token: message.token,
+    });
+  } catch {
+    if (message.digest) {
+      await pool.query(
+        'DELETE FROM accounts_emailverificationtoken WHERE token_digest = $1',
+        [message.digest],
+      );
+    }
+    throw new ApiError(503, 'Email delivery is temporarily unavailable.');
+  }
+}
+
+export async function verifyAccountEmail(pool, uid, token) {
+  const userId = userIdFromUid(uid);
+  if (!userId) throw invalidToken('This verification link is invalid or expired.');
+  const digest = createHash('sha256').update(token, 'utf8').digest('hex');
+
+  return withTransaction(pool, async (client) => {
+    const user = await client.query(
+      `SELECT account.id, account.is_active, account.is_staff, account.is_superuser,
+              account.email, profile.role
+       FROM auth_user AS account
+       JOIN accounts_profile AS profile ON profile.user_id = account.id
+       WHERE account.id = $1 FOR UPDATE OF account, profile`,
+      [userId],
+    );
+    const row = user.rows[0];
+    if (!row || row.is_active || row.is_staff || row.is_superuser || row.role !== 'customer') {
+      throw invalidToken('This verification link is invalid or expired.');
+    }
+    const matching = await client.query(
+      `SELECT id FROM accounts_emailverificationtoken
+       WHERE user_id = $1 AND email = $2 AND token_digest = $3
+         AND expires_at > CURRENT_TIMESTAMP
+       FOR UPDATE`,
+      [row.id, row.email, digest],
+    );
+    if (!matching.rowCount) throw invalidToken('This verification link is invalid or expired.');
+
+    await client.query('UPDATE auth_user SET is_active = TRUE WHERE id = $1', [row.id]);
+    await client.query(
+      'DELETE FROM accounts_emailverificationtoken WHERE user_id = $1',
+      [row.id],
+    );
+    return { detail: 'Your email address is verified. You can now sign in.' };
+  });
+}
+
+export async function confirmPasswordReset(pool, uid, token, password) {
+  const userId = userIdFromUid(uid);
+  if (!userId) throw invalidToken('This password reset link is invalid or expired.');
+  const digest = createHash('sha256').update(token, 'utf8').digest('hex');
+
+  return withTransaction(pool, async (client) => {
+    const user = await client.query(
+      'SELECT id, email, username, is_active FROM auth_user WHERE id = $1 FOR UPDATE',
+      [userId],
+    );
+    const row = user.rows[0];
+    if (!row || !row.is_active) {
+      throw invalidToken('This password reset link is invalid or expired.');
+    }
+    const matching = await client.query(
+      `SELECT id FROM accounts_emailverificationtoken
+       WHERE user_id = $1 AND email = $2 AND token_digest = $3
+         AND expires_at > CURRENT_TIMESTAMP
+       FOR UPDATE`,
+      [row.id, row.email, digest],
+    );
+    if (!matching.rowCount) throw invalidToken('This password reset link is invalid or expired.');
+
+    validatePasswordForAccount(password, row);
+    const encodedPassword = await hashPassword(password);
+    await client.query('UPDATE auth_user SET password = $2 WHERE id = $1', [row.id, encodedPassword]);
+    await client.query(
+      `UPDATE accounts_tabsessiontoken SET revoked_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND revoked_at IS NULL`,
+      [row.id],
+    );
+    await client.query(
+      'DELETE FROM accounts_emailverificationtoken WHERE user_id = $1',
+      [row.id],
+    );
+    return { detail: 'Your password has been changed. You can now sign in.' };
+  });
+}
+
+export async function acceptDelegatedInvitation(pool, token, password) {
+  const digest = createHash('sha256').update(token, 'utf8').digest('hex');
+
+  return withTransaction(pool, async (client) => {
+    const invitation = await client.query(
+      `SELECT invitation.id, invitation.user_id, profile.role,
+              account.username, account.email
+       FROM accounts_delegatedaccountinvitation AS invitation
+       JOIN auth_user AS account ON account.id = invitation.user_id
+       JOIN accounts_profile AS profile ON profile.user_id = account.id
+       WHERE invitation.token_digest = $1
+         AND invitation.accepted_at IS NULL
+         AND invitation.expires_at > CURRENT_TIMESTAMP
+         AND account.is_active = FALSE
+       FOR UPDATE OF invitation, account, profile`,
+      [digest],
+    );
+    const row = invitation.rows[0];
+    if (!row) {
+      throw invalidToken('This invitation is invalid, expired, or already used.');
+    }
+
+    validatePasswordForAccount(password, row);
+    const encodedPassword = await hashPassword(password);
+    await client.query(
+      `UPDATE auth_user SET password = $2, is_active = TRUE WHERE id = $1`,
+      [row.user_id, encodedPassword],
+    );
+    if (row.role === 'agent') {
+      await client.query(
+        `UPDATE accounts_profile
+         SET agent_approved = FALSE, agent_onboarding_required = TRUE,
+             agent_password_changed = TRUE, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1`,
+        [row.user_id],
+      );
+    }
+    await client.query(
+      `UPDATE accounts_delegatedaccountinvitation
+       SET accepted_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [row.id],
+    );
+    return getAccount(client, row.user_id);
+  });
+}
+
+async function lockAgentOnboardingProfile(client, userId) {
+  const result = await client.query(
+    `SELECT role, agent_onboarding_required, agent_password_changed, assigned_city_id
+     FROM accounts_profile WHERE user_id = $1 FOR UPDATE`,
+    [userId],
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentOnboardingPassword(pool, userId, sessionId, data) {
+  return withTransaction(pool, async (client) => {
+    const user = await client.query(
+      'SELECT id, username, email FROM auth_user WHERE id = $1 FOR UPDATE',
+      [userId],
+    );
+    const profile = await lockAgentOnboardingProfile(client, userId);
+    if (
+      !user.rowCount || !profile || profile.role !== 'agent'
+      || !profile.agent_onboarding_required || profile.agent_password_changed
+    ) {
+      throw invalidToken('This account is not waiting for its initial password change.');
+    }
+
+    validatePasswordForAccount(data.new_password, {
+      username: data.username || user.rows[0].username,
+      email: user.rows[0].email,
+    });
+
+    if (data.username) {
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended(lower($1), 0))',
+        [data.username],
+      );
+      const duplicate = await client.query(
+        'SELECT 1 FROM auth_user WHERE lower(username) = lower($1) AND id <> $2 LIMIT 1',
+        [data.username, userId],
+      );
+      if (duplicate.rowCount) {
+        throw new ApiError(400, 'Request validation failed.', {
+          username: ['A user with this username already exists.'],
+        });
+      }
+    }
+
+    const encodedPassword = await hashPassword(data.new_password);
+    await client.query(
+      'UPDATE auth_user SET username = COALESCE($2, username), password = $3 WHERE id = $1',
+      [userId, data.username || null, encodedPassword],
+    );
+    await client.query(
+      `UPDATE accounts_profile SET agent_password_changed = TRUE, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1`,
+      [userId],
+    );
+    await client.query(
+      `UPDATE accounts_tabsessiontoken SET revoked_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND revoked_at IS NULL AND id <> $2`,
+      [userId, sessionId],
+    );
+    return getAccount(client, userId);
+  });
+}
+
+export async function updateAgentOnboardingProfile(pool, userId, data) {
+  return withTransaction(pool, async (client) => {
+    const user = await client.query(
+      'SELECT id FROM auth_user WHERE id = $1 FOR UPDATE',
+      [userId],
+    );
+    const profile = await lockAgentOnboardingProfile(client, userId);
+    if (
+      !user.rowCount || !profile || profile.role !== 'agent'
+      || !profile.agent_onboarding_required || !profile.agent_password_changed
+    ) {
+      throw invalidToken('Change the initial password before completing your agent profile.');
+    }
+    if (profile.assigned_city_id === null) {
+      throw new ApiError(400, 'Contact an administrator to assign your city before completing agent setup.');
+    }
+
+    await client.query(
+      'SELECT pg_advisory_xact_lock(hashtextextended(lower($1), 0))',
+      [data.email],
+    );
+    const duplicate = await client.query(
+      'SELECT 1 FROM auth_user WHERE lower(email) = lower($1) AND id <> $2 LIMIT 1',
+      [data.email, userId],
+    );
+    if (duplicate.rowCount) {
+      throw new ApiError(400, 'Request validation failed.', {
+        email: ['A user with this email already exists.'],
+      });
+    }
+
+    await client.query(
+      `UPDATE auth_user SET first_name = $2, last_name = $3, email = $4
+       WHERE id = $1`,
+      [userId, data.first_name, data.last_name, data.email],
+    );
+    await client.query(
+      `UPDATE accounts_profile
+       SET phone = $2, agent_onboarding_required = FALSE, agent_approved = TRUE,
+           management_permissions = '["properties.manage_assigned","viewings.manage_assigned","locations.manage_subcities"]'::jsonb,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1`,
+      [userId, data.phone],
+    );
+    return getAccount(client, userId);
+  });
+}
+
 export async function getAuthenticatedAccount(pool, userId) {
   return getAccount(pool, userId);
 }

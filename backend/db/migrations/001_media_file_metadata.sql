@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE TABLE public.backend_media_file_metadata (
     property_image_id bigint PRIMARY KEY
         REFERENCES public.user_propertyimage(id) ON DELETE CASCADE,
@@ -11,5 +9,3 @@ CREATE TABLE public.backend_media_file_metadata (
     height integer NOT NULL CHECK (height > 0),
     uploaded_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-COMMIT;

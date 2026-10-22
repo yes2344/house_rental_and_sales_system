@@ -19,8 +19,12 @@ import { requireAdministrator } from '../middleware/requireAdministrator.js';
 import { mediaStorageController } from '../controllers/mediaStorageController.js';
 import { managedPropertyController } from '../controllers/managedPropertyController.js';
 import { managedPropertyQuerySchema } from '../validators/managedProperties.js';
+import { accountExtensionsRouter } from './accountExtensions.js';
+import { adminManagementWorkflowsRouter } from './adminManagementWorkflows.js';
+import { ownerViewingWorkflowsRouter } from './ownerViewingWorkflows.js';
+import { siteWorkflowsRouter } from './siteWorkflows.js';
 
-export function apiRouter({ pool, logger, mediaConfig }) {
+export function apiRouter({ pool, logger, mediaConfig, sendEmail }) {
   const router = Router();
   const accounts = accountController({ pool });
   const publicProperties = publicPropertyController({ pool });
@@ -85,6 +89,7 @@ export function apiRouter({ pool, logger, mediaConfig }) {
     );
   router.post('/auth/preferences/reset/', authenticate({ pool }), accounts.resetPreferences);
   router.get('/auth/activity/', authenticate({ pool }), accounts.activity);
+  router.use(accountExtensionsRouter({ pool, sendEmail }));
   router.route('/management/properties/:propertyId/images/')
     .get(authenticate({ pool }), images.listManaged)
     .post(
@@ -127,5 +132,8 @@ export function apiRouter({ pool, logger, mediaConfig }) {
     authenticate({ pool }),
     images.original,
   );
+  router.use(siteWorkflowsRouter({ pool }));
+  router.use(ownerViewingWorkflowsRouter({ pool }));
+  router.use(adminManagementWorkflowsRouter({ pool, mediaConfig, logger }));
   return router;
 }

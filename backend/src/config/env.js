@@ -26,9 +26,12 @@ function sslConfig() {
   return { rejectUnauthorized: process.env.PGSSL_REJECT_UNAUTHORIZED !== 'false' };
 }
 
-export function getDatabaseConfig() {
-  if (process.env.DATABASE_URL?.trim()) {
-    const config = { connectionString: process.env.DATABASE_URL.trim() };
+export function getDatabaseConfig({ migration = false } = {}) {
+  const configuredUrl = migration
+    ? process.env.MIGRATION_DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim()
+    : process.env.DATABASE_URL?.trim();
+  if (configuredUrl) {
+    const config = { connectionString: configuredUrl };
     if (process.env.PGSSL === 'true') config.ssl = sslConfig();
     return config;
   }

@@ -5,6 +5,12 @@ frontend in `frontend/`. The Django/Python application has been removed.
 HahuCloud must provide a supported Node.js application runtime, PostgreSQL
 connectivity, and persistent writable storage before this project can run
 there. These provider capabilities have not been verified from this workspace.
+The intended existing HahuCloud database was reported as PostgreSQL 13.12.
+PostgreSQL 13 reached upstream end-of-life on November 13, 2025. The deployment
+preflight will block that version; arrange a provider-supported PostgreSQL
+upgrade (15 or newer) before production. A major-version upgrade must follow
+HahuCloud's documented procedure and a verified backup/restore plan.
+See the upstream [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/).
 
 ## Check with HahuCloud first
 
@@ -39,25 +45,61 @@ never publish credentials in the frontend document root:
 | `MEDIA_ROOT` | Absolute persistent path for public property images. |
 | `PRIVATE_MEDIA_ROOT` | Separate absolute persistent path for private originals. |
 | `MEDIA_CAPACITY_BYTES` | Optional, provider-confirmed media allocation used for warnings. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | SMTP host, port (587 by default), and direct-TLS setting. |
+| `SMTP_USER`, `SMTP_PASS` | Private SMTP credentials. |
+| `EMAIL_FROM` | Verified sender address. |
+| `FRONTEND_URL` | Exact HTTPS frontend origin used to create email links. |
 
 Production startup requires `MEDIA_ROOT` and `PRIVATE_MEDIA_ROOT`; the paths
 must be separate, writable, outside the application release directory, and
-persistent across restarts and deployments. Never expose the private media
-directory through a static web server.
+persistent across restarts and deployments. `npm run check:deployment`
+validates the local path properties but cannot confirm provider persistence.
+Never expose the private media directory through a static web server.
 
 The health endpoint is `GET /api/v1/health/`. It returns an error if PostgreSQL
 cannot be reached. Test it after the host starts the process.
 
-## PostgreSQL readiness is a deployment blocker
+## Existing PostgreSQL database readiness
 
-The Node API currently queries the existing PostgreSQL table layout described
-in [`backend/docs/POSTGRESQL_CATALOG_SNAPSHOT.md`](backend/docs/POSTGRESQL_CATALOG_SNAPSHOT.md).
-This repository does not yet include a complete schema-creation migration for
-a new empty PostgreSQL database. Its checked-in SQL migration only adds media
-metadata, and that migration has not been applied. Do not point the API at an
-empty database and assume it will initialize itself. Confirm the approved
-database, schema, required grants, and migration plan; take and verify backups
-before any schema or data change. Never use a superuser account for the app.
+The deployment target is an existing database, not a new empty database. The
+Node API expects the prior application's PostgreSQL schema and does not
+initialize it. The catalog snapshot in
+[`backend/docs/POSTGRESQL_CATALOG_SNAPSHOT.md`](backend/docs/POSTGRESQL_CATALOG_SNAPSHOT.md)
+is from a different, local PostgreSQL 18.6 candidate; it is not evidence about
+the HahuCloud database. Compare the actual target schema and grants before
+deployment.
+
+Run the read-only database and media preflight from the backend after setting
+the private production environment:
+
+```powershell
+Set-Location backend
+npm ci
+$env:NODE_ENV = 'production'
+npm run check:deployment
+```
+
+The check verifies PostgreSQL reachability/version, a non-superuser application
+role with the required core table privileges, required existing tables,
+complete SMTP configuration, and that the separate public/private media
+directories exist, are writable, and are outside the release directory. It
+does not change the database, send mail, or prove that provider volumes survive
+a restart; confirm persistence with HahuCloud and a staging restart test.
+
+The additive `001_media_file_metadata.sql` migration depends on the existing
+`user_propertyimage` table and creates `backend_media_file_metadata`. It is not
+applied automatically. Before applying it, compare the target catalog, back up
+the database, restore-test that backup on the same PostgreSQL major version,
+and run the migration against the isolated restore first. Review the migration
+plan and use a dedicated non-superuser schema-migration role. From `backend/`,
+`npm run migrate` performs a no-DDL preflight; only `npm run migrate -- --apply`
+applies the versioned, checksummed migration. Configure the dedicated role with
+`MIGRATION_DATABASE_URL` only for this controlled step; it needs `CREATE` on
+`public` and `REFERENCES` on `public.user_propertyimage`. Set
+`APPLICATION_DATABASE_ROLE` if the migration should grant that non-superuser
+app role access to the new metadata table. The web process never runs
+migrations automatically. Never use a superuser account for the app or
+migration.
 
 The PostgreSQL snapshot and earlier local inspection are not proof that any
 particular HahuCloud database is authoritative or compatible. No database,
@@ -88,9 +130,10 @@ or backend source files to the public document root.
 
 ## Feature coverage
 
-Removing Django also removes routes that Node has not implemented yet. The
-frontend still contains features that call those routes; they will return 404
-until equivalent Node handlers and PostgreSQL tests are added. Check
+Node handlers now cover the documented legacy API paths and methods. Backend
+tests exercise the workflows with mocked PostgreSQL; they do not certify
+compatibility with the HahuCloud schema or production data. Review
 [`backend/docs/API_MIGRATION_STATUS.md`](backend/docs/API_MIGRATION_STATUS.md)
-before enabling the site for users. Do not treat a successful health check or
-frontend build as full application readiness.
+and complete the PostgreSQL upgrade/schema preflight, SMTP verification, and
+persistent-media restart test before enabling the site for users. A successful
+health check or frontend build alone is not full application readiness.

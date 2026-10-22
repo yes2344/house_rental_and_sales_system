@@ -4,9 +4,16 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { notFound } from './middleware/notFound.js';
 import { apiRouter } from './routes/index.js';
 import { getMediaConfig } from './config/media.js';
+import { createEmailSender } from './services/emailService.js';
 
-export function createApp({ pool, logger = console, mediaConfig = getMediaConfig() }) {
+export function createApp({
+  pool,
+  logger = console,
+  mediaConfig = getMediaConfig(),
+  sendEmail,
+}) {
   const app = express();
+  const emailSender = sendEmail ?? createEmailSender({ logger });
 
   app.disable('x-powered-by');
   app.use((request, response, next) => {
@@ -32,7 +39,7 @@ export function createApp({ pool, logger = console, mediaConfig = getMediaConfig
     },
   }));
   app.use(express.json({ limit: '1mb' }));
-  app.use('/api/v1', apiRouter({ pool, logger, mediaConfig }));
+  app.use('/api/v1', apiRouter({ pool, logger, mediaConfig, sendEmail: emailSender }));
   app.use(notFound);
   app.use(errorHandler({ logger }));
 

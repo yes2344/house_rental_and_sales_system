@@ -63,3 +63,41 @@ export const preferencesSchema = z.object({
 }).strict().refine((data) => Object.keys(data).length > 0, {
   message: 'At least one preference is required.',
 });
+
+export const emailAddressSchema = z.object({
+  email: z.string().trim().email().max(254),
+}).strict();
+
+export const emailVerificationSchema = z.object({
+  uid: z.string().min(1).max(64),
+  token: z.string().min(20).max(256),
+}).strict();
+
+export const passwordResetConfirmSchema = z.object({
+  uid: z.string().min(1).max(64),
+  token: z.string().min(20).max(256),
+  password: passwordSchema,
+  password_confirmation: passwordSchema,
+}).strict().refine((data) => data.password === data.password_confirmation, {
+  path: ['password_confirmation'],
+  message: 'Passwords do not match.',
+});
+
+export const invitationAcceptSchema = z.object({
+  token: z.string().min(20).max(256),
+  password: passwordSchema,
+}).strict();
+
+export const agentOnboardingPasswordSchema = z.object({
+  username: z.string().trim().max(150)
+    .refine((value) => !value || /^[\p{L}\p{N}_@.+-]+$/u.test(value), 'Enter a valid username.')
+    .optional(),
+  new_password: passwordSchema,
+}).strict();
+
+export const agentOnboardingProfileSchema = z.object({
+  first_name: z.string().min(1).max(150),
+  last_name: z.string().min(1).max(150),
+  email: z.string().trim().email().max(254),
+  phone: z.string().min(1).max(50),
+}).strict();

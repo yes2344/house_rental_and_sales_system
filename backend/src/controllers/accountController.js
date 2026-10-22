@@ -1,12 +1,18 @@
 import {
   accountActivity,
+  acceptDelegatedInvitation,
+  confirmPasswordReset,
   getAuthenticatedAccount,
   getPreferences,
   login,
   register,
+  requestAccountEmail,
   revokeSession,
   updateAccount,
+  updateAgentOnboardingPassword,
+  updateAgentOnboardingProfile,
   updatePreferences,
+  verifyAccountEmail,
 } from '../services/accountService.js';
 import { createCsrfToken, csrfTokenController } from '../middleware/csrf.js';
 
@@ -54,6 +60,57 @@ export function accountController({ pool }) {
     },
     activity: async (request, response) => {
       response.json(await accountActivity(pool, request.userId));
+    },
+  };
+}
+
+export function accountExtensionsController({ pool, sendEmail }) {
+  if (typeof sendEmail !== 'function') {
+    throw new Error('Configure sendEmail({ to, purpose, uid, token }) before mounting account extensions.');
+  }
+
+  return {
+    resendVerification: async (request, response) => {
+      await requestAccountEmail(pool, request.validated.body.email, 'verification', sendEmail);
+      response.status(202).json({
+        detail: 'If an unverified account matches that email, a verification message will be sent.',
+      });
+    },
+    requestPasswordReset: async (request, response) => {
+      await requestAccountEmail(pool, request.validated.body.email, 'password_reset', sendEmail);
+      response.status(202).json({
+        detail: 'If an account matches that email, password reset instructions will be sent.',
+      });
+    },
+    verifyEmail: async (request, response) => {
+      response.json(await verifyAccountEmail(
+        pool,
+        request.validated.body.uid,
+        request.validated.body.token,
+      ));
+    },
+    confirmPasswordReset: async (request, response) => {
+      const { uid, token, password } = request.validated.body;
+      response.json(await confirmPasswordReset(pool, uid, token, password));
+    },
+    acceptInvitation: async (request, response) => {
+      const { token, password } = request.validated.body;
+      response.json(await acceptDelegatedInvitation(pool, token, password));
+    },
+    agentOnboardingPassword: async (request, response) => {
+      response.json(await updateAgentOnboardingPassword(
+        pool,
+        request.userId,
+        request.auth.session_id,
+        request.validated.body,
+      ));
+    },
+    agentOnboardingProfile: async (request, response) => {
+      response.json(await updateAgentOnboardingProfile(
+        pool,
+        request.userId,
+        request.validated.body,
+      ));
     },
   };
 }
