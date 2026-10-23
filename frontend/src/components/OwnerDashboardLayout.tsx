@@ -42,7 +42,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
         {(canManageSubcities || canManageCities) && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
         {canManageAgents && <NavLink to="/management/agents">{text('managerAgentAccounts')}</NavLink>}
         {canManageBranding && <NavLink to="/management/branding">{text('siteBrandingTitle')}</NavLink>}
-        {canManageBranding && <NavLink to="/management/public-pages">{text('publicPagesManagementTitle')}</NavLink>}
+        {(canManageBranding || canManageSettings) && <NavLink to="/management/public-pages">{text('publicPagesManagementTitle')}</NavLink>}
         {canManageSettings && <NavLink to="/management/brokerage">{text('brokerageSettingsTitle')}</NavLink>}
       </nav>
       <Outlet />

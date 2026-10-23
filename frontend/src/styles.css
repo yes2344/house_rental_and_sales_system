@@ -1559,9 +1559,9 @@ img { display: block; max-width: 100%; }
 .homepage-note-row .manager-badge { display: inline-flex; }
 .public-page-editor-fields .manager-field:nth-child(n + 3) { grid-column: 1 / -1; }
 .floating-contact-links { position: fixed; z-index: 18; top: 50%; right: 20px; display: grid; gap: 12px; transform: translateY(-50%); }
-.floating-contact-link { width: 55px; height: 55px; display: grid; place-items: center; border: 1.5px solid #fff; border-radius: 50%; box-shadow: 0 5px 18px rgb(12 38 62 / 25%); color: #fff; transition: transform .18s ease, box-shadow .18s ease; }
+.floating-contact-link { width: 82.5px; height: 82.5px; display: grid; place-items: center; border: 1.5px solid #fff; border-radius: 50%; box-shadow: 0 5px 18px rgb(12 38 62 / 25%); color: #fff; transition: transform .18s ease, box-shadow .18s ease; }
 .floating-contact-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgb(12 38 62 / 30%); }
-.floating-contact-link svg { width: 22px; height: 22px; }
+.floating-contact-link svg { width: 33px; height: 33px; }
 .floating-contact-phone { background: #e53935; }
 .floating-contact-whatsapp { background: #25d366; }
 .floating-contact-telegram { background: #1686c9; }
@@ -1581,7 +1581,7 @@ img { display: block; max-width: 100%; }
 
 @media (max-width: 740px) {
   .floating-contact-links { right: 12px; gap: 8px; }
-  .floating-contact-link { width: 42.625px; height: 42.625px; }
+  .floating-contact-link { width: 63.94px; height: 63.94px; }
   .homepage-notes-section { padding: 24px 0; }
   .homepage-note-card { padding: 14px; }
   .homepage-note-row { flex-direction: column; }
@@ -1827,7 +1827,7 @@ img { display: block; max-width: 100%; }
       font-size: 35.1px;
       line-height: .92;
     }
-    .app-shell:has(.hero-section) .floating-contact-link { width: 47.85px; height: 47.85px; }
+    .app-shell:has(.hero-section) .floating-contact-link { width: 71.78px; height: 71.78px; }
     .app-shell:has(.hero-section) .home-search-section .listing-type-toggle button {
       font-size: clamp(15px, 3vw, 19px);
     }
@@ -1836,8 +1836,8 @@ img { display: block; max-width: 100%; }
     .app-shell:has(.hero-section) .home-search-section .search-submit { font-size: 26px; }
   }
 
-  .app-shell:has(.hero-section) .floating-contact-link { width: 55px; height: 55px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 22px; height: 22px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 82.5px; height: 82.5px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 33px; height: 33px; }
   .login-page .auth-card h1 { font-size: 25px; }
 
   @media (max-width: 980px) {
@@ -1857,8 +1857,8 @@ img { display: block; max-width: 100%; }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
     font-size: clamp(1.04rem, 3.24vw, 1.76rem);
   }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 44px; height: 44px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 17.6px; height: 17.6px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 66px; height: 66px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 26.4px; height: 26.4px; }
   .app-shell:has(.hero-section) .home-search-section .search-field select,
   .app-shell:has(.hero-section) .home-search-section .search-field select option {
     font-size: 33.6px;
@@ -1875,8 +1875,8 @@ img { display: block; max-width: 100%; }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) {
     font-size: clamp(1.4625rem, 4.55625vw, 2.475rem);
   }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 44px; height: 44px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 17.6px; height: 17.6px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 66px; height: 66px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 26.4px; height: 26.4px; }
   .app-shell:has(.hero-section) .home-search-section .search-field select,
   .app-shell:has(.hero-section) .home-search-section .search-field select option {
     font-size: 33.6px;
@@ -1910,8 +1910,8 @@ img { display: block; max-width: 100%; }
   .app-shell:has(.hero-section) .site-header .brand-copy strong { font-size: 15.42px; }
   .app-shell:has(.hero-section) .hero-copy h1 { font-size: 48.4704px; }
   .app-shell:has(.hero-section) .hero-copy h1 > span:not(.hero-headline) { font-size: 23.868px; }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 37.4px; height: 37.4px; }
-  .app-shell:has(.hero-section) .floating-contact-link svg { width: 14.96px; height: 14.96px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 56.1px; height: 56.1px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 22.44px; height: 22.44px; }
   .app-shell:has(.hero-section) .mobile-header-actions .mobile-account-link {
     width: 35.7px;
     height: 35.7px;
@@ -1969,40 +1969,36 @@ img { display: block; max-width: 100%; }
   .site-footer .footer-links { gap: 18px 17px; }
 
   .floating-contact-links {
-    top: auto;
+    top: 50%;
     right: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
-    display: flex;
-    max-width: calc(100vw - 24px);
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    bottom: auto;
+    display: grid;
+    max-width: none;
     gap: 8px;
-    transform: none;
+    transform: translateY(-50%);
   }
   .floating-contact-link {
-    width: 68px;
-    height: 68px;
+    width: 102px;
+    height: 102px;
   }
   .floating-contact-link svg {
-    width: 44.88px;
-    height: 44.88px;
+    width: 67.32px;
+    height: 67.32px;
   }
 
   .app-shell:has(.hero-section) .floating-contact-links {
-    top: auto;
+    top: 50%;
     right: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
-    display: flex;
-    max-width: calc(100vw - 24px);
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    bottom: auto;
+    display: grid;
+    max-width: none;
     gap: 8px;
-    transform: none;
+    transform: translateY(-50%);
   }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 68px; height: 68px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 102px; height: 102px; }
   .app-shell:has(.hero-section) .floating-contact-link svg {
-    width: 44.88px;
-    height: 44.88px;
+    width: 67.32px;
+    height: 67.32px;
   }
 }
 
@@ -2019,10 +2015,10 @@ img { display: block; max-width: 100%; }
     transform: none;
   }
   .floating-contact-link svg {
-    width: 35.2px;
-    height: 35.2px;
+    width: 52.8px;
+    height: 52.8px;
   }
-  .floating-contact-link { width: 64px; height: 64px; }
+  .floating-contact-link { width: 96px; height: 96px; }
   .app-shell:has(.hero-section) .floating-contact-links {
     top: auto;
     right: 12px;
@@ -2035,13 +2031,87 @@ img { display: block; max-width: 100%; }
     transform: none;
   }
   .app-shell:has(.hero-section) .floating-contact-link svg {
-    width: 35.2px;
-    height: 35.2px;
+    width: 52.8px;
+    height: 52.8px;
   }
-  .app-shell:has(.hero-section) .floating-contact-link { width: 64px; height: 64px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 96px; height: 96px; }
 }
 
-.floating-contact-email { background: #6047a8; }
 .floating-contact-social { background: var(--green-900); }
 .floating-contact-social.floating-contact-whatsapp { background: #25d366; }
 .floating-contact-social.floating-contact-telegram { background: #1686c9; }
+
+.floating-contact-link { width: 61.875px; height: 61.875px; }
+.floating-contact-link svg { width: 24.75px; height: 24.75px; }
+.site-footer .brand-copy strong { font-size: 40.5px; }
+.site-footer .brand-footer .brand-logo,
+.site-footer .brand-footer .brand-mark { width: 30px; height: 30px; }
+.site-footer .brand-footer .brand-mark svg { width: 21px; height: 21px; }
+.site-footer .footer-brand p { font-size: 28.5px; }
+.site-footer .footer-links h2,
+.site-footer .footer-links a,
+.site-footer .footer-contact h2,
+.site-footer .footer-contact > a,
+.site-footer .footer-socials > span,
+.site-footer .footer-bottom { font-size: 27px; }
+.site-footer .footer-contact > a svg,
+.site-footer .footer-socials svg { width: 11.25px; height: 11.25px; }
+.site-footer .footer-socials a { width: 21.75px; height: 21.75px; }
+.site-footer .footer-contact-error { font-size: 20.25px; }
+.site-footer .footer-bottom > span:not(.footer-developer-credit) { font-size: 27px; }
+.site-footer .footer-developer-credit { font-size: 18px; }
+
+@media (min-width: 741px) and (max-width: 980px) {
+  .site-footer .brand-copy strong { font-size: 20.25px; }
+  .site-footer .footer-brand p { font-size: 14.25px; }
+  .site-footer .footer-links h2,
+  .site-footer .footer-links a,
+  .site-footer .footer-contact h2,
+  .site-footer .footer-contact > a,
+  .site-footer .footer-socials > span,
+  .site-footer .footer-bottom,
+  .site-footer .footer-bottom > span:not(.footer-developer-credit) { font-size: 13.5px; }
+  .site-footer .footer-contact-error { font-size: 10.125px; }
+  .site-footer .footer-developer-credit { font-size: 9px; }
+}
+
+@media (max-width: 740px) {
+  .floating-contact-link { width: 47.955px; height: 47.955px; }
+  .floating-contact-link svg { width: 24.75px; height: 24.75px; }
+  .site-footer .brand-copy strong { font-size: 40.5px; }
+  .site-footer .brand-footer .brand-logo,
+  .site-footer .brand-footer .brand-mark { width: 60px; height: 60px; }
+  .site-footer .brand-footer .brand-mark svg { width: 42px; height: 42px; }
+  .site-footer .footer-brand p { font-size: 28.5px; }
+  .site-footer .footer-links h2,
+  .site-footer .footer-links a,
+  .site-footer .footer-contact h2,
+  .site-footer .footer-contact > a,
+  .site-footer .footer-socials > span,
+  .site-footer .footer-bottom,
+  .site-footer .footer-bottom > span:not(.footer-developer-credit) { font-size: 27px; }
+  .site-footer .footer-developer-credit { font-size: 18px; }
+  .site-footer .footer-contact > a svg,
+  .site-footer .footer-socials svg { width: 22.5px; height: 22.5px; }
+  .site-footer .footer-socials a { width: 43.5px; height: 43.5px; }
+  .site-footer .footer-contact-error { font-size: 40.5px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 76.5px; height: 76.5px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 50.49px; height: 50.49px; }
+}
+
+@media (min-width: 741px) and (max-width: 1024px) {
+  .floating-contact-link { width: 72px; height: 72px; }
+  .floating-contact-link svg { width: 39.6px; height: 39.6px; }
+  .app-shell:has(.hero-section) .floating-contact-link { width: 72px; height: 72px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 39.6px; height: 39.6px; }
+}
+
+@media (min-width: 1025px) and (max-width: 1280px) {
+  .app-shell:has(.hero-section) .floating-contact-link { width: 61.875px; height: 61.875px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 24.75px; height: 24.75px; }
+}
+
+@media (min-width: 1281px) {
+  .app-shell:has(.hero-section) .floating-contact-link { width: 49.5px; height: 49.5px; }
+  .app-shell:has(.hero-section) .floating-contact-link svg { width: 19.8px; height: 19.8px; }
+}

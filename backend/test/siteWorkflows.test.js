@@ -420,6 +420,43 @@ test('homepage notes and brokerage contact expose only their public serializer f
   assert.equal(callCount, 3);
 });
 
+test('brokerage media URLs use HTTPS when TLS terminates at the hosting proxy', async () => {
+  const pool = {
+    async query(text) {
+      if (text.includes('portal_admin_brokeragesettings')) {
+        return {
+          rows: [{
+            site_name: 'Infinity House',
+            footer_copyright: '',
+            site_logo: 'site-branding/logo.webp',
+            homepage_hero_image: 'site-branding/hero.webp',
+            business_name: '',
+            phone: '',
+            email: '',
+          }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  };
+  const request = {
+    protocol: 'http',
+    get: (name) => name === 'x-forwarded-proto' ? 'https' : 'infinityhouseproperty.com',
+  };
+
+  const contact = await getBrokerageContact(pool, request);
+
+  assert.equal(
+    contact.site_logo,
+    'https://infinityhouseproperty.com/media/site-branding/logo.webp',
+  );
+  assert.equal(
+    contact.homepage_hero_image,
+    'https://infinityhouseproperty.com/media/site-branding/hero.webp',
+  );
+});
+
 test('report creation checks public eligibility and persists only parameterized input', async () => {
   const calls = [];
   const pool = {

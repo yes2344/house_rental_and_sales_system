@@ -11,6 +11,7 @@
     "check:deployment": "node scripts/check-deployment-readiness.js",
     "inspect:database": "node scripts/inspect-database.js",
     "migrate": "node scripts/migrate-database.js",
+    "seed:public-pages": "node scripts/seed-public-information-pages.js",
     "bootstrap:platform-owner": "node scripts/bootstrap-platform-owner.js",
     "test": "node --test"
   },

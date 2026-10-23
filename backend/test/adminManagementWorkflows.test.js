@@ -15,6 +15,7 @@ const csrf = 'same-origin-csrf-test-token';
 let server;
 let origin;
 const transactionQueries = [];
+const managedPropertyInsertQueries = [];
 let testAccountRole = 'platform-owner';
 const agentAccount = {
   id: 42,
@@ -47,12 +48,12 @@ const pool = {
           id: 3,
           username: 'workflow-admin',
           is_active: true,
-          is_staff: testAccountRole !== 'agent',
+          is_staff: !['agent', 'settings-manager'].includes(testAccountRole),
           is_superuser: testAccountRole === 'platform-owner',
           platform_owner_id: testAccountRole === 'platform-owner' ? 3 : null,
-          role: testAccountRole === 'agent' ? 'agent' : 'administrator',
-          agent_approved: false,
-          management_permissions: [],
+          role: ['agent', 'settings-manager'].includes(testAccountRole) ? 'agent' : 'administrator',
+          agent_approved: testAccountRole === 'settings-manager',
+          management_permissions: testAccountRole === 'settings-manager' ? ['settings.manage'] : [],
         }],
       };
     }
@@ -65,19 +66,25 @@ const pool = {
     if (sql.includes('FROM properties_location')) {
       return { rowCount: 1, rows: [{ id: 7 }] };
     }
+    if (sql.includes('SELECT phone FROM accounts_profile')) {
+      return { rowCount: 1, rows: [{ phone: '0911000000' }] };
+    }
+    if (sql.includes('FROM user_propertyimage')) {
+      return { rowCount: 0, rows: [] };
+    }
     if (sql.includes('FROM portal_admin_publicinformationpage ORDER BY page')) {
       return {
-        rowCount: 1,
-        rows: [{
-          page: 'about',
-          title_en: 'About',
-          title_am: 'ስለ',
+        rowCount: 3,
+        rows: ['about', 'contact', 'property-management'].map((page) => ({
+          page,
+          title_en: page,
+          title_am: page,
           introduction_en: 'Introduction',
           introduction_am: 'መግቢያ',
           body_en: '',
           body_am: '',
           updated_at: '2026-01-01T00:00:00.000Z',
-        }],
+        })),
       };
     }
     throw new Error(`Unexpected test SQL: ${sql}`);
@@ -86,6 +93,61 @@ const pool = {
     return {
       async query(sql, values = []) {
         transactionQueries.push({ sql, values });
+        if (sql.includes('FROM auth_user AS u')) {
+          return {
+            rowCount: 1,
+            rows: [{
+              id: 3,
+              username: 'workflow-admin',
+              first_name: '',
+              last_name: '',
+              email: '',
+              is_active: true,
+              is_staff: true,
+              is_superuser: false,
+              role: 'administrator',
+              phone: '0911000000',
+              agent_approved: false,
+              management_permissions: [],
+              assigned_city_id: null,
+            }],
+          };
+        }
+        if (sql.includes('SELECT id FROM properties_location')) {
+          return { rowCount: 1, rows: [{ id: 7 }] };
+        }
+        if (sql.includes('INSERT INTO user_property')) {
+          managedPropertyInsertQueries.push({ sql, values });
+          return {
+            rowCount: 1,
+            rows: [{
+              id: 100,
+              title: values[0],
+              slug: values[1],
+              location: values[2],
+              administrative_location_id: values[3],
+              property_type: values[4],
+              listing_type: values[5],
+              price: values[6],
+              rental_frequency: values[7],
+              bedrooms: values[8],
+              bathrooms: values[9],
+              area_sqft: values[10],
+              area_value: values[11],
+              area_unit: values[12],
+              description: values[13],
+              features: values[14],
+              status: values[15],
+              publication_status: 'pending_review',
+              is_featured: false,
+              submitted_by_id: 3,
+              moderation_note: '',
+              contact_name: values[17],
+              contact_phone: values[18],
+              contact_email: values[19],
+            }],
+          };
+        }
         if (sql.includes('FROM auth_user u JOIN accounts_profile p')) {
           return { rowCount: 1, rows: [{ ...agentAccount }] };
         }
@@ -115,11 +177,25 @@ test('management public pages list uses the authenticated workflow route', async
     headers: { Authorization: ['Bearer', token].join(' ') },
   });
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).results.map((page) => page.page), ['about']);
+  const data = await response.json();
+  assert.equal(data.count, 3);
+  assert.deepEqual(data.results.map((page) => page.page), ['about', 'contact', 'property-management']);
 });
 
 test('management public pages are available to administrators who are not platform owners', async () => {
   testAccountRole = 'administrator';
+  try {
+    const response = await fetch(`${origin}/management/public-pages/`, {
+      headers: { Authorization: ['Bearer', token].join(' ') },
+    });
+    assert.equal(response.status, 200);
+  } finally {
+    testAccountRole = 'platform-owner';
+  }
+});
+
+test('management public pages are available to approved platform managers', async () => {
+  testAccountRole = 'settings-manager';
   try {
     const response = await fetch(`${origin}/management/public-pages/`, {
       headers: { Authorization: ['Bearer', token].join(' ') },
@@ -140,6 +216,34 @@ test('management public pages reject agents', async () => {
   } finally {
     testAccountRole = 'platform-owner';
   }
+});
+
+test('managed property creation supplies non-null privacy and authorization flags', async () => {
+  managedPropertyInsertQueries.length = 0;
+  const response = await fetch(`${origin}/management/properties/`, {
+    method: 'POST',
+    headers: {
+      Authorization: ['Bearer', token].join(' '),
+      Cookie: `csrftoken=${csrf}`,
+      'X-CSRFToken': csrf,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      title: 'Regression property',
+      location: 'Addis Ababa',
+      administrative_location: 7,
+      category: 'house',
+      listing_type: 'sale',
+      price: '100000',
+      contact_name: 'Property contact',
+    }),
+  });
+
+  assert.equal(response.status, 201);
+  const insert = managedPropertyInsertQueries[0];
+  assert.ok(insert);
+  assert.match(insert.sql, /advertising_authorized,\s*contact_publicly_visible,\s*exact_location_is_public/);
+  assert.match(insert.sql, /'agent_managed',FALSE,\$17,'',FALSE,FALSE,FALSE,\$18/);
 });
 
 test('management homepage note creation rejects invalid content before database writes', async () => {

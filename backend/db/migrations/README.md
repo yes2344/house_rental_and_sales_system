@@ -51,3 +51,12 @@ never run automatically by the web process. The checked-in
 `001_media_file_metadata.sql` migration is additive and has not been applied
 to a live or production database. Catalog inspection uses a separate
 read-only pool.
+
+The public About, Contact, and Property management page copy is stored in the
+existing `portal_admin_publicinformationpage` table. To inspect and initialize
+only missing default rows, run `npm run seed:public-pages` from `backend/` with
+the intended database configured; this is a read-only dry run by default.
+Review the reported database name and missing page slugs, then back up and
+verify a restorable database copy before explicitly running
+`npm run seed:public-pages -- --apply`. Existing page content is never replaced.
+This data-only initializer is not run automatically by the web process.

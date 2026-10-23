@@ -1,4 +1,4 @@
-import { Mail, Phone } from 'lucide-react';
+import { Phone } from 'lucide-react';
 
 import { useBrokerageContact } from '../BrokerageContactContext';
 import type { MessageKey } from '../i18n';
@@ -15,18 +15,13 @@ export function FloatingContactLinks({ text }: FloatingContactLinksProps) {
     && link.url
     && (link.platform === 'whatsapp' || link.platform === 'telegram')
   ));
-  if (!contact.phone && !contact.email && socialLinks.length === 0) return null;
+  if (!contact.phone && socialLinks.length === 0) return null;
 
   return (
     <nav className="floating-contact-links" aria-label={text('floatingContactLinks')}>
       {contact.phone && (
         <a className="floating-contact-link floating-contact-phone" href={`tel:${contact.phone}`} aria-label={text('contactByPhone')}>
           <Phone aria-hidden="true" />
-        </a>
-      )}
-      {contact.email && (
-        <a className="floating-contact-link floating-contact-email" href={`mailto:${contact.email}`} aria-label={text('contactByEmail')}>
-          <Mail aria-hidden="true" />
         </a>
       )}
       {socialLinks.map((link) => (

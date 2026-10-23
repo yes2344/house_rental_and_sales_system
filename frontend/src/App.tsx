@@ -4,6 +4,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { BrokerageContactProvider } from './BrokerageContactContext';
 import { HomepageContentProvider } from './HomepageContentContext';
 import { PageLayout } from './components/PageLayout';
+import { ApplicationErrorBoundary } from './components/ApplicationErrorBoundary';
 import { RequireAuth } from './components/RequireAuth';
 import { RequireAgentAccountManager } from './components/RequireAgentAccountManager';
 import { RequireMarketplaceAccess } from './components/RequireMarketplaceAccess';
@@ -145,7 +146,9 @@ export default function App() {
                     </div>
                   )}
                 >
-                  <Outlet />
+                  <ApplicationErrorBoundary text={text}>
+                    <Outlet />
+                  </ApplicationErrorBoundary>
                 </Suspense>
               )}
             >
@@ -208,6 +211,10 @@ export default function App() {
                 <Route element={<RequireBrandingManager text={text} />}>
                   <Route element={<OwnerDashboardLayout text={text} />}>
                     <Route path="management/branding" element={<SiteBrandingPage text={text} />} />
+                  </Route>
+                </Route>
+                <Route element={<RequireSettingsManager text={text} />}>
+                  <Route element={<OwnerDashboardLayout text={text} />}>
                     <Route path="management/public-pages" element={<PublicInformationPagesEditor text={text} />} />
                   </Route>
                 </Route>

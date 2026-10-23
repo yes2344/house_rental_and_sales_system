@@ -121,6 +121,18 @@ async function requireAccountAdministrator(pool, userId) {
   return user;
 }
 
+async function requirePublicPageManager(pool, userId) {
+  const user = await access(pool, userId);
+  if (
+    !user.is_superuser
+    && !(user.is_staff && user.role === 'administrator')
+    && !user.permissions.includes('settings.manage')
+  ) {
+    throw new ApiError(403, 'Website page management access is required.');
+  }
+  return user;
+}
+
 async function writeAudit(client, user, action, objectType, objectId, changes = {}) {
   await client.query(
     `INSERT INTO portal_admin_adminauditevent
@@ -497,7 +509,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
   }));
 
   router.get('/management/public-pages/', asyncRoute(async (req, res) => {
-    await requireAccountAdministrator(pool, req.userId);
+    await requirePublicPageManager(pool, req.userId);
     const result = await pool.query(
       `SELECT page, title_en, title_am, introduction_en, introduction_am, body_en, body_am, updated_at
        FROM portal_admin_publicinformationpage ORDER BY page`,
@@ -506,7 +518,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
   }));
 
   router.route('/management/public-pages/:page/').all(asyncRoute(async (req, res, next) => {
-    const user = await requireAccountAdministrator(pool, req.userId);
+    const user = await requirePublicPageManager(pool, req.userId);
     if (!publicPageNames.includes(req.params.page)) throw new ApiError(404, 'Public information page not found.');
     if (req.method === 'GET') {
       const result = await pool.query(
@@ -797,9 +809,10 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
            (title, slug, location, administrative_location_id, property_type, listing_type, price,
             rental_frequency, bedrooms, bathrooms, area_sqft, area_value, area_unit, description, features,
             status, publication_status, service_type, is_featured, submitted_by_id, moderation_note,
-            contact_name, contact_phone, contact_email, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending_review',
-                 'agent_managed',FALSE,$17,'',$18,$19,$20,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+              advertising_authorized, contact_publicly_visible, exact_location_is_public,
+              contact_name, contact_phone, contact_email, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending_review',
+                   'agent_managed',FALSE,$17,'',FALSE,FALSE,FALSE,$18,$19,$20,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
          RETURNING *`,
         [input.title, slug, input.location, input.administrative_location, input.category, input.listing_type,
           input.price, input.rental_frequency, input.bedrooms, input.bathrooms, input.area_sqft, input.area_value,

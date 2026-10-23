@@ -289,8 +289,8 @@ export interface ManagedPropertyFilters {
 }
 
 export async function getAmenities(signal?: AbortSignal): Promise<AmenityOption[]> {
-  const response = await apiClient.get<PaginatedResponse<AmenityOption>>('/amenities/', { signal });
-  return response.data.results;
+  const response = await apiClient.get<AmenityOption[]>('/amenities/', { signal });
+  return response.data;
 }
 
 export async function getManagedProperties(

@@ -65,7 +65,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
       ]),
   ];
 
-  if (canManageBranding) {
+  if (canManageBranding || canManageSettings) {
     entries.push({
       href: '/management/public-pages',
       title: text('publicPagesManagementTitle'),

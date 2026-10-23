@@ -38,7 +38,11 @@ const publicPropertyFilter = `p.publication_status = 'published'
 function absoluteUrl(request, path) {
   if (!path) return null;
   const mediaPath = `/media/${String(path).split('/').map(encodeURIComponent).join('/')}`;
-  return new URL(mediaPath, `${request.protocol}://${request.get('host')}`).toString();
+  const forwardedProtocol = request.get('x-forwarded-proto')?.trim().toLowerCase();
+  const protocol = request.protocol === 'https' || forwardedProtocol === 'https'
+    ? 'https'
+    : request.protocol;
+  return new URL(mediaPath, `${protocol}://${request.get('host')}`).toString();
 }
 
 function asLocation(row) {
