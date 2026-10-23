@@ -86,6 +86,11 @@ const BrokerageSettingsPage = lazy(() =>
 const SiteBrandingPage = lazy(() =>
   import('./pages/SiteBrandingPage').then(({ SiteBrandingPage }) => ({ default: SiteBrandingPage })),
 );
+const PublicInformationPagesEditor = lazy(() =>
+  import('./components/PublicInformationPagesEditor').then(({ PublicInformationPagesEditor }) => ({
+    default: PublicInformationPagesEditor,
+  })),
+);
 const LocationManagementPage = lazy(() =>
   import('./pages/LocationManagementPage').then(({ LocationManagementPage }) => ({ default: LocationManagementPage })),
 );
@@ -203,6 +208,7 @@ export default function App() {
                 <Route element={<RequireBrandingManager text={text} />}>
                   <Route element={<OwnerDashboardLayout text={text} />}>
                     <Route path="management/branding" element={<SiteBrandingPage text={text} />} />
+                    <Route path="management/public-pages" element={<PublicInformationPagesEditor text={text} />} />
                   </Route>
                 </Route>
                 <Route element={<RequireLocationManager text={text} />}>

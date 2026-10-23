@@ -215,6 +215,29 @@ test('public locations use parameterized search and return the Django location s
   assert.ok(!calls.some(({ text }) => text.includes("Bole%' OR TRUE")));
 });
 
+test('public location type filters include nested locations when all locations are requested', async () => {
+  let query;
+  const city = {
+    ...locationRow(),
+    id: '3',
+    name: 'Addis Ababa',
+    location_type: 'city',
+    parent_id: '2',
+    city_id: '3',
+  };
+  const results = await listPublicLocations({
+    async query(text, values) {
+      query = { text, values };
+      return { rows: [city], rowCount: 1 };
+    },
+  }, { all: '1', types: 'city' });
+
+  assert.equal(results[0].name, 'Addis Ababa');
+  assert.match(query.text, /location\.location_type = ANY\(\$1::varchar\[\]\)/);
+  assert.doesNotMatch(query.text, /location\.parent_id IS NULL/);
+  assert.deepEqual(query.values, [['city']]);
+});
+
 test('brokerage PATCH denies active customers without settings permissions', async () => {
   const denied = {
     async query(text) {

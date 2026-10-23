@@ -61,25 +61,36 @@ function AgentAccountManagementContent({ text }: AgentAccountManagementPageProps
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
+  const [cityLoading, setCityLoading] = useState(true);
+  const [cityError, setCityError] = useState('');
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      getManagedAgentAccounts(controller.signal),
-      getLocationsByTypes(['city'], controller.signal),
-    ])
-      .then(([agentAccounts, configuredCities]) => {
-        setAccounts(agentAccounts);
-        setCities(configuredCities);
+    setLoading(true);
+    setCityLoading(true);
+    setCityError('');
+    void getManagedAgentAccounts(controller.signal)
+      .then((agentAccounts) => {
+        if (!controller.signal.aborted) setAccounts(agentAccounts);
       })
       .catch((loadError: unknown) => {
         if (!controller.signal.aborted) setError(getErrorMessage(loadError));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
+      });
+    void getLocationsByTypes(['city'], controller.signal)
+      .then((configuredCities) => {
+        if (!controller.signal.aborted) setCities(configuredCities);
+      })
+      .catch((loadError: unknown) => {
+        if (!controller.signal.aborted) setCityError(getErrorMessage(loadError));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCityLoading(false);
       });
     return () => controller.abort();
   }, []);
@@ -251,6 +262,7 @@ function AgentAccountManagementContent({ text }: AgentAccountManagementPageProps
             <select
               className="filter-select"
               required
+              disabled={cityLoading || Boolean(cityError) || cities.length === 0}
               value={assignedCityId}
               onChange={(event) => {
                 setAssignedCityId(event.target.value);
@@ -265,10 +277,16 @@ function AgentAccountManagementContent({ text }: AgentAccountManagementPageProps
               ))}
             </select>
             {fieldErrors.assigned_city_id && <small role="alert">{fieldErrors.assigned_city_id}</small>}
-            {cities.length === 0 && <small>{text('locationOptionsEmpty')}</small>}
+            {cityLoading && <small role="status">{text('loadingLocations')}</small>}
+            {cityError && <small role="alert">{text('locationLoadError')} {cityError}</small>}
+            {!cityLoading && !cityError && cities.length === 0 && <small>{text('locationOptionsEmpty')}</small>}
           </label>
           <div className="location-form-actions">
-            <button className="button button-primary" type="submit" disabled={saving || cities.length === 0}>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={saving || cityLoading || Boolean(cityError) || cities.length === 0}
+            >
               {saving ? text('creatingAccount') : text('createAgentAccount')}
             </button>
           </div>
@@ -305,6 +323,7 @@ function AgentAccountManagementContent({ text }: AgentAccountManagementPageProps
               <select
                 className="filter-select"
                 required
+                disabled={cityLoading || Boolean(cityError) || cities.length === 0}
                 value={editValues.assigned_city_id}
                 onChange={(event) => setEditValues((current) => ({ ...current, assigned_city_id: event.target.value }))}
               >
@@ -314,6 +333,9 @@ function AgentAccountManagementContent({ text }: AgentAccountManagementPageProps
                 ))}
               </select>
               {fieldErrors.assigned_city_id && <small role="alert">{fieldErrors.assigned_city_id}</small>}
+              {cityLoading && <small role="status">{text('loadingLocations')}</small>}
+              {cityError && <small role="alert">{text('locationLoadError')} {cityError}</small>}
+              {!cityLoading && !cityError && cities.length === 0 && <small>{text('locationOptionsEmpty')}</small>}
             </label>
             <label className="filter-label">{text('agentEmail')}
               <input

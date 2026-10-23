@@ -693,11 +693,11 @@ export async function listPublicLocations(pool, filters) {
     } else {
       conditions.push('location.parent_id IS NULL');
     }
-    if (filters.type || filters.types) {
-      const types = (filters.types || filters.type).split(',').map((value) => value.trim()).filter(Boolean);
-      values.push(types);
-      conditions.push(`location.location_type = ANY($${values.length}::varchar[])`);
-    }
+  }
+  if (filters.type || filters.types) {
+    const types = (filters.types || filters.type).split(',').map((value) => value.trim()).filter(Boolean);
+    values.push(types);
+    conditions.push(`location.location_type = ANY($${values.length}::varchar[])`);
   }
   const result = await pool.query(
     `SELECT ${locationProjection}

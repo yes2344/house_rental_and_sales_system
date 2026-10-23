@@ -497,7 +497,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
   }));
 
   router.get('/management/public-pages/', asyncRoute(async (req, res) => {
-    await requireWorkflowAccess(pool, req.userId, 'settings.manage');
+    await requireAccountAdministrator(pool, req.userId);
     const result = await pool.query(
       `SELECT page, title_en, title_am, introduction_en, introduction_am, body_en, body_am, updated_at
        FROM portal_admin_publicinformationpage ORDER BY page`,
@@ -506,7 +506,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
   }));
 
   router.route('/management/public-pages/:page/').all(asyncRoute(async (req, res, next) => {
-    const user = await requireWorkflowAccess(pool, req.userId, 'settings.manage');
+    const user = await requireAccountAdministrator(pool, req.userId);
     if (!publicPageNames.includes(req.params.page)) throw new ApiError(404, 'Public information page not found.');
     if (req.method === 'GET') {
       const result = await pool.query(

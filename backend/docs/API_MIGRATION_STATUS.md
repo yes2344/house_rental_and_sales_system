@@ -30,7 +30,7 @@ PostgreSQL and do not certify behavior against the HahuCloud database.
 | `favorites/` | `GET, POST /api/v1/favorites/` | Implemented; workflow tested |
 | `favorites/<int:property_id>/` | `DELETE /api/v1/favorites/:property_id/` | Implemented; ownership and deletion tested |
 | `amenities/` | `GET /api/v1/amenities/` | Implemented; local read-only DB exercised |
-| `locations/` | `GET /api/v1/locations/` | Implemented; query tested |
+| `locations/` | `GET /api/v1/locations/` | Implemented; nested type filters and query tested |
 | `property-types/` | `GET /api/v1/property-types/` | Implemented |
 | `management/locations/` | `GET, POST /api/v1/management/locations/` | Implemented; authorization and workflows tested |
 | `management/locations/<int:pk>/` | `GET, PATCH, DELETE /api/v1/management/locations/:pk/` | Implemented; authorization and workflows tested |
@@ -59,7 +59,7 @@ PostgreSQL and do not certify behavior against the HahuCloud database.
 | `management/properties/bulk-delete/` | `POST /api/v1/management/properties/bulk-delete/` | Implemented; authorization and workflow tested |
 | `management/homepage-notes/` | `GET, POST /api/v1/management/homepage-notes/` | Implemented; workflow tested |
 | `management/homepage-notes/<int:pk>/` | `GET, PATCH, DELETE /api/v1/management/homepage-notes/:pk/` | Implemented; workflow tested |
-| `management/public-pages/` | `GET /api/v1/management/public-pages/` | Implemented; authorization tested |
+| `management/public-pages/` | `GET /api/v1/management/public-pages/` | Implemented; administrator-only, including non-owner administrators; authorization tested |
 | `management/public-pages/<slug:page>/` | `GET, PATCH /api/v1/management/public-pages/:page/` | Implemented; validation and workflow tested |
 | `management/properties/<int:pk>/` | `GET, PATCH, DELETE /api/v1/management/properties/:pk/` | Implemented; authorization and workflow tested |
 | `management/properties/<int:pk>/publication/` | `POST /api/v1/management/properties/:pk/publication/` | Implemented; workflow tested |

@@ -29,6 +29,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
   const canManageBranding = account?.role === 'administrator' && permissions.includes('branding.manage');
   const canManageSettings = Boolean(
     account?.is_platform_owner
+    || (account?.role === 'administrator' && permissions.includes('branding.manage'))
     || (isAuthorizedAgent && permissions.includes('settings.manage')),
   );
 
@@ -41,6 +42,7 @@ export function OwnerDashboardLayout({ text }: OwnerDashboardLayoutProps) {
         {(canManageSubcities || canManageCities) && <NavLink to="/management/locations">{text('locationManagementTitle')}</NavLink>}
         {canManageAgents && <NavLink to="/management/agents">{text('managerAgentAccounts')}</NavLink>}
         {canManageBranding && <NavLink to="/management/branding">{text('siteBrandingTitle')}</NavLink>}
+        {canManageBranding && <NavLink to="/management/public-pages">{text('publicPagesManagementTitle')}</NavLink>}
         {canManageSettings && <NavLink to="/management/brokerage">{text('brokerageSettingsTitle')}</NavLink>}
       </nav>
       <Outlet />

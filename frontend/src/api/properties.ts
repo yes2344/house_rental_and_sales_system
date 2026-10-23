@@ -130,7 +130,7 @@ export async function getLocationsByTypes(
   signal?: AbortSignal,
 ): Promise<MarketplaceLocation[]> {
   const response = await apiClient.get<MarketplaceLocation[]>('/locations/', {
-    params: { types: locationTypes.join(',') },
+    params: { all: 1, types: locationTypes.join(',') },
     signal,
   });
   return response.data;

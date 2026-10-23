@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   Building2,
   CalendarDays,
+  FileText,
   Paintbrush,
   Heart,
   MapPinned,
@@ -38,6 +39,7 @@ export function DashboardPage({ text }: DashboardPageProps) {
   const canManageCities = account.role === 'administrator' && permissions.includes('locations.manage_cities');
   const canManageBranding = account.role === 'administrator' && permissions.includes('branding.manage');
   const canManageSettings = account.is_platform_owner
+    || canManageBranding
     || (isAgent && permissions.includes('settings.manage'));
 
   const entries: {
@@ -62,6 +64,14 @@ export function DashboardPage({ text }: DashboardPageProps) {
       { href: '/account', title: text('accountTitle'), icon: <UserRound aria-hidden="true" /> },
       ]),
   ];
+
+  if (canManageBranding) {
+    entries.push({
+      href: '/management/public-pages',
+      title: text('publicPagesManagementTitle'),
+      icon: <FileText aria-hidden="true" />,
+    });
+  }
 
   if (!isAdministrator && account.role !== 'agent') {
     entries.push({

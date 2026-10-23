@@ -15,6 +15,7 @@ const csrf = 'same-origin-csrf-test-token';
 let server;
 let origin;
 const transactionQueries = [];
+let testAccountRole = 'platform-owner';
 const agentAccount = {
   id: 42,
   username: 'managed-agent',
@@ -46,10 +47,10 @@ const pool = {
           id: 3,
           username: 'workflow-admin',
           is_active: true,
-          is_staff: true,
-          is_superuser: true,
-          platform_owner_id: 3,
-          role: 'administrator',
+          is_staff: testAccountRole !== 'agent',
+          is_superuser: testAccountRole === 'platform-owner',
+          platform_owner_id: testAccountRole === 'platform-owner' ? 3 : null,
+          role: testAccountRole === 'agent' ? 'agent' : 'administrator',
           agent_approved: false,
           management_permissions: [],
         }],
@@ -115,6 +116,30 @@ test('management public pages list uses the authenticated workflow route', async
   });
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).results.map((page) => page.page), ['about']);
+});
+
+test('management public pages are available to administrators who are not platform owners', async () => {
+  testAccountRole = 'administrator';
+  try {
+    const response = await fetch(`${origin}/management/public-pages/`, {
+      headers: { Authorization: ['Bearer', token].join(' ') },
+    });
+    assert.equal(response.status, 200);
+  } finally {
+    testAccountRole = 'platform-owner';
+  }
+});
+
+test('management public pages reject agents', async () => {
+  testAccountRole = 'agent';
+  try {
+    const response = await fetch(`${origin}/management/public-pages/`, {
+      headers: { Authorization: ['Bearer', token].join(' ') },
+    });
+    assert.equal(response.status, 403);
+  } finally {
+    testAccountRole = 'platform-owner';
+  }
 });
 
 test('management homepage note creation rejects invalid content before database writes', async () => {
