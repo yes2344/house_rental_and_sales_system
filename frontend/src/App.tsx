@@ -146,7 +146,7 @@ export default function App() {
                     </div>
                   )}
                 >
-                  <ApplicationErrorBoundary text={text}>
+                  <ApplicationErrorBoundary key={location.key} text={text}>
                     <Outlet />
                   </ApplicationErrorBoundary>
                 </Suspense>
