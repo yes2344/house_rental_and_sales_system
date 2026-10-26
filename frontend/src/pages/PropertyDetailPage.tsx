@@ -111,6 +111,7 @@ export function PropertyDetailPage({ locale, text }: HomePageProps) {
               property.rental_frequency,
               locale,
               text,
+              property.currency,
             )}</strong></div>
             <span className="detail-availability"><span />{text('available')}</span>
           </div>

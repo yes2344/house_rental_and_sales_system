@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, test } from 'node:test';
 import sharp from 'sharp';
 import { createApp } from '../src/app.js';
 import {
+  PROPERTY_IMAGE_WATERMARK,
   prepareImageUpload,
   storedMediaPath,
+  watermarkSvg,
 } from '../src/services/propertyImageService.js';
 
 const temporaryDirectories = [];
@@ -24,7 +27,7 @@ after(async () => {
   await Promise.all(temporaryDirectories.map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-function fakePool(userId = 1, initialImages = [], propertyOverrides = {}) {
+function fakePool(userId = 1, initialImages = [], propertyOverrides = {}, options = {}) {
   const images = initialImages.map((image) => ({ ...image }));
   let nextId = Math.max(0, ...images.map((image) => image.id)) + 1;
   const property = {
@@ -70,10 +73,23 @@ function fakePool(userId = 1, initialImages = [], propertyOverrides = {}) {
       return { rows: [], rowCount: 0 };
     },
     async connect() {
+      let transactionSnapshot;
       return {
         async query(sql, values = []) {
           const normalized = sql.replace(/\s+/g, ' ').trim();
-          if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(normalized)) {
+          if (normalized === 'BEGIN') {
+            transactionSnapshot = { images: images.map((image) => ({ ...image })), nextId };
+            return { rows: [], rowCount: 0 };
+          }
+          if (normalized === 'ROLLBACK') {
+            if (transactionSnapshot) {
+              images.splice(0, images.length, ...transactionSnapshot.images);
+              nextId = transactionSnapshot.nextId;
+            }
+            return { rows: [], rowCount: 0 };
+          }
+          if (normalized === 'COMMIT') {
+            transactionSnapshot = undefined;
             return { rows: [], rowCount: 0 };
           }
           if (normalized.startsWith('SELECT property.id')) {
@@ -98,6 +114,8 @@ function fakePool(userId = 1, initialImages = [], propertyOverrides = {}) {
             return { rows: [], rowCount: images.length };
           }
           if (normalized.startsWith('INSERT INTO user_propertyimage')) {
+            assert.match(normalized, /caption, is_primary, created_at\)/);
+            assert.match(normalized, /VALUES \(\$1, \$2, \$3, \$4, \$5, \$6, \$7, NOW\(\)\)/);
             const row = {
               id: nextId++,
               property_id: Number(values[0]),
@@ -113,6 +131,12 @@ function fakePool(userId = 1, initialImages = [], propertyOverrides = {}) {
             return { rows: [row], rowCount: 1 };
           }
           if (normalized.startsWith('INSERT INTO backend_media_file_metadata')) {
+            if (options.failMetadataInsert) {
+              throw Object.assign(
+                new Error('relation "backend_media_file_metadata" does not exist'),
+                { code: '42P01' },
+              );
+            }
             return { rows: [], rowCount: 1 };
           }
           if (normalized.startsWith('SELECT id, image, original_image, caption, is_primary, created_at FROM user_propertyimage WHERE property_id')) {
@@ -122,6 +146,10 @@ function fakePool(userId = 1, initialImages = [], propertyOverrides = {}) {
           if (normalized.startsWith('SELECT id, image, original_image, caption, is_primary FROM user_propertyimage WHERE id')) {
             const row = images.find((image) => image.id === Number(values[0]) && image.property_id === Number(values[1]));
             return { rows: row ? [{ ...row }] : [], rowCount: row ? 1 : 0 };
+          }
+          if (normalized.startsWith('SELECT id FROM user_propertyimage WHERE id')) {
+            const row = images.find((image) => image.id === Number(values[0]) && image.property_id === Number(values[1]));
+            return { rows: row ? [{ id: row.id }] : [], rowCount: row ? 1 : 0 };
           }
           if (normalized.startsWith('UPDATE user_propertyimage SET image = $1')) {
             const image = images.find((entry) => entry.id === Number(values[4]));
@@ -147,8 +175,8 @@ function fakePool(userId = 1, initialImages = [], propertyOverrides = {}) {
   };
 }
 
-async function startServer(t, pool, mediaConfig) {
-  const app = createApp({ pool, mediaConfig, logger: { error() {} } });
+async function startServer(t, pool, mediaConfig, errors = []) {
+  const app = createApp({ pool, mediaConfig, logger: { error: (...values) => errors.push(values) } });
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   let closed = false;
@@ -246,6 +274,28 @@ test('managed property images upload as watermarked public files and private ori
   assert.equal((await fetch(`${restartedServer.baseUrl}/media/property_images/missing.jpg`)).status, 404);
 });
 
+test('simultaneous property image uploads use distinct files and records', async (t) => {
+  const mediaConfig = await makeMediaConfig();
+  const pool = fakePool();
+  const { baseUrl } = await startServer(t, pool, mediaConfig);
+  const responses = await Promise.all(
+    ['front.jpg', 'back.jpg'].map((filename) => fetch(
+      `${baseUrl}/api/v1/management/properties/1/images/`,
+      { method: 'POST', headers, body: multipart(sampleImage, filename) },
+    )),
+  );
+  const images = await Promise.all(responses.map((response) => response.json()));
+
+  assert.deepEqual(responses.map((response) => response.status), [201, 201]);
+  assert.equal(pool.images.length, 2);
+  assert.equal(new Set(images.map((image) => image.id)).size, 2);
+  assert.equal(new Set(pool.images.map((image) => image.image)).size, 2);
+  assert.equal(new Set(pool.images.map((image) => image.original_image)).size, 2);
+  for (const image of images) {
+    assert.equal((await fetch(image.image)).status, 200);
+  }
+});
+
 test('owner submission images are available only to the submitter while the submission is reviewable', async (t) => {
   const mediaConfig = await makeMediaConfig();
   const pool = fakePool(2, [], {
@@ -274,6 +324,66 @@ test('owner submission images are available only to the submitter while the subm
   assert.equal((await afterUpload.json()).count, 1);
   const original = await fetch(image.original_url, { headers });
   assert.equal(original.status, 200);
+});
+
+test('database upload failures are correlated and clean written files after transaction rollback', async (t) => {
+  const mediaConfig = await makeMediaConfig();
+  const errors = [];
+  const pool = fakePool(1, [], {}, { failMetadataInsert: true });
+  const { baseUrl } = await startServer(t, pool, mediaConfig, errors);
+  const response = await fetch(`${baseUrl}/api/v1/management/properties/1/images/`, {
+    method: 'POST',
+    headers,
+    body: multipart(),
+  });
+
+  assert.equal(response.status, 500);
+  assert.match(response.headers.get('x-request-id') || '', /^[\da-f-]{36}$/i);
+  assert.deepEqual(await response.json(), {
+    error: {
+      status_code: 500,
+      message: 'The server encountered an error.',
+      details: {},
+    },
+  });
+  assert.equal(pool.images.length, 0);
+  assert.equal(errors.length, 1);
+  const [message, diagnostic] = errors[0];
+  assert.equal(message, 'Unhandled API error:');
+  assert.equal(diagnostic.path, '/management/properties/:propertyId/images/');
+  assert.equal(diagnostic.stage, 'database_image_record');
+  assert.equal(diagnostic.file_count, 1);
+  assert.equal(diagnostic.file_size_bytes, sampleImage.length);
+  assert.equal(diagnostic.code, '42P01');
+  assert.equal(diagnostic.sqlstate, '42P01');
+  assert.equal(diagnostic.missingRelation, 'backend_media_file_metadata');
+  assert.equal(diagnostic.cleanup, 'succeeded');
+  assert.match(diagnostic.request_id, /^[\da-f-]{36}$/i);
+  assert.equal(JSON.stringify(errors).includes('does not exist'), false);
+  assert.deepEqual(await readdir(path.join(mediaConfig.publicRoot, 'property_images')), []);
+  assert.deepEqual(await readdir(path.join(mediaConfig.privateRoot, 'private_property_images')), []);
+});
+
+test('filesystem directory failures are correlated without creating database image records', async (t) => {
+  const mediaConfig = await makeMediaConfig();
+  await writeFile(mediaConfig.publicRoot, 'not a directory');
+  const errors = [];
+  const pool = fakePool();
+  const { baseUrl } = await startServer(t, pool, mediaConfig, errors);
+  const response = await fetch(`${baseUrl}/api/v1/management/properties/1/images/`, {
+    method: 'POST',
+    headers,
+    body: multipart(),
+  });
+
+  assert.equal(response.status, 500);
+  assert.equal(pool.images.length, 0);
+  assert.equal(errors.length, 1);
+  const [, diagnostic] = errors[0];
+  assert.equal(diagnostic.stage, 'filesystem_directory');
+  assert.equal(diagnostic.file_count, 1);
+  assert.equal(diagnostic.file_size_bytes, sampleImage.length);
+  assert.equal(diagnostic.code, 'ENOTDIR');
 });
 
 test('managed image replacement and deletion update PostgreSQL references and remove old files', async (t) => {
@@ -313,7 +423,7 @@ test('managed image replacement and deletion update PostgreSQL references and re
   await assert.rejects(stat(path.join(mediaConfig.privateRoot, replacedOriginalName)));
 });
 
-test('image upload enforces object permissions and rejects undecodable or oversized uploads', async (t) => {
+test('image upload enforces object permissions, accepts large files, and has no photo-count limit', async (t) => {
   const mediaConfig = await makeMediaConfig();
   const ownerPool = fakePool(2);
   const { baseUrl: unauthorizedBaseUrl } = await startServer(t, ownerPool, mediaConfig);
@@ -341,8 +451,20 @@ test('image upload enforces object permissions and rejects undecodable or oversi
     headers,
     body: multipart(oversized, 'large.jpg'),
   });
-  assert.equal(tooLarge.status, 413);
+  assert.equal(tooLarge.status, 400);
   assert.equal(pool.images.length, 0);
+
+  const largeImage = await sharp(randomBytes(2048 * 2048 * 3), {
+    raw: { width: 2048, height: 2048, channels: 3 },
+  }).png({ compressionLevel: 0 }).toBuffer();
+  assert.ok(largeImage.length > 10 * 1024 * 1024);
+  const largeUpload = await fetch(`${baseUrl}/api/v1/management/properties/1/images/`, {
+    method: 'POST',
+    headers,
+    body: multipart(largeImage, 'large.png'),
+  });
+  assert.equal(largeUpload.status, 201);
+  assert.equal(pool.images.length, 1);
 
   const fullPool = fakePool(1, Array.from({ length: 10 }, (_, index) => ({
     id: index + 1,
@@ -359,8 +481,8 @@ test('image upload enforces object permissions and rejects undecodable or oversi
     headers,
     body: multipart(),
   });
-  assert.equal(full.status, 400);
-  assert.equal(fullPool.images.length, 10);
+  assert.equal(full.status, 201);
+  assert.equal(fullPool.images.length, 11);
 });
 
 test('stored image paths reject traversal and missing public files return 404', async (t) => {
@@ -376,6 +498,32 @@ test('stored image paths reject traversal and missing public files return 404', 
 });
 
 test('image decoder accepts supported formats based on bytes rather than browser MIME', async () => {
+  assert.equal(PROPERTY_IMAGE_WATERMARK, '@Infinity House');
+  const watermark = watermarkSvg(320, 200).toString();
+  assert.doesNotMatch(watermark, /<rect\b|fill="#102d4a"|stroke="#f2c46d"/);
+  assert.match(watermark, /fill-opacity="\.5"/);
+  assert.match(watermark, /<path d="M[\d.]+ [\d.]+h[\d.]+v[\d.]+h-[\d.]+z/);
+  assert.equal((watermark.match(/<text\b/g) ?? []).length, 0);
+  assert.doesNotMatch(watermark, /phone|logo|@infinity house/);
+  const centeredWatermark = watermark.match(/transform="translate\(([\d.]+) ([\d.]+)\)"/);
+  assert.ok(centeredWatermark);
+  const [, x, y] = centeredWatermark.map(Number);
+  const characters = [...PROPERTY_IMAGE_WATERMARK];
+  const textWidth = characters.reduce((total, character) => total + (character === ' ' ? 4 : 6), 0) - 1;
+  const cellSize = Math.min(320 * 0.9 / (textWidth + 4), 200 * 0.16 / 10) / 2;
+  assert.match(watermark, new RegExp(`v${cellSize}h-${cellSize}z`));
+  assert.ok(Math.abs(x + textWidth * cellSize / 2 - 160) < 0.001);
+  assert.ok(Math.abs(y + 7 * cellSize / 2 - 100) < 0.001);
+  assert.match(watermarkSvg(1600, 1200).toString(), /<path d="M/);
+  const smallSource = await sharp({
+    create: { width: 32, height: 20, channels: 3, background: '#ccddee' },
+  }).jpeg().toBuffer();
+  const smallResult = await prepareImageUpload({
+    buffer: smallSource,
+    size: smallSource.length,
+    originalname: 'small.jpg',
+  });
+  assert.equal((await sharp(smallResult.publicBuffer).metadata()).width, 32);
   for (const format of ['jpeg', 'png', 'webp']) {
     const source = await sharp({
       create: {

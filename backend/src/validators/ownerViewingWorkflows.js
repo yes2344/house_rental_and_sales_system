@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 const id = z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const price = z.preprocess(
+  (value) => value === '' || value === undefined ? null : value,
+  z.union([z.null(), z.coerce.number().positive()]),
+);
 const time = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).refine((value) => {
   const [hour, minute, second = '0'] = value.split(':').map(Number);
   return hour < 24 && minute < 60 && second < 60;
@@ -15,11 +19,12 @@ export const submissionQuerySchema = z.object({
 }).strict();
 
 const propertyFields = {
-  title: z.string().trim().min(1).max(200),
-  location: z.string().trim().min(1).max(255),
+  title: z.string().trim().max(200),
+  location: z.string().trim().max(255),
   category: z.enum(['house', 'villa', 'apartment', 'condominium', 'land', 'office', 'shop', 'warehouse', 'commercial', 'other']).default('house'),
   listing_type: z.enum(['sale', 'rent']).default('sale'),
-  price: z.coerce.number().positive(),
+  price: price.default(null),
+  currency: z.enum(['ETB', 'USD']).default('ETB'),
   bedrooms: z.coerce.number().int().min(0).optional(),
   bathrooms: z.coerce.number().int().min(0).optional(),
   area_sqft: z.coerce.number().int().min(0).optional(),
@@ -35,12 +40,12 @@ const propertyFields = {
 
 export const submissionCreateSchema = z.object({
   ...propertyFields,
-  owner_contact_name: z.string().trim().min(1).max(200),
-  owner_contact_phone: z.string().trim().min(1).max(50),
+  owner_contact_name: z.string().trim().max(200).optional().default(''),
+  owner_contact_phone: z.string().trim().max(50).optional().default(''),
   owner_contact_email: z.string().trim().email().or(z.literal('')).optional(),
   authorization_confirmed: z.literal(true),
   terms_accepted: z.literal(true),
-  administrative_location: id,
+  administrative_location: id.nullable().optional().default(null),
 }).strict();
 
 export const submissionPatchSchema = z.object({
@@ -49,6 +54,7 @@ export const submissionPatchSchema = z.object({
   category: propertyFields.category.optional(),
   listing_type: propertyFields.listing_type.optional(),
   price: propertyFields.price.optional(),
+  currency: propertyFields.currency.optional(),
   bedrooms: propertyFields.bedrooms,
   bathrooms: propertyFields.bathrooms,
   area_sqft: propertyFields.area_sqft,
@@ -58,12 +64,12 @@ export const submissionPatchSchema = z.object({
   amenities: propertyFields.amenities,
   description: propertyFields.description,
   features: propertyFields.features,
-  owner_contact_name: z.string().trim().min(1).max(200).optional(),
-  owner_contact_phone: z.string().trim().min(1).max(50).optional(),
+  owner_contact_name: z.string().trim().max(200).optional(),
+  owner_contact_phone: z.string().trim().max(50).optional(),
   owner_contact_email: z.string().trim().email().or(z.literal('')).optional(),
   authorization_confirmed: z.boolean().optional(),
   terms_accepted: z.boolean().optional(),
-  administrative_location: id.optional(),
+  administrative_location: id.nullable().optional(),
 }).strict().refine((body) => Object.keys(body).length > 0, 'At least one field is required.');
 
 export const bulkDeleteSchema = z.object({

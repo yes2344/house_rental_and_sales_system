@@ -1,93 +1,88 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { ApiError } from '../errors.js';
 import { withTransaction } from '../db.js';
 
-export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
-const MAX_IMAGE_PIXELS = 50_000_000;
+export const PROPERTY_IMAGE_WATERMARK = '@Infinity House';
+const watermarkGlyphs = {
+  '@': ['01110', '10001', '10111', '10101', '10111', '10000', '01110'],
+  I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111'],
+  N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+  F: ['11111', '10000', '10000', '11110', '10000', '10000', '10000'],
+  T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
+  Y: ['10001', '10001', '01010', '00100', '00100', '00100', '00100'],
+  H: ['10001', '10001', '10001', '11111', '10001', '10001', '10001'],
+  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
+  U: ['10001', '10001', '10001', '10001', '10001', '10001', '01110'],
+  S: ['01111', '10000', '10000', '01110', '00001', '00001', '11110'],
+  E: ['11111', '10000', '10000', '11110', '10000', '10000', '11111'],
+  i: ['00100', '00000', '01100', '00100', '00100', '00100', '01110'],
+  n: ['00000', '00000', '11110', '10001', '10001', '10001', '10001'],
+  f: ['00110', '01001', '01000', '11100', '01000', '01000', '01000'],
+  t: ['01000', '01000', '11110', '01000', '01000', '01001', '00110'],
+  y: ['00000', '00000', '10001', '10001', '01111', '00001', '01110'],
+  h: ['10000', '10000', '10110', '11001', '10001', '10001', '10001'],
+  o: ['00000', '00000', '01110', '10001', '10001', '10001', '01110'],
+  u: ['00000', '00000', '10001', '10001', '10001', '10011', '01101'],
+  s: ['00000', '00000', '01111', '10000', '01110', '00001', '11110'],
+  e: ['00000', '00000', '01110', '10001', '11111', '10000', '01110'],
+};
 const allowedFormats = new Map([
   ['jpeg', { extension: 'jpg', contentType: 'image/jpeg' }],
   ['png', { extension: 'png', contentType: 'image/png' }],
   ['webp', { extension: 'webp', contentType: 'image/webp' }],
 ]);
 
-function escapeXml(value) {
-  return value.replace(/[<>&"']/g, (character) => ({
-    '<': '&lt;',
-    '>': '&gt;',
-    '&': '&amp;',
-    '"': '&quot;',
-    "'": '&apos;',
-  })[character]);
-}
-
-function watermarkSvg(width, height, siteName, phone, logoDataUri) {
-  const safeName = escapeXml(siteName);
-  const safePhone = escapeXml(phone);
-  const scale = Math.max(0.55, Math.min(width, height) / 700);
-  const margin = Math.max(6, Math.round(12 * scale));
-  const padding = Math.max(6, Math.round(10 * scale));
-  const fontSize = Math.max(10, Math.round(15 * scale));
-  const phoneSize = Math.max(9, Math.round(11 * scale));
-  const markSize = Math.max(20, Math.round(34 * scale));
-  const textWidth = Math.max(safeName.length * fontSize * 0.62, safePhone.length * phoneSize * 0.62);
-  const panelWidth = Math.min(width - margin * 2, markSize + padding * 3 + textWidth);
-  const panelHeight = Math.min(height - margin * 2, Math.max(markSize, fontSize + (phone ? phoneSize + 4 : 0)) + padding * 2);
-  const left = Math.max(margin, width - margin - panelWidth);
-  const top = Math.max(margin, height - margin - panelHeight);
-  const textX = left + padding + markSize + padding;
-  const textY = top + padding + fontSize;
-  const centerFont = Math.max(10, Math.min(28, Math.round(Math.min(width, height) * 0.065)));
-  const logo = logoDataUri
-    ? `<image x="${left + padding}" y="${top + padding}" width="${markSize}" height="${markSize}" preserveAspectRatio="xMidYMid meet" href="${logoDataUri}"/>`
-    : `<path d="M${left + padding + 2} ${top + padding + markSize * 0.42}l${markSize * 0.4} -${markSize * 0.3} ${markSize * 0.4} ${markSize * 0.3}v${markSize * 0.4}h-${markSize * 0.3}v-${markSize * 0.25}h-${markSize * 0.2}v${markSize * 0.25}h-${markSize * 0.3}z" fill="#fff"/>`;
-
+export function watermarkSvg(width, height) {
+  const characters = [...PROPERTY_IMAGE_WATERMARK];
+  const textWidth = characters.reduce(
+    (total, character) => total + (character === ' ' ? 4 : 6),
+    0,
+  ) - 1;
+  const cellSize = Math.min(width * 0.9 / (textWidth + 4), height * 0.16 / 10) / 2;
+  const textHeight = 7 * cellSize;
+  const originX = (width - textWidth * cellSize) / 2;
+  const originY = (height - textHeight) / 2;
+  let cursorX = 0;
+  const glyphPaths = [];
+  for (const character of characters) {
+    if (character === ' ') {
+      cursorX += 4 * cellSize;
+      continue;
+    }
+    const glyph = watermarkGlyphs[character];
+    for (let row = 0; row < glyph.length; row += 1) {
+      for (let column = 0; column < glyph[row].length; column += 1) {
+        if (glyph[row][column] === '1') {
+          const x = cursorX + column * cellSize;
+          const y = row * cellSize;
+          glyphPaths.push(`M${x} ${y}h${cellSize}v${cellSize}h-${cellSize}z`);
+        }
+      }
+    }
+    cursorX += 6 * cellSize;
+  }
   return Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <g opacity="0.86">
-      <rect x="${left}" y="${top}" width="${panelWidth}" height="${panelHeight}" rx="${Math.max(4, padding)}" fill="#0d1f31" stroke="#fff"/>
-      ${logo}
-      <text x="${textX}" y="${textY}" fill="#fff" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="700">${safeName}</text>
-      ${phone ? `<text x="${textX}" y="${textY + phoneSize + 4}" fill="#fff" font-family="Arial,sans-serif" font-size="${phoneSize}">${safePhone}</text>` : ''}
-    </g>
-    <text x="${width / 2}" y="${height / 2}" text-anchor="middle" dominant-baseline="middle"
-      fill="#f3c5c9" fill-opacity=".85" stroke="#0d1f31" stroke-opacity=".85" stroke-width="2"
-      paint-order="stroke" font-family="Arial,sans-serif" font-size="${centerFont}">@Infinity House</text>
+    <path d="${glyphPaths.join('')}" fill="#fff" fill-opacity=".5" transform="translate(${originX} ${originY})" />
   </svg>`);
 }
 
-export async function prepareImageUpload(file, branding = {}) {
+export async function prepareImageUpload(file) {
   if (!file?.buffer || !Buffer.isBuffer(file.buffer)) {
     throw new ApiError(400, 'Choose a property image to upload.');
   }
-  if (file.size > MAX_IMAGE_SIZE_BYTES) {
-    throw new ApiError(413, 'Image files must be 10 MB or smaller.');
-  }
-
   try {
-    const image = sharp(file.buffer, { failOn: 'error', limitInputPixels: MAX_IMAGE_PIXELS });
+    const image = sharp(file.buffer, { failOn: 'error' });
     const metadata = await image.metadata();
     const format = allowedFormats.get(metadata.format);
     if (!format || !metadata.width || !metadata.height) {
       throw new ApiError(400, 'Property photos must be valid JPEG, PNG, or WebP images.');
     }
-    if (metadata.width < 256 || metadata.height < 160) {
-      throw new ApiError(400, 'Property photos must be at least 256 by 160 pixels.');
-    }
-
-    const oriented = await sharp(file.buffer, {
-      failOn: 'error',
-      limitInputPixels: MAX_IMAGE_PIXELS,
-    }).rotate().toBuffer();
+    const oriented = await sharp(file.buffer, { failOn: 'error' }).rotate().toBuffer();
     const orientedMetadata = await sharp(oriented).metadata();
-    const overlay = watermarkSvg(
-      orientedMetadata.width,
-      orientedMetadata.height,
-      branding.siteName || 'Infinity House',
-      branding.phone || '',
-      branding.logoDataUri || '',
-    );
+    const overlay = watermarkSvg(orientedMetadata.width, orientedMetadata.height);
     let publicPipeline = sharp(oriented).composite([{ input: overlay }]);
     if (metadata.format === 'jpeg') publicPipeline = publicPipeline.jpeg({ quality: 92, mozjpeg: true });
     if (metadata.format === 'png') publicPipeline = publicPipeline.png({ compressionLevel: 8 });
@@ -130,16 +125,18 @@ export function storedMediaPath(root, storedName, expectedDirectory) {
   return fullPath;
 }
 
-async function writeMediaFiles(mediaConfig, image) {
+async function writeMediaFiles(mediaConfig, image, request) {
   const baseName = `${randomUUID()}.${image.extension}`;
   const publicName = `property_images/${baseName}`;
   const privateName = `private_property_images/${baseName}`;
   const publicPath = storedMediaPath(mediaConfig.publicRoot, publicName, 'property_images');
   const privatePath = storedMediaPath(mediaConfig.privateRoot, privateName, 'private_property_images');
+  request.uploadStage = 'filesystem_directory';
   await Promise.all([
     mkdir(path.dirname(publicPath), { recursive: true, mode: 0o755 }),
     mkdir(path.dirname(privatePath), { recursive: true, mode: 0o700 }),
   ]);
+  request.uploadStage = 'filesystem_write';
   try {
     const writes = await Promise.allSettled([
       writeFile(publicPath, image.publicBuffer, { flag: 'wx', mode: 0o644 }),
@@ -148,7 +145,15 @@ async function writeMediaFiles(mediaConfig, image) {
     const failure = writes.find((result) => result.status === 'rejected');
     if (failure) throw failure.reason;
   } catch (error) {
-    await Promise.all([rm(publicPath, { force: true }), rm(privatePath, { force: true })]);
+    const cleanup = await Promise.allSettled([
+      rm(publicPath, { force: true }),
+      rm(privatePath, { force: true }),
+    ]);
+    const cleanupFailure = cleanup.find((result) => result.status === 'rejected');
+    request.uploadCleanup = cleanupFailure ? 'failed' : 'succeeded';
+    if (cleanupFailure) {
+      request.uploadCleanupErrorCode = cleanupFailure.reason.code || cleanupFailure.reason.name;
+    }
     throw error;
   }
   return { publicName, privateName, publicPath, privatePath };
@@ -208,8 +213,8 @@ async function lockAndAuthorizeProperty(client, userId, propertyId, mode) {
 async function createImageRecord(client, propertyId, image, files, caption, isPrimary) {
   const result = await client.query(
     `INSERT INTO user_propertyimage
-       (property_id, image, original_image, original_filename, original_content_type, caption, is_primary)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (property_id, image, original_image, original_filename, original_content_type, caption, is_primary, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
      RETURNING id, property_id, image, original_image, original_filename,
                original_content_type, caption, is_primary, created_at`,
     [
@@ -239,28 +244,6 @@ async function createImageRecord(client, propertyId, image, files, caption, isPr
     ],
   );
   return record;
-}
-
-async function getBranding(client, mediaConfig) {
-  const result = await client.query(
-    'SELECT site_name, phone, site_logo FROM portal_admin_brokeragesettings WHERE id = 1',
-  );
-  const settings = result.rows[0];
-  let logoDataUri = '';
-  if (settings?.site_logo) {
-    const logoPath = storedMediaPath(mediaConfig.publicRoot, settings.site_logo, 'site-branding');
-    const logoBytes = await readFile(logoPath);
-    const logo = await sharp(logoBytes, {
-      failOn: 'error',
-      limitInputPixels: 20_000_000,
-    }).rotate().resize(64, 64, { fit: 'inside' }).png().toBuffer();
-    logoDataUri = `data:image/png;base64,${logo.toString('base64')}`;
-  }
-  return {
-    siteName: settings?.site_name || 'Infinity House',
-    phone: settings?.phone || '',
-    logoDataUri,
-  };
 }
 
 export function imageUrl(request, storedName) {
@@ -338,6 +321,9 @@ export async function getManagedImage(pool, request, userId, propertyId, imageId
 
 export async function createPropertyImage(pool, request, userId, propertyId, mode, file, fields, mediaConfig) {
   const caption = fields.caption || '';
+  request.uploadStage = 'input_validation';
+  request.uploadFileCount = file ? 1 : 0;
+  request.uploadFileSizeBytes = file?.size ?? 0;
   if (typeof caption !== 'string' || caption.length > 200) {
     throw new ApiError(400, 'Caption must be 200 characters or fewer.');
   }
@@ -346,36 +332,54 @@ export async function createPropertyImage(pool, request, userId, propertyId, mod
   }
 
   let createdFiles;
+  let imageRecord;
   try {
-    const imageRecord = await withTransaction(pool, async (client) => {
+    request.uploadStage = 'property_authorization';
+    await withTransaction(pool, async (client) => {
+      await lockAndAuthorizeProperty(client, userId, propertyId, mode);
+    });
+
+    request.uploadStage = 'image_processing';
+    const image = await prepareImageUpload(file);
+    createdFiles = await writeMediaFiles(mediaConfig, image, request);
+
+    imageRecord = await withTransaction(pool, async (client) => {
+      request.uploadStage = 'property_authorization';
       const property = await lockAndAuthorizeProperty(client, userId, propertyId, mode);
+      request.uploadStage = 'image_record_lookup';
       const count = await client.query(
         'SELECT COUNT(*)::integer AS image_count FROM user_propertyimage WHERE property_id = $1',
         [propertyId],
       );
       const imageCount = count.rows[0].image_count;
-      if (imageCount >= 10) {
-        throw new ApiError(400, 'A property can have at most 10 images.');
-      }
-      const image = await prepareImageUpload(file, await getBranding(client, mediaConfig));
-      const files = await writeMediaFiles(mediaConfig, image);
-      createdFiles = files;
       const isPrimary = mode === 'managed'
         ? imageCount === 0 || fields.is_primary === 'true'
         : fields.is_primary === 'true';
       if (isPrimary) {
+        request.uploadStage = 'primary_image_update';
         await client.query(
           'UPDATE user_propertyimage SET is_primary = FALSE WHERE property_id = $1',
           [propertyId],
         );
       }
-      return createImageRecord(client, property.id, image, files, caption, isPrimary);
+      request.uploadStage = 'database_image_record';
+      const record = await createImageRecord(client, property.id, image, createdFiles, caption, isPrimary);
+      request.uploadStage = 'database_commit';
+      return record;
     });
-    return serializeImage(request, imageRecord, true);
   } catch (error) {
-    if (createdFiles) await removeFiles([createdFiles.publicPath, createdFiles.privatePath]);
+    if (createdFiles) {
+      try {
+        await removeFiles([createdFiles.publicPath, createdFiles.privatePath]);
+        request.uploadCleanup = 'succeeded';
+      } catch (cleanupError) {
+        request.uploadCleanup = 'failed';
+        request.uploadCleanupErrorCode = cleanupError.code || cleanupError.name;
+      }
+    }
     throw error;
   }
+  return serializeImage(request, imageRecord, true);
 }
 
 export async function updateManagedImage(pool, request, userId, propertyId, imageId, fields) {
@@ -414,10 +418,27 @@ export async function updateManagedImage(pool, request, userId, propertyId, imag
 }
 
 export async function replaceManagedImage(pool, request, userId, propertyId, imageId, file, mediaConfig) {
+  request.uploadFileCount = file ? 1 : 0;
+  request.uploadFileSizeBytes = file?.size ?? 0;
+  request.uploadStage = 'property_authorization';
+  await withTransaction(pool, async (client) => {
+    await lockAndAuthorizeProperty(client, userId, propertyId, 'managed');
+    const selected = await client.query(
+      `SELECT id FROM user_propertyimage
+       WHERE id = $1 AND property_id = $2 FOR UPDATE`,
+      [imageId, propertyId],
+    );
+    if (selected.rowCount !== 1) throw new ApiError(404, 'Image not found.');
+  });
+
+  request.uploadStage = 'image_processing';
+  const image = await prepareImageUpload(file);
   let createdFiles;
   let replaced;
   try {
+    createdFiles = await writeMediaFiles(mediaConfig, image, request);
     replaced = await withTransaction(pool, async (client) => {
+      request.uploadStage = 'property_authorization';
       await lockAndAuthorizeProperty(client, userId, propertyId, 'managed');
       const selected = await client.query(
         `SELECT id, image, original_image, caption, is_primary
@@ -425,15 +446,13 @@ export async function replaceManagedImage(pool, request, userId, propertyId, ima
         [imageId, propertyId],
       );
       if (selected.rowCount !== 1) throw new ApiError(404, 'Image not found.');
-      const image = await prepareImageUpload(file, await getBranding(client, mediaConfig));
-      const files = await writeMediaFiles(mediaConfig, image);
-      createdFiles = files;
+      request.uploadStage = 'database_image_record';
       const update = await client.query(
         `UPDATE user_propertyimage
          SET image = $1, original_image = $2, original_filename = $3, original_content_type = $4
          WHERE id = $5
          RETURNING id, image, original_image, caption, is_primary, created_at`,
-        [files.publicName, files.privateName, image.originalFilename, image.contentType, imageId],
+        [createdFiles.publicName, createdFiles.privateName, image.originalFilename, image.contentType, imageId],
       );
       await client.query(
         `INSERT INTO backend_media_file_metadata
@@ -458,6 +477,7 @@ export async function replaceManagedImage(pool, request, userId, propertyId, ima
           image.height,
         ],
       );
+      request.uploadStage = 'database_commit';
       return {
         record: update.rows[0],
         oldImage: selected.rows[0].image,
@@ -465,17 +485,33 @@ export async function replaceManagedImage(pool, request, userId, propertyId, ima
       };
     });
   } catch (error) {
-    if (createdFiles) await removeFiles([createdFiles.publicPath, createdFiles.privatePath]);
+    if (createdFiles) {
+      try {
+        await removeFiles([createdFiles.publicPath, createdFiles.privatePath]);
+        request.uploadCleanup = 'succeeded';
+      } catch (cleanupError) {
+        request.uploadCleanup = 'failed';
+        request.uploadCleanupErrorCode = cleanupError.code || cleanupError.name;
+      }
+    }
     throw error;
   }
-  await removeFiles([
-    replaced.oldImage
-      ? storedMediaPath(mediaConfig.publicRoot, replaced.oldImage, 'property_images')
-      : null,
-    replaced.oldOriginal
-      ? storedMediaPath(mediaConfig.privateRoot, replaced.oldOriginal, 'private_property_images')
-      : null,
-  ]);
+  request.uploadStage = 'filesystem_cleanup';
+  try {
+    await removeFiles([
+      replaced.oldImage
+        ? storedMediaPath(mediaConfig.publicRoot, replaced.oldImage, 'property_images')
+        : null,
+      replaced.oldOriginal
+        ? storedMediaPath(mediaConfig.privateRoot, replaced.oldOriginal, 'private_property_images')
+        : null,
+    ]);
+    request.uploadCleanup = 'succeeded';
+  } catch (cleanupError) {
+    request.uploadCleanup = 'failed';
+    request.uploadCleanupErrorCode = cleanupError.code || cleanupError.name;
+    throw cleanupError;
+  }
   return serializeImage(request, replaced.record, true);
 }
 

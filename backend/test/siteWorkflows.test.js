@@ -16,6 +16,7 @@ import {
   deleteFavorite,
   getBrokerageContact,
   getManagedLocation,
+  getPublicInformationPage,
   listFavorites,
   listHomepageNotes,
   listManagedLocations,
@@ -30,6 +31,24 @@ import {
   locationPatchSchema,
   locationWriteSchema,
 } from '../src/validators/siteWorkflows.js';
+
+test('public information pages return editable defaults when their database row is missing', async () => {
+  const pool = {
+    async query() {
+      return { rows: [], rowCount: 0 };
+    },
+  };
+
+  const page = await getPublicInformationPage(pool, 'about');
+  assert.equal(page.page, 'about');
+  assert.equal(page.title_en, 'About Infinity House');
+  assert.equal(page.body_en, '');
+  assert.equal(page.updated_at, null);
+  await assert.rejects(
+    getPublicInformationPage(pool, 'unknown'),
+    (error) => error.statusCode === 404,
+  );
+});
 
 function locationRow() {
   return {

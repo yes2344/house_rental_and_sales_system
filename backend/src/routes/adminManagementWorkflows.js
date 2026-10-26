@@ -11,6 +11,10 @@ import { requireCsrf } from '../middleware/csrf.js';
 import { storedMediaPath } from '../services/propertyImageService.js';
 import { hashPassword } from '../services/passwordService.js';
 import {
+  getDefaultPublicInformationPage,
+  publicInformationPageDefaults,
+} from '../services/publicInformationPageSeedService.js';
+import {
   adminPropertyPatchSchema,
   adminUserPatchSchema,
   assignmentSchema,
@@ -375,7 +379,8 @@ function serializeManagedProperty(row) {
   return {
     id: Number(row.id), title: row.title, slug: row.slug, location: row.location,
     administrative_location: row.administrative_location_id === null ? null : Number(row.administrative_location_id),
-    category: row.property_type, listing_type: row.listing_type, price: String(row.price), currency: 'ETB',
+    category: row.property_type, listing_type: row.listing_type,
+    price: row.price === null ? null : String(row.price), currency: row.currency || 'ETB',
     bedrooms: row.bedrooms, bathrooms: row.bathrooms, area_sqft: row.area_sqft,
     area_value: row.area_value === null ? null : String(row.area_value), area_unit: row.area_unit,
     rental_frequency: row.rental_frequency, description: row.description, features: row.features,
@@ -397,6 +402,81 @@ async function getPropertyAmenities(pool, id) {
 
 export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = console }) {
   const router = Router();
+  const deleteManagedProperties = async (ids, user, ownerId = null) => {
+    const deleted = await withTransaction(pool, async (client) => {
+      const values = ownerId === null ? [ids] : [ids, ownerId];
+      const rows = await client.query(
+        `SELECT id, title, service_type FROM user_property
+         WHERE id = ANY($1::bigint[]) AND service_type = 'agent_managed'
+         ${ownerId === null ? '' : 'AND submitted_by_id = $2'} ORDER BY id FOR UPDATE`,
+        values,
+      );
+      if (rows.rowCount !== ids.length) {
+        throw new ApiError(404, 'One or more selected listings are unavailable.');
+      }
+
+      const viewingRequests = await client.query(
+        `SELECT DISTINCT property_id FROM user_viewingrequest
+         WHERE property_id = ANY($1::bigint[])`,
+        [ids],
+      );
+      if (viewingRequests.rowCount) {
+        throw new ApiError(
+          409,
+          'Listings with viewing requests cannot be permanently deleted. Mark them inactive instead.',
+        );
+      }
+
+      const images = await client.query(
+        `SELECT id, image, original_image FROM user_propertyimage
+         WHERE property_id = ANY($1::bigint[]) ORDER BY id`,
+        [ids],
+      );
+      if (images.rowCount && !mediaConfig) {
+        throw new Error('Media storage is required to delete property images.');
+      }
+      const imagePaths = images.rows.flatMap((image) => [
+        storedMediaPath(mediaConfig.publicRoot, image.image, 'property_images'),
+        storedMediaPath(mediaConfig.privateRoot, image.original_image, 'private_property_images'),
+      ]);
+
+      for (const row of rows.rows) {
+        await writeAudit(client, user, 'property_deleted', 'property', row.id,
+          { title: row.title, service_type: row.service_type });
+      }
+      await client.query(
+        'UPDATE properties_listingreport SET property_id = NULL WHERE property_id = ANY($1::bigint[])',
+        [ids],
+      );
+      await client.query('DELETE FROM favorites_favorite WHERE property_id = ANY($1::bigint[])', [ids]);
+      await client.query(
+        'DELETE FROM properties_propertyagentassignment WHERE property_id = ANY($1::bigint[])',
+        [ids],
+      );
+      await client.query('DELETE FROM user_property_amenities WHERE property_id = ANY($1::bigint[])', [ids]);
+      await client.query('DELETE FROM user_propertyimage WHERE property_id = ANY($1::bigint[])', [ids]);
+      await client.query(
+        `DELETE FROM user_property WHERE id = ANY($1::bigint[]) AND service_type = 'agent_managed'
+         ${ownerId === null ? '' : 'AND submitted_by_id = $2'}`,
+        values,
+      );
+      return { count: rows.rowCount, images: images.rows, imagePaths };
+    });
+
+    await Promise.all(deleted.imagePaths.map(async (imagePath, index) => {
+      try {
+        await unlink(imagePath);
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          logger.error('Failed to remove property image after listing deletion.', {
+            imageId: deleted.images[Math.floor(index / 2)].id,
+            code: error.code || error.name,
+          });
+        }
+      }
+    }));
+    return deleted.count;
+  };
   const requireMutationCsrf = (request, response, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return next();
     return requireCsrf(request, response, next);
@@ -514,7 +594,11 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
       `SELECT page, title_en, title_am, introduction_en, introduction_am, body_en, body_am, updated_at
        FROM portal_admin_publicinformationpage ORDER BY page`,
     );
-    res.json({ count: result.rowCount, next: null, previous: null, results: result.rows });
+    const existingPages = new Map(result.rows.map((page) => [page.page, page]));
+    const pages = publicInformationPageDefaults.map(({ page }) => (
+      existingPages.get(page) || getDefaultPublicInformationPage(page)
+    ));
+    res.json({ count: pages.length, next: null, previous: null, results: pages });
   }));
 
   router.route('/management/public-pages/:page/').all(asyncRoute(async (req, res, next) => {
@@ -525,23 +609,33 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
         `SELECT page, title_en, title_am, introduction_en, introduction_am, body_en, body_am, updated_at
          FROM portal_admin_publicinformationpage WHERE page = $1`, [req.params.page],
       );
-      if (!result.rowCount) throw new ApiError(404, 'Public information page not found.');
-      res.json(result.rows[0]);
+      res.json(result.rows[0] || getDefaultPublicInformationPage(req.params.page));
       return;
     }
     if (req.method === 'PATCH') {
       const input = parse(publicPagePatchSchema, req.body);
       const fields = Object.keys(input);
-      const values = fields.map((field) => input[field]);
-      values.push(req.params.page);
+      const defaults = getDefaultPublicInformationPage(req.params.page);
+      const content = { ...defaults, ...input };
+      const columns = [
+        'title_en', 'title_am', 'introduction_en', 'introduction_am', 'body_en', 'body_am',
+      ];
+      const insertValues = [
+        req.params.page,
+        ...columns.map((field) => content[field]),
+      ];
+      const conflictUpdates = fields.map((field) =>
+        `${field} = EXCLUDED.${field}`).concat('updated_at = CURRENT_TIMESTAMP');
       const result = await withTransaction(pool, async (client) => {
         const updated = await client.query(
-          `UPDATE portal_admin_publicinformationpage SET ${fields.map((field, i) => `${field} = $${i + 1}`).join(', ')},
-             updated_at = CURRENT_TIMESTAMP WHERE page = $${values.length}
+          `INSERT INTO portal_admin_publicinformationpage
+             (page, ${columns.join(', ')}, updated_at)
+           VALUES ($1, ${columns.map((_, index) => `$${index + 2}`).join(', ')}, CURRENT_TIMESTAMP)
+           ON CONFLICT (page) DO UPDATE SET ${conflictUpdates.join(', ')}
            RETURNING page, title_en, title_am, introduction_en, introduction_am, body_en, body_am, updated_at`,
-          values,
+          insertValues,
         );
-        if (!updated.rowCount) throw new ApiError(404, 'Public information page not found.');
+        if (updated.rowCount !== 1) throw new Error('Could not save the public information page.');
         await writeAudit(client, user, 'public_information_page_updated', 'public_information_page',
           req.params.page, { fields });
         return updated.rows[0];
@@ -771,14 +865,11 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
       && user.permissions.includes('properties.manage_assigned') && Boolean(user.assigned_city_id);
     const canCreate = user.admin || canCreateAsAgent;
     if (!canCreate) throw new ApiError(403, 'You are not allowed to create properties.');
+    const initialPublicationStatus = user.admin ? 'published' : 'pending_review';
     const input = parse(managedPropertyCreateSchema, req.body);
     if (!input.contact_phone.trim()) {
       const profile = await pool.query('SELECT phone FROM accounts_profile WHERE user_id = $1', [req.userId]);
-      const phone = profile.rows[0]?.phone?.trim();
-      if (!phone) throw new ApiError(400, 'A phone number is required when registering a property.', {
-        contact_phone: ['A phone number is required when registering a property.'],
-      });
-      input.contact_phone = phone;
+      input.contact_phone = profile.rows[0]?.phone?.trim() || '';
     }
     if ((input.listing_type === 'sale' && input.status === 'rented')
       || (input.listing_type === 'rent' && input.status === 'sold')) {
@@ -802,20 +893,20 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
         if (amenities.rowCount !== input.amenities.length) throw new ApiError(400, 'One or more amenities are unavailable.');
       }
       const base = input.title.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 150) || 'property';
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 41) || 'property';
       const slug = `${base}-${randomUUID().slice(0, 8)}`;
       const inserted = await client.query(
         `INSERT INTO user_property
-           (title, slug, location, administrative_location_id, property_type, listing_type, price,
+           (title, slug, location, administrative_location_id, property_type, listing_type, price, currency,
             rental_frequency, bedrooms, bathrooms, area_sqft, area_value, area_unit, description, features,
             status, publication_status, service_type, is_featured, submitted_by_id, moderation_note,
               advertising_authorized, contact_publicly_visible, exact_location_is_public,
               contact_name, contact_phone, contact_email, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'pending_review',
-                   'agent_managed',FALSE,$17,'',FALSE,FALSE,FALSE,$18,$19,$20,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'${initialPublicationStatus}',
+                   'agent_managed',FALSE,$18,'',FALSE,FALSE,FALSE,$19,$20,$21,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
          RETURNING *`,
         [input.title, slug, input.location, input.administrative_location, input.category, input.listing_type,
-          input.price, input.rental_frequency, input.bedrooms, input.bathrooms, input.area_sqft, input.area_value,
+          input.price, input.currency, input.rental_frequency, input.bedrooms, input.bathrooms, input.area_sqft, input.area_value,
           input.area_unit, input.description, input.features, input.status, req.userId, input.contact_name,
           input.contact_phone, input.contact_email],
       );
@@ -823,7 +914,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
         await client.query('INSERT INTO user_property_amenities (property_id, amenity_id) VALUES ($1, $2)', [inserted.rows[0].id, amenityId]);
       }
       await writeAudit(client, user, 'property_created', 'property', inserted.rows[0].id,
-        { publication_status: 'pending_review' });
+        { publication_status: initialPublicationStatus });
       return inserted.rows[0];
     });
     const relationships = await managedPropertyRelationships(pool, req, created.id);
@@ -838,23 +929,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
       && user.permissions.includes('properties.manage_assigned');
     if (!canDeleteAll && !canDeleteOwn) throw new ApiError(403, 'You are not allowed to delete properties.');
     const { ids } = parse(idsSchema, req.body);
-    const removed = await withTransaction(pool, async (client) => {
-      const values = canDeleteAll ? [ids] : [ids, user.id];
-      const rows = await client.query(
-        `SELECT id, title, service_type FROM user_property
-         WHERE id = ANY($1::bigint[]) AND service_type = 'agent_managed'
-         ${canDeleteAll ? '' : 'AND submitted_by_id = $2'} ORDER BY id FOR UPDATE`, values,
-      );
-      if (rows.rowCount !== ids.length) throw new ApiError(404, 'One or more selected listings are unavailable.');
-      for (const row of rows.rows) {
-        await writeAudit(client, user, 'property_deleted', 'property', row.id, { title: row.title, service_type: row.service_type });
-      }
-      await client.query(
-        `DELETE FROM user_property WHERE id = ANY($1::bigint[]) AND service_type = 'agent_managed'
-         ${canDeleteAll ? '' : 'AND submitted_by_id = $2'}`, values,
-      );
-      return rows.rowCount;
-    });
+    const removed = await deleteManagedProperties(ids, user, canDeleteAll ? null : user.id);
     res.json({ deleted_count: removed });
   }));
 
@@ -875,7 +950,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
         throw new ApiError(403, 'You are not allowed to edit this property.');
       }
       const input = parse(managedPropertyPatchSchema, req.body);
-      const allowed = new Set(['title', 'location', 'administrative_location', 'category', 'listing_type', 'price',
+      const allowed = new Set(['title', 'location', 'administrative_location', 'category', 'listing_type', 'price', 'currency',
         'bedrooms', 'bathrooms', 'area_sqft', 'area_value', 'area_unit', 'rental_frequency', 'description',
         'features', 'status', 'amenities', 'contact_name', 'contact_phone', 'contact_email']);
       const fields = Object.keys(input).filter((field) => allowed.has(field));
@@ -944,12 +1019,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
         && user.permissions.includes('properties.manage_assigned')
         && Number(row.submitted_by_id) === Number(user.id);
       if (!canDeleteAll && !canDeleteOwn) throw new ApiError(403, 'You are not allowed to delete this property.');
-      await withTransaction(pool, async (client) => {
-        const current = await lookupManagedProperty(client, user, id, true);
-        await writeAudit(client, user, 'property_deleted', 'property', id,
-          { title: current.title, service_type: current.service_type });
-        await client.query('DELETE FROM user_property WHERE id = $1', [id]);
-      });
+      await deleteManagedProperties([id], user, canDeleteAll ? null : user.id);
       res.status(204).end();
       return;
     }
@@ -1008,7 +1078,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
       '-price': 'p.price DESC, p.id DESC',
     })[page.ordering] || 'p.created_at DESC, p.id DESC';
     const rows = await pool.query(
-      `SELECT p.id, p.title, p.slug, p.location, p.property_type, p.listing_type, p.price::text AS price,
+      `SELECT p.id, p.title, p.slug, p.location, p.property_type, p.listing_type, p.price::text AS price, p.currency,
               p.status, p.publication_status, p.is_featured, p.owner_id, p.submitted_by_id,
               p.created_at, p.updated_at
        FROM user_property p ${whereSql}
@@ -1028,7 +1098,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
     else requireAnyPermission(user, ['properties.view_all', 'properties.moderate']);
     const id = parse(positiveId, req.params.id);
     const result = await pool.query(
-      `SELECT id, title, slug, location, property_type, listing_type, price::text AS price, status,
+      `SELECT id, title, slug, location, property_type, listing_type, price::text AS price, currency, status,
               publication_status, is_featured, owner_id, submitted_by_id, moderation_note, created_at, updated_at
        FROM user_property WHERE id = $1 AND service_type = 'agent_managed'`, [id],
     );
@@ -1065,7 +1135,7 @@ export function adminManagementWorkflowsRouter({ pool, mediaConfig, logger = con
         const row = await client.query(
           `UPDATE user_property SET ${writeFields.map((field, i) => `${field} = $${i + 1}`).join(', ')},
              updated_at = CURRENT_TIMESTAMP WHERE id = $${writeValues.length} RETURNING
-             id, title, slug, location, property_type, listing_type, price::text AS price, status,
+             id, title, slug, location, property_type, listing_type, price::text AS price, currency, status,
              publication_status, is_featured, owner_id, submitted_by_id, created_at, updated_at`,
           writeValues,
         );

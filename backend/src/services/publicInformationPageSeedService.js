@@ -1,4 +1,4 @@
-const publicInformationPageDefaults = [
+export const publicInformationPageDefaults = [
   {
     page: 'about',
     title_en: 'About Infinity House',
@@ -21,6 +21,17 @@ const publicInformationPageDefaults = [
     introduction_am: 'የንብረት ባለቤቶች ዝርዝሮቻቸውን ለማቅረብና ለመከራየት ወይም ለመግዛት ከሚፈልጉ ሰዎች ጋር ለመገናኘት እናግዛለን። ስለ ንብረት አስተዳደር አገልግሎቶች ለመወያየት ያግኙን።',
   },
 ];
+
+export function getDefaultPublicInformationPage(page) {
+  const defaults = publicInformationPageDefaults.find((item) => item.page === page);
+  if (!defaults) return null;
+  return {
+    ...defaults,
+    body_en: '',
+    body_am: '',
+    updated_at: null,
+  };
+}
 
 export async function seedMissingPublicInformationPages(client, { apply = false } = {}) {
   await client.query(apply ? 'BEGIN' : 'BEGIN READ ONLY');

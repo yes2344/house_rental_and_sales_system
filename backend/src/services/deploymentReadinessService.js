@@ -13,6 +13,13 @@ const requiredTables = [
   'properties_location',
   'backend_media_file_metadata',
 ];
+const requiredColumns = [
+  ['user_property', 'currency'],
+  ['user_property', 'price'],
+];
+const requiredNullableColumns = [
+  ['user_property', 'price'],
+];
 
 const requiredPrivileges = [
   ['auth_user', 'SELECT'],
@@ -173,6 +180,38 @@ export async function checkDeploymentReadiness({
   if (missingTables.length > 0) {
     blockers.push(`Existing database schema is missing required tables: ${missingTables.join(', ')}.`);
   }
+  const columnsResult = await pool.query(
+    `SELECT table_name, column_name, is_nullable
+     FROM information_schema.columns
+     WHERE table_schema = $1
+       AND table_name = ANY($2::text[])
+       AND column_name = ANY($3::text[])`,
+    [
+      schema,
+      requiredColumns.map(([table]) => table),
+      requiredColumns.map(([, column]) => column),
+    ],
+  );
+  const presentColumns = new Set(
+    columnsResult.rows.map(({ table_name, column_name }) => `${table_name}.${column_name}`),
+  );
+  const nullableColumns = new Set(
+    columnsResult.rows
+      .filter(({ is_nullable }) => is_nullable === 'YES')
+      .map(({ table_name, column_name }) => `${table_name}.${column_name}`),
+  );
+  const missingColumns = requiredColumns
+    .filter(([table, column]) => !presentColumns.has(`${table}.${column}`))
+    .map(([table, column]) => `${table}.${column}`);
+  if (missingColumns.length > 0) {
+    blockers.push(`Existing database schema is missing required columns: ${missingColumns.join(', ')}.`);
+  }
+  const nonNullableColumns = requiredNullableColumns
+    .filter(([table, column]) => !nullableColumns.has(`${table}.${column}`))
+    .map(([table, column]) => `${table}.${column}`);
+  if (nonNullableColumns.length > 0) {
+    blockers.push(`Existing database columns must allow NULL values: ${nonNullableColumns.join(', ')}.`);
+  }
   const privilegesResult = await pool.query(
     `SELECT required.table_name, required.privilege
      FROM unnest($2::text[], $3::text[]) AS required(table_name, privilege)
@@ -213,6 +252,8 @@ export async function checkDeploymentReadiness({
       server_version_num: version,
       schema,
       missing_required_tables: missingTables,
+      missing_required_columns: missingColumns,
+      non_nullable_required_columns: nonNullableColumns,
       missing_table_privileges: privilegesResult.rows.map(
         ({ table_name, privilege }) => `${table_name}:${privilege}`,
       ),

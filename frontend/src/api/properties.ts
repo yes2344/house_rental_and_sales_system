@@ -62,8 +62,8 @@ export interface PropertySummary {
   category: PropertyType;
   listing_type: ListingType;
   rental_frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
-  price: string;
-  currency: 'ETB';
+  price: string | null;
+  currency: 'ETB' | 'USD';
   area_value: string | null;
   area_unit: 'sqm' | 'sqft' | '';
   bedrooms: number;

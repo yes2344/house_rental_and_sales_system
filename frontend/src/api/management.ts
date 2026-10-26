@@ -10,6 +10,7 @@ export type PublicationStatus =
   | 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended' | 'expired' | 'withdrawn';
 export type ManagedAreaUnit = 'sqm' | 'sqft' | '';
 export type ManagedRentalFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
+export type ManagedCurrency = 'ETB' | 'USD';
 export type ViewingRequestStatus =
   | 'pending'
   | 'proposed'
@@ -181,8 +182,8 @@ export interface ManagedProperty {
   location_path: PropertyLocationPathItem[];
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
-  price: string;
-  currency: 'ETB';
+  price: string | null;
+  currency: ManagedCurrency;
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;
@@ -211,7 +212,8 @@ export interface ManagedPropertyPayload {
   administrative_location: number | null;
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
-  price: string;
+  price: string | null;
+  currency: ManagedCurrency;
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;

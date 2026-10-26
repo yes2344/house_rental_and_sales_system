@@ -42,6 +42,7 @@ export function PropertyCard({ property, locale, text, imageLoading = 'lazy' }: 
     property.rental_frequency,
     locale,
     text,
+    property.currency,
   );
   const statusKey = statusMessageKeys[property.status];
   const isLand = property.category === 'land';

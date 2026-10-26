@@ -5,6 +5,7 @@ import { errorHandler } from '../src/middleware/errorHandler.js';
 import { notFound } from '../src/middleware/notFound.js';
 import { ownerViewingWorkflowsRouter } from '../src/routes/ownerViewingWorkflows.js';
 import {
+  actOnManagementViewingRequest,
   createOwnerSubmission,
   createViewingRequest,
   deleteCustomerViewingRequest,
@@ -77,6 +78,39 @@ test('workflow validators reject protected fields and malformed decisions', () =
     administrative_location: 1,
   };
   assert.equal(submissionCreateSchema.safeParse(validSubmission).success, true);
+  const blankPropertyFields = submissionCreateSchema.parse({
+    ...validSubmission,
+    title: '',
+    location: '',
+    owner_contact_name: '',
+    owner_contact_phone: '',
+    administrative_location: null,
+  });
+  assert.equal(blankPropertyFields.title, '');
+  assert.equal(blankPropertyFields.owner_contact_name, '');
+  assert.equal(blankPropertyFields.administrative_location, null);
+  assert.equal(submissionCreateSchema.safeParse({
+    ...validSubmission,
+    authorization_confirmed: false,
+  }).success, false);
+  const submissionWithoutPrice = { ...validSubmission };
+  delete submissionWithoutPrice.price;
+  assert.equal(submissionCreateSchema.parse(submissionWithoutPrice).price, null);
+  assert.equal(submissionCreateSchema.parse({
+    ...validSubmission,
+    price: '',
+  }).price, null);
+  assert.equal(submissionCreateSchema.parse({
+    ...validSubmission,
+    price: null,
+  }).price, null);
+  assert.equal(submissionCreateSchema.safeParse({
+    ...validSubmission,
+    price: 0,
+  }).success, false);
+  assert.equal(submissionPatchSchema.parse({ price: '' }).price, null);
+  assert.equal(submissionCreateSchema.safeParse({ ...validSubmission, currency: 'USD' }).success, true);
+  assert.equal(submissionCreateSchema.safeParse({ ...validSubmission, currency: 'EUR' }).success, false);
   assert.equal(submissionCreateSchema.safeParse({ ...validSubmission, status: 'approved' }).success, false);
   assert.equal(submissionPatchSchema.safeParse({ status: 'approved' }).success, false);
   assert.equal(viewingCreateSchema.safeParse({
@@ -128,6 +162,7 @@ test('owner submission creation writes the property, agreement proof, event, and
     id: 44, announcement_id: 61, title: 'Sunny home', slug: 'sunny-home-abcd',
     location: 'Addis Ababa', administrative_location_id: 2, category: 'house',
     listing_type: 'sale', price: '1000.00', bedrooms: 0, bathrooms: 0,
+    currency: 'USD',
     area_sqft: 0, area_value: null, area_unit: '', rental_frequency: '',
     description: '', features: '', property_status: 'available',
     publication_status: 'pending_review', is_featured: false, submitted_by_id: 12,
@@ -167,11 +202,14 @@ test('owner submission creation writes the property, agreement proof, event, and
   const result = await createOwnerSubmission(pool, 12, {
     title: 'Sunny home', location: 'Addis Ababa', administrative_location: 2,
     category: 'house', listing_type: 'sale', price: 1000,
+    currency: 'USD',
     owner_contact_name: 'Owner', owner_contact_phone: '123',
     authorization_confirmed: true, terms_accepted: true,
   });
   assert.equal(result.id, 44);
+  assert.equal(result.currency, 'USD');
   const propertyInsert = calls.find(({ sql }) => sql.includes('INSERT INTO user_property'));
+  assert.equal(propertyInsert.values[7], 'USD');
   assert.ok(propertyInsert.sql.includes('owner_id'));
   assert.ok(propertyInsert.sql.includes("'owner_announced'"));
   assert.equal(propertyInsert.values.at(-1), 12);
@@ -324,6 +362,60 @@ test('receipt POST accepts a live proposal and stores the confirmed schedule', a
   assert.equal(result.status, 'confirmed');
   assert.equal(result.scheduled_date, '2099-12-30');
   assert.equal(row.scheduled_time, '10:00:00');
+});
+
+test('admin confirmation writes a requester notification with contiguous SQL parameters', async () => {
+  const admin = {
+    id: 3, is_active: true, is_staff: true, is_superuser: true,
+    role: 'administrator', agent_approved: false, management_permissions: [],
+  };
+  const row = {
+    id: 71, requester_id: 12, property_id: 44, full_name: 'Viewer',
+    email: 'viewer@example.test', phone: '123', preferred_date: '2099-12-30',
+    preferred_time: '10:00:00', proposed_date: null, proposed_time: null,
+    scheduled_date: null, scheduled_time: null, status: 'pending', message: '',
+    agent_notes: '', title: 'Test house', slug: 'test-house', location: 'Addis Ababa',
+    listing_type: 'sale', property_status: 'available', events: [],
+  };
+  const notificationQueries = [];
+  const pool = {
+    async connect() {
+      return {
+        async query(sql, values = []) {
+          if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [], rowCount: 0 };
+          if (sql.includes('FROM auth_user AS u')) return { rows: [admin], rowCount: 1 };
+          if (sql.includes('SELECT r.*, p.title')) return { rows: [{ ...row }], rowCount: 1 };
+          if (sql.includes("UPDATE user_viewingrequest SET status = 'confirmed'")) {
+            row.status = 'confirmed';
+            row.scheduled_date = row.preferred_date;
+            row.scheduled_time = row.preferred_time;
+            return { rows: [], rowCount: 1 };
+          }
+          if (sql.includes('INSERT INTO viewings_viewingrequestevent')) return { rows: [{ id: 91 }], rowCount: 1 };
+          if (sql.includes('INSERT INTO owner_announcements_inappnotification')) {
+            notificationQueries.push({ sql, values });
+            return { rows: [], rowCount: 1 };
+          }
+          throw new Error(`Unexpected transaction query: ${sql}`);
+        },
+        release() {},
+      };
+    },
+  };
+
+  const result = await actOnManagementViewingRequest(pool, admin.id, row.id, 'confirm_requested');
+
+  assert.equal(result.status, 'confirmed');
+  assert.equal(result.scheduled_date, row.preferred_date);
+  assert.equal(result.scheduled_time, row.preferred_time);
+  assert.equal(notificationQueries.length, 1);
+  const [notification] = notificationQueries;
+  assert.deepEqual(notification.values, [
+    row.id, row.property_id, 'Viewing request for Test house: request confirmed.', 91,
+  ]);
+  assert.match(notification.sql, /property_id = \$2/);
+  const parameterNumbers = [...new Set([...notification.sql.matchAll(/\$(\d+)/g)].map((match) => Number(match[1])))];
+  assert.deepEqual(parameterNumbers.sort(), [1, 2, 3, 4]);
 });
 
 test('frontend PATCH/DELETE detail methods and receipt POST are registered', async (t) => {

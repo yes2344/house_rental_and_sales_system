@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import { LocationCascade } from '../components/LocationCascade';
+import { formatPropertyFeatures, parsePropertyFeatures, PROPERTY_FACILITIES } from '../components/propertyFeatures';
 import {
   createManagedProperty,
   deleteManagedImage,
@@ -21,6 +22,7 @@ import {
   type ManagedProperty,
   type ManagedPropertyPayload,
   type ManagedAreaUnit,
+  type ManagedCurrency,
   type ManagedRentalFrequency,
   type ManagedPropertyStatus,
   type ManagedPropertyType,
@@ -39,6 +41,7 @@ interface PropertyFormValues {
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
   price: string;
+  currency: ManagedCurrency;
   bedrooms: string;
   bathrooms: string;
   area_sqft: string;
@@ -61,6 +64,7 @@ const initialValues: PropertyFormValues = {
   category: 'house',
   listing_type: 'sale',
   price: '',
+  currency: 'ETB',
   bedrooms: '',
   bathrooms: '',
   area_sqft: '',
@@ -85,7 +89,8 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
       : String(property.administrative_location),
     category: property.category,
     listing_type: property.listing_type,
-    price: property.price,
+    price: property.price ?? '',
+    currency: property.currency,
     bedrooms: String(property.bedrooms),
     bathrooms: String(property.bathrooms),
     area_sqft: String(property.area_sqft),
@@ -104,9 +109,10 @@ function fromProperty(property: ManagedProperty): PropertyFormValues {
 
 function isCreatedNavigationState(
   state: unknown,
-): state is { created: true; available: boolean; imageUploadFailures?: string[] } {
+): state is { created: true; available: boolean; published: boolean; imageUploadFailures?: string[] } {
   return typeof state === 'object' && state !== null && 'created' in state
-    && state.created === true && 'available' in state && typeof state.available === 'boolean';
+    && state.created === true && 'available' in state && typeof state.available === 'boolean'
+    && 'published' in state && typeof state.published === 'boolean';
 }
 
 function statusText(status: ManagedPropertyStatus, text: (key: MessageKey) => string): string {
@@ -148,7 +154,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState('');
   const [imageBusyId, setImageBusyId] = useState<number | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [stagedImages, setStagedImages] = useState<File[]>([]);
   const [imageCaption, setImageCaption] = useState('');
   const [makePrimary, setMakePrimary] = useState(false);
@@ -234,10 +240,11 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
     setFieldErrors({});
     const payload: ManagedPropertyPayload = {
       ...values,
+      currency: values.currency,
       administrative_location: values.administrative_location
         ? Number(values.administrative_location)
         : null,
-      price: values.price.trim(),
+      price: values.price.trim() || null,
       bedrooms: values.bedrooms ? Number(values.bedrooms) : 0,
       bathrooms: values.bathrooms ? Number(values.bathrooms) : 0,
       area_sqft: values.area_unit === 'sqft' && values.area_value
@@ -270,6 +277,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           state: {
             created: true,
             available: created.status === 'available',
+            published: created.publication_status === 'published',
             ...(imageUploadFailures.length ? { imageUploadFailures } : {}),
           },
         });
@@ -295,20 +303,20 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
     }
   };
 
-  const chooseImage = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextFile = event.target.files?.[0] ?? null;
-    setImageFile(nextFile);
-    setImageError('');
-    if (nextFile) {
-      const extension = nextFile.name.split('.').pop()?.toLowerCase();
+  const chooseImages = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextFiles = [...imageFiles];
+    let selectionError = '';
+    for (const file of Array.from(event.target.files ?? [])) {
+      const extension = file.name.split('.').pop()?.toLowerCase();
       if (!['jpg', 'jpeg', 'png', 'webp'].includes(extension ?? '')) {
-        setImageError(text('imageTypeError'));
-        setImageFile(null);
-      } else if (nextFile.size > 10 * 1024 * 1024) {
-        setImageError(text('imageSizeError'));
-        setImageFile(null);
+        selectionError = text('imageTypeError');
+        continue;
       }
+      nextFiles.push(file);
     }
+    setImageFiles(nextFiles);
+    setImageError(selectionError);
+    event.target.value = '';
   };
 
   const chooseNewImages = (event: ChangeEvent<HTMLInputElement>) => {
@@ -321,14 +329,6 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
         selectionError = text('imageTypeError');
         continue;
       }
-      if (file.size > 10 * 1024 * 1024) {
-        selectionError = text('imageSizeError');
-        continue;
-      }
-      if (nextImages.length >= 10) {
-        selectionError = text('imageLimitError');
-        break;
-      }
       nextImages.push(file);
     }
     setStagedImages(nextImages);
@@ -338,26 +338,39 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
 
   const submitImage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!isEditing || propertyId === null || !imageFile) {
+    if (!isEditing || propertyId === null || imageFiles.length === 0) {
       setImageError(text('imageChooseFile'));
-      return;
-    }
-    if (images.length >= 10) {
-      setImageError(text('imageLimitError'));
       return;
     }
     setImageBusyId(-1);
     setImageError('');
     try {
-      await uploadManagedImage(propertyId, imageFile, imageCaption.trim(), makePrimary);
-      setImageFile(null);
-      setImageCaption('');
-      setMakePrimary(false);
+      const failedFiles: File[] = [];
+      const uploadFailures: string[] = [];
+      for (const [index, file] of imageFiles.entries()) {
+        try {
+          await uploadManagedImage(
+            propertyId,
+            file,
+            imageCaption.trim(),
+            makePrimary && index === 0,
+          );
+        } catch (error: unknown) {
+          failedFiles.push(file);
+          uploadFailures.push(`${file.name}: ${getErrorMessage(error)}`);
+        }
+      }
+      setImageFiles(failedFiles);
+      if (uploadFailures.length === 0) {
+        setImageCaption('');
+        setMakePrimary(false);
+      }
       const input = document.getElementById('property-image-file');
       if (input instanceof HTMLInputElement) input.value = '';
       await refreshImages();
-    } catch (error: unknown) {
-      setImageError(getErrorMessage(error));
+      if (uploadFailures.length) {
+        setImageError(uploadFailures.join(' '));
+      }
     } finally {
       setImageBusyId(null);
     }
@@ -461,7 +474,9 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
 
       {isCreatedNavigationState(location.state) && (
         <div className="manager-success" role="status">
-          {text(location.state.available ? 'listingCreated' : 'listingCreatedUnavailable')}
+          {text(location.state.published
+            ? location.state.available ? 'listingCreated' : 'listingCreatedUnavailable'
+            : 'listingCreatedPendingReview')}
         </div>
       )}
       {isCreatedNavigationState(location.state) && location.state.imageUploadFailures?.length ? (
@@ -478,17 +493,17 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           <h2>{text('listingInformation')}</h2>
           <div className="manager-form-grid">
             <label className="manager-field manager-field-wide">
-              <span>{text('listingTitle')} *</span>
-              <input required maxLength={200} value={values.title} onChange={(event) => updateValue('title', event.target.value)} />
+              <span>{text('listingTitle')}</span>
+              <input maxLength={200} value={values.title} onChange={(event) => updateValue('title', event.target.value)} />
               {fieldError('title')}
             </label>
             <label className="manager-field">
-              <span>{text('location')} *</span>
-              <input required maxLength={200} value={values.location} onChange={(event) => updateValue('location', event.target.value)} />
+              <span>{text('location')}</span>
+              <input maxLength={200} value={values.location} onChange={(event) => updateValue('location', event.target.value)} />
               {fieldError('location')}
             </label>
             <label className="manager-field">
-              <span>{text('categoryLabel')} *</span>
+              <span>{text('categoryLabel')}</span>
               <select value={values.category} onChange={(event) => updateValue('category', event.target.value as ManagedPropertyType)}>
                 <option value="house">{text('house')}</option>
                 <option value="villa">{text('villa')}</option>
@@ -504,7 +519,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('category')}
             </label>
             <label className="manager-field">
-              <span>{text('listingTypeLabel')} *</span>
+              <span>{text('listingTypeLabel')}</span>
               <select value={values.listing_type} onChange={(event) => onListingTypeChange(event.target.value as ManagedListingType)}>
                 <option value="sale">{text('forSale')}</option>
                 <option value="rent">{text('forRent')}</option>
@@ -514,14 +529,24 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
             <label className="manager-field">
               <span>
                 {values.listing_type === 'rent' && values.rental_frequency
-                  ? text('priceWithPeriod').replace('{period}', text(values.rental_frequency))
-                  : `${text('priceLabel')} (${text('ethiopianBirr')})`} *
+                  ? text('priceWithPeriod')
+                    .replace('{currency}', values.currency === 'USD' ? text('usDollar') : 'ETB')
+                    .replace('{period}', text(values.rental_frequency))
+                  : `${text('priceLabel')} (${values.currency === 'USD' ? text('usDollar') : text('ethiopianBirr')})`}
               </span>
-              <input type="number" required min="0.01" step="0.01" value={values.price} onChange={(event) => updateValue('price', event.target.value)} />
+              <input type="number" min="0.01" step="0.01" value={values.price} onChange={(event) => updateValue('price', event.target.value)} />
+              <small>{text('priceNegotiableHint')}</small>
               {fieldError('price')}
             </label>
             <label className="manager-field">
-              <span>{text('listingStatus')} *</span>
+              <span>{text('currencyLabel')}</span>
+              <select value={values.currency} onChange={(event) => updateValue('currency', event.target.value as ManagedCurrency)}>
+                <option value="ETB">{text('ethiopianBirr')}</option>
+                <option value="USD">{text('usDollar')}</option>
+              </select>
+            </label>
+            <label className="manager-field">
+              <span>{text('listingStatus')}</span>
               <select value={values.status} onChange={(event) => updateValue('status', event.target.value as ManagedPropertyStatus)}>
                 {allowedStatuses.map((status) => <option key={status} value={status}>{statusText(status, text)}</option>)}
               </select>
@@ -545,7 +570,7 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
             <label className="manager-field">
               <span>{text('areaUnit')}</span>
               <select value={values.area_unit} onChange={(event) => updateValue('area_unit', event.target.value as ManagedAreaUnit)}>
-                <option value="">{text('optionalField')}</option>
+                <option value="">{text('selectOption')}</option>
                 <option value="sqm">{text('squareMetres')}</option>
                 <option value="sqft">{text('squareFeet')}</option>
               </select>
@@ -553,8 +578,8 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
             </label>
             {values.listing_type === 'rent' && (
               <label className="manager-field">
-                <span>{text('rentalFrequency')} *</span>
-                <select required value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
+                <span>{text('rentalFrequency')}</span>
+                <select value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
                   <option value="">{text('selectOption')}</option>
                   <option value="daily">{text('daily')}</option>
                   <option value="monthly">{text('monthly')}</option>
@@ -564,15 +589,47 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               </label>
             )}
             <label className="manager-field manager-field-wide">
-              <span>{text('detailsHeading')} *</span>
-              <textarea required rows={5} value={values.description} onChange={(event) => updateValue('description', event.target.value)} />
+              <span>{text('detailsHeading')}</span>
+              <textarea rows={5} value={values.description} onChange={(event) => updateValue('description', event.target.value)} />
               {fieldError('description')}
             </label>
             <label className="manager-field manager-field-wide">
-              <span>{text('featuresLabel')}</span>
-              <textarea rows={3} value={values.features} onChange={(event) => updateValue('features', event.target.value)} />
+              <span>{text('additionalFeaturesLabel')}</span>
+              <textarea
+                rows={3}
+                value={parsePropertyFeatures(values.features).additional}
+                onChange={(event) => {
+                  const parsed = parsePropertyFeatures(values.features);
+                  updateValue('features', formatPropertyFeatures(parsed.facilities, event.target.value));
+                }}
+              />
               {fieldError('features')}
             </label>
+          </div>
+        </section>
+
+        <section className="manager-form-section">
+          <h2>{text('facilitiesHeading')}</h2>
+          <div className="amenity-choice-grid facility-choice-grid">
+            {PROPERTY_FACILITIES.map((facility) => {
+              const selectedFacilities = parsePropertyFeatures(values.features).facilities;
+              return (
+                <label key={facility} className="amenity-choice facility-choice">
+                  <input
+                    type="checkbox"
+                    checked={selectedFacilities.includes(facility)}
+                    onChange={(event) => {
+                      const parsed = parsePropertyFeatures(values.features);
+                      const nextFacilities = event.target.checked
+                        ? [...parsed.facilities, facility]
+                        : parsed.facilities.filter((item) => item !== facility);
+                      updateValue('features', formatPropertyFeatures(nextFacilities, parsed.additional));
+                    }}
+                  />
+                  <span>{facility}</span>
+                </label>
+              );
+            })}
           </div>
         </section>
 
@@ -585,9 +642,6 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
                 locale={locale}
                 text={text}
                 fixedCityId={account?.role === 'agent' ? account.assigned_city_id : null}
-                required={!property || values.administrative_location !== (
-                  property.administrative_location === null ? '' : String(property.administrative_location)
-                )}
                 management
                 onChange={(value) => updateValue('administrative_location', value)}
               />
@@ -624,8 +678,8 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               {fieldError('contact_name')}
             </label>
             <label className="manager-field">
-              <span>{text('contactByPhone')}{!isEditing ? ' *' : ''}</span>
-              <input required={!isEditing} type="tel" maxLength={50} value={values.contact_phone} onChange={(event) => updateValue('contact_phone', event.target.value)} />
+              <span>{text('contactByPhone')}</span>
+              <input type="tel" maxLength={50} value={values.contact_phone} onChange={(event) => updateValue('contact_phone', event.target.value)} />
               {fieldError('contact_phone')}
             </label>
             <label className="manager-field manager-field-wide">
@@ -640,7 +694,6 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
           <section className="manager-form-section">
             <div className="manager-section-heading">
               <div><h2>{text('managePhotos')}</h2><p>{text('imageUploadAfterSave')}</p></div>
-              <span className="manager-count">{stagedImages.length} / 10</span>
             </div>
             {imageError && <p className="manager-inline-error" role="alert">{imageError}</p>}
             <label className="manager-field">
@@ -688,15 +741,32 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
       {isEditing && propertyId !== null && (
         <section className="manager-form manager-form-section image-manager-section">
           <div className="manager-section-heading">
-            <div><h2>{text('managePhotos')}</h2><p>{text('imageLimitHint').replace('{count}', String(images.length))}</p></div>
-            <span className="manager-count">{images.length} / 10</span>
+            <div><h2>{text('managePhotos')}</h2><p>{text('imageLimitHint')}</p></div>
           </div>
           {imageError && <p className="manager-inline-error" role="alert">{imageError}</p>}
           <form className="image-upload-form" onSubmit={(event) => void submitImage(event)}>
             <label className="manager-field">
               <span>{text('chooseImage')}</span>
-              <input id="property-image-file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={chooseImage} />
+              <input id="property-image-file" type="file" multiple accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={chooseImages} disabled={imageBusyId !== null} />
             </label>
+            <p className="manager-field-hint">{text('imageBatchUploadHint')}</p>
+            {imageFiles.length > 0 && (
+              <ul className="staged-image-list">
+                {imageFiles.map((file, index) => (
+                  <li key={`${file.name}-${file.lastModified}-${index}`}>
+                    <span>{file.name}</span>
+                    <button
+                      className="manager-text-button danger-text"
+                      type="button"
+                      disabled={imageBusyId !== null}
+                      onClick={() => setImageFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                    >
+                      {text('removeSelectedImage')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <label className="manager-field">
               <span>{text('imageCaption')}</span>
               <input maxLength={200} value={imageCaption} onChange={(event) => setImageCaption(event.target.value)} />
@@ -705,8 +775,8 @@ export function OwnerPropertyFormPage({ locale, text }: OwnerPropertyFormPagePro
               <input type="checkbox" checked={makePrimary || images.length === 0} onChange={(event) => setMakePrimary(event.target.checked)} disabled={images.length === 0} />
               <span>{text('makePrimaryImage')}</span>
             </label>
-            <button className="button button-primary" type="submit" disabled={imageBusyId !== null || images.length >= 10}>
-              <Upload size={16} aria-hidden="true" />{imageBusyId === -1 ? text('uploadingImage') : text('uploadImage')}
+            <button className="button button-primary" type="submit" disabled={imageBusyId !== null}>
+              <Upload size={16} aria-hidden="true" />{imageBusyId === -1 ? text('uploadingImage') : text('uploadSelectedImages')}
             </button>
           </form>
           {imageLoading ? (

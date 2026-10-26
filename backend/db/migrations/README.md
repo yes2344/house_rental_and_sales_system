@@ -22,14 +22,18 @@ Compare and verify the actual target catalog before connecting the
 application. Run `npm run check:deployment` from `backend/` to perform a
 read-only schema/runtime/media preflight.
 
-The only checked-in migration adds media-file metadata to the existing
-`user_propertyimage` table. It is not applied automatically and must first be
-tested against a verified restore of the target database. Do not run it
-directly on production as part of application startup. `npm run migrate` is a
-no-DDL preflight; after review, backup, and isolated-restore verification, the
-explicit `npm run migrate -- --apply` command records a SHA-256 checksum and
-applies it transactionally. Use a dedicated non-superuser migration role with
-`CREATE` on `public` and `REFERENCES` on `public.user_propertyimage`,
+The checked-in migrations add media-file metadata to the existing
+`user_propertyimage` table, add a currency column to `user_property`, and make
+property price nullable so negotiable listings can be stored without an
+invented price.
+Neither migration is applied automatically. Test both against a verified
+restore of the target database; do not run them directly on production as
+part of application startup. `npm run migrate` is a no-DDL preflight; after
+review, backup, and isolated-restore verification, the explicit
+`npm run migrate -- --apply` command records SHA-256 checksums and applies
+pending migrations transactionally. Use a dedicated non-superuser migration
+role with `CREATE` on `public`, `REFERENCES` on `public.user_propertyimage`,
+and ownership of `public.user_property` (or membership in its owning role),
 optionally supplied through `MIGRATION_DATABASE_URL`. Set
 `APPLICATION_DATABASE_ROLE` to have the migration grant CRUD privileges on the
 new metadata table to the non-superuser application role. The web process
@@ -48,9 +52,13 @@ never runs migrations automatically. Future SQL migrations must:
 Creating the migration-history table or applying any DDL to an existing
 database requires an approved schema plan. The explicit migration command is
 never run automatically by the web process. The checked-in
-`001_media_file_metadata.sql` migration is additive and has not been applied
-to a live or production database. Catalog inspection uses a separate
-read-only pool.
+`001_media_file_metadata.sql`, `002_property_currency.sql`, and
+`003_negotiable_property_price.sql` migrations are additive and have not been
+applied to a live or production database. Catalog inspection uses a separate
+read-only pool. Deployment readiness requires `user_property.currency` and a
+nullable `user_property.price`; apply pending migrations to an isolated
+verified restore before deploying code that depends on those schema changes.
+The web process never applies migrations automatically.
 
 The public About, Contact, and Property management page copy is stored in the
 existing `portal_admin_publicinformationpage` table. To inspect and initialize

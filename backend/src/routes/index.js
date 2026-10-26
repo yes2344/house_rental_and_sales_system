@@ -31,11 +31,6 @@ export function apiRouter({ pool, logger, mediaConfig, sendEmail }) {
   const images = propertyImageController({ pool, mediaConfig });
   const managedProperties = managedPropertyController({ pool });
   const storage = mediaStorageController({ pool, mediaConfig });
-  const imageUploadRateLimit = rateLimit({
-    limit: 30,
-    windowMs: 60 * 60 * 1000,
-    key: (request) => String(request.userId),
-  });
 
   router.get('/health/', healthController({ pool, logger }));
   router.get(
@@ -95,7 +90,6 @@ export function apiRouter({ pool, logger, mediaConfig, sendEmail }) {
     .post(
       authenticate({ pool }),
       requireCsrf,
-      imageUploadRateLimit,
       propertyImageUpload,
       images.createManaged,
     );
@@ -109,7 +103,6 @@ export function apiRouter({ pool, logger, mediaConfig, sendEmail }) {
     .put(
       authenticate({ pool }),
       requireCsrf,
-      imageUploadRateLimit,
       propertyImageUpload,
       images.replaceManaged,
     )
@@ -123,7 +116,6 @@ export function apiRouter({ pool, logger, mediaConfig, sendEmail }) {
     .post(
       authenticate({ pool }),
       requireCsrf,
-      imageUploadRateLimit,
       propertyImageUpload,
       images.createSubmission,
     );

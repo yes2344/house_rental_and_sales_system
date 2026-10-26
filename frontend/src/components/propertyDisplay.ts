@@ -5,11 +5,12 @@ import type { Locale, MessageKey } from '../i18n';
 type RentalPeriod = ManagedRentalFrequency;
 
 export function formatPropertyPrice(
-  price: string,
+  price: string | null,
   listingType: ListingType,
   rentalFrequency: RentalPeriod,
   locale: Locale,
   text: (key: MessageKey) => string,
+  currency: 'ETB' | 'USD' = 'ETB',
 ): string {
   const numericPrice = Number(price);
   if (!Number.isFinite(numericPrice) || numericPrice <= 0) return text('priceOnRequest');
@@ -25,7 +26,7 @@ export function formatPropertyPrice(
   const period = listingType === 'rent' && rentalFrequency
     ? ` ${text(periodKey[rentalFrequency])}`
     : '';
-  return `${text('ethiopianBirr')} ${formattedPrice}${period}`;
+  return `${currency === 'USD' ? 'USD $' : text('ethiopianBirr')} ${formattedPrice}${period}`;
 }
 
 export function formatRegistrationDate(createdAt: string | null | undefined, locale: Locale): string | null {

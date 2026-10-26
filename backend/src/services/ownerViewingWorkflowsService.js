@@ -10,6 +10,7 @@ const submissionFields = {
   category: 'p.property_type',
   listing_type: 'p.listing_type',
   price: 'p.price',
+  currency: 'p.currency',
   bedrooms: 'p.bedrooms',
   bathrooms: 'p.bathrooms',
   area_sqft: 'p.area_sqft',
@@ -117,7 +118,7 @@ function propertySubmission(row, request) {
     category: row.category,
     listing_type: row.listing_type,
     price: row.price === null ? null : String(row.price),
-    currency: 'ETB',
+    currency: row.currency || 'ETB',
     bedrooms: row.bedrooms,
     bathrooms: row.bathrooms,
     area_sqft: row.area_sqft,
@@ -151,7 +152,7 @@ function propertySubmission(row, request) {
 
 const ownerSubmissionSelect = `
   SELECT p.id, a.id AS announcement_id, p.title, p.slug, p.location, p.administrative_location_id,
-         p.property_type AS category, p.listing_type, p.price::text AS price, p.bedrooms,
+         p.property_type AS category, p.listing_type, p.price::text AS price, p.currency, p.bedrooms,
          p.bathrooms, p.area_sqft, p.area_value::text AS area_value, p.area_unit,
          p.rental_frequency, p.description, p.features, p.status AS property_status,
          p.publication_status, p.is_featured, p.submitted_by_id, p.moderation_note,
@@ -228,11 +229,6 @@ async function validatePropertyInput(client, input, existing = null) {
   const listingType = input.listing_type ?? existing?.listing_type ?? 'sale';
   const rentalFrequency = input.rental_frequency ?? existing?.rental_frequency ?? '';
   if (listingType === 'rent') {
-    const becameRental = !existing || existing.listing_type !== 'rent';
-    const changedFrequency = Object.hasOwn(input, 'rental_frequency');
-    if (!rentalFrequency && (becameRental || changedFrequency)) {
-      throw new ApiError(400, 'Choose a rental period for rental listings.');
-    }
     if (rentalFrequency === 'weekly' && (!existing || existing.rental_frequency !== 'weekly')) {
       throw new ApiError(400, 'New rental listings must use daily, monthly, or yearly pricing.');
     }
@@ -250,10 +246,7 @@ async function validatePropertyInput(client, input, existing = null) {
   }
   const locationId = input.administrative_location;
   const locationSubmitted = Object.hasOwn(input, 'administrative_location');
-  if ((!existing || locationSubmitted) && locationId == null) {
-    throw new ApiError(400, 'Select a configured city or town and its applicable area.');
-  }
-  if (locationSubmitted || !existing) {
+  if (locationId != null && (locationSubmitted || !existing)) {
     const path = await client.query(
       `WITH RECURSIVE location_path AS (
          SELECT id, parent_id, location_type, is_active, ARRAY[id] AS visited
@@ -292,7 +285,8 @@ async function addAdminAudit(client, user, action, objectId, changes) {
 
 async function notifyViewing(client, viewing, eventId, toRequester) {
   const recipients = toRequester
-    ? `SELECT requester_id AS id FROM user_viewingrequest WHERE id = $1 AND requester_id IS NOT NULL`
+    ? `SELECT requester_id AS id FROM user_viewingrequest
+       WHERE id = $1 AND property_id = $2 AND requester_id IS NOT NULL`
     : `SELECT DISTINCT u.id
        FROM auth_user AS u
        JOIN accounts_profile AS profile ON profile.user_id = u.id
@@ -317,9 +311,8 @@ async function notifyViewing(client, viewing, eventId, toRequester) {
             NOW()
      FROM (${recipients}) AS recipients
      ON CONFLICT (idempotency_key) DO NOTHING`,
-    toRequester
-      ? [viewing.id, null, `Viewing request for ${viewing.title}: ${viewing.event_type.replaceAll('_', ' ')}.`, eventId]
-      : [viewing.id, viewing.property_id, `Viewing request for ${viewing.title}: ${viewing.event_type.replaceAll('_', ' ')}.`, eventId],
+    [viewing.id, viewing.property_id,
+      `Viewing request for ${viewing.title}: ${viewing.event_type.replaceAll('_', ' ')}.`, eventId],
   );
 }
 
@@ -382,17 +375,17 @@ export async function createOwnerSubmission(pool, userId, input, request) {
     const property = await client.query(
       `INSERT INTO user_property
        (title, slug, location, administrative_location_id, property_type, listing_type,
-        price, bedrooms, bathrooms, area_sqft, area_value, area_unit, rental_frequency,
+        price, currency, bedrooms, bathrooms, area_sqft, area_value, area_unit, rental_frequency,
         description, features, status, publication_status, is_featured, service_type,
         submitted_by_id, owner_id, advertising_authorized, contact_publicly_visible,
          contact_name, contact_phone, contact_email, exact_location_is_public,
          moderation_note, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-         'available', 'pending_review', FALSE, 'owner_announced', $16, $16, TRUE, FALSE,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+         'available', 'pending_review', FALSE, 'owner_announced', $17, $17, TRUE, FALSE,
          '', '', '', FALSE, '', NOW(), NOW())
        RETURNING id`,
       [input.title, slug, input.location, input.administrative_location ?? null,
-        input.category, input.listing_type, input.price, input.bedrooms ?? 0,
+        input.category, input.listing_type, input.price, input.currency ?? 'ETB', input.bedrooms ?? 0,
         input.bathrooms ?? 0, areaSqft, areaValue, areaUnit,
         input.rental_frequency ?? '', input.description ?? '', input.features ?? '', userId],
     );

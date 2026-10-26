@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import express from 'express';
+import os from 'node:os';
+import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { adminManagementWorkflowsRouter } from '../src/routes/adminManagementWorkflows.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import {
   homepageNotePatchSchema,
+  managedPropertyCreateSchema,
   managedPropertyPatchSchema,
 } from '../src/validators/adminManagementWorkflows.js';
 
@@ -16,7 +20,13 @@ let server;
 let origin;
 const transactionQueries = [];
 const managedPropertyInsertQueries = [];
+let managedPropertiesToDelete = [];
+let propertyImagesToDelete = [];
+let propertiesWithViewingRequests = [];
+let mediaRoot;
 let testAccountRole = 'platform-owner';
+let publicPageRowsPresent = true;
+let testProfilePhone = '0911000000';
 const agentAccount = {
   id: 42,
   username: 'managed-agent',
@@ -48,12 +58,13 @@ const pool = {
           id: 3,
           username: 'workflow-admin',
           is_active: true,
-          is_staff: !['agent', 'settings-manager'].includes(testAccountRole),
+          is_staff: !['agent', 'approved-agent', 'settings-manager'].includes(testAccountRole),
           is_superuser: testAccountRole === 'platform-owner',
           platform_owner_id: testAccountRole === 'platform-owner' ? 3 : null,
-          role: ['agent', 'settings-manager'].includes(testAccountRole) ? 'agent' : 'administrator',
-          agent_approved: testAccountRole === 'settings-manager',
+          role: ['agent', 'approved-agent', 'settings-manager'].includes(testAccountRole) ? 'agent' : 'administrator',
+          agent_approved: ['approved-agent', 'settings-manager'].includes(testAccountRole),
           management_permissions: testAccountRole === 'settings-manager' ? ['settings.manage'] : [],
+          assigned_city_id: testAccountRole === 'approved-agent' ? 7 : null,
         }],
       };
     }
@@ -67,12 +78,13 @@ const pool = {
       return { rowCount: 1, rows: [{ id: 7 }] };
     }
     if (sql.includes('SELECT phone FROM accounts_profile')) {
-      return { rowCount: 1, rows: [{ phone: '0911000000' }] };
+      return { rowCount: 1, rows: [{ phone: testProfilePhone }] };
     }
     if (sql.includes('FROM user_propertyimage')) {
       return { rowCount: 0, rows: [] };
     }
     if (sql.includes('FROM portal_admin_publicinformationpage ORDER BY page')) {
+      if (!publicPageRowsPresent) return { rowCount: 0, rows: [] };
       return {
         rowCount: 3,
         rows: ['about', 'contact', 'property-management'].map((page) => ({
@@ -87,12 +99,32 @@ const pool = {
         })),
       };
     }
+    if (sql.includes('FROM portal_admin_publicinformationpage WHERE page = $1')) {
+      return { rowCount: 0, rows: [] };
+    }
     throw new Error(`Unexpected test SQL: ${sql}`);
   },
   async connect() {
     return {
       async query(sql, values = []) {
         transactionQueries.push({ sql, values });
+        if (sql.includes('SELECT id, title, service_type FROM user_property')) {
+          const ids = new Set(values[0].map(Number));
+          const rows = managedPropertiesToDelete.filter((row) => ids.has(row.id));
+          return { rowCount: rows.length, rows };
+        }
+        if (sql.includes('SELECT DISTINCT property_id FROM user_viewingrequest')) {
+          const ids = new Set(values[0].map(Number));
+          const rows = propertiesWithViewingRequests
+            .filter((id) => ids.has(id))
+            .map((property_id) => ({ property_id }));
+          return { rowCount: rows.length, rows };
+        }
+        if (sql.includes('SELECT id, image, original_image FROM user_propertyimage')) {
+          const ids = new Set(values[0].map(Number));
+          const rows = propertyImagesToDelete.filter((image) => ids.has(image.property_id));
+          return { rowCount: rows.length, rows };
+        }
         if (sql.includes('FROM auth_user AS u')) {
           return {
             rowCount: 1,
@@ -129,22 +161,38 @@ const pool = {
               property_type: values[4],
               listing_type: values[5],
               price: values[6],
-              rental_frequency: values[7],
-              bedrooms: values[8],
-              bathrooms: values[9],
-              area_sqft: values[10],
-              area_value: values[11],
-              area_unit: values[12],
-              description: values[13],
-              features: values[14],
-              status: values[15],
-              publication_status: 'pending_review',
+              currency: values[7],
+              rental_frequency: values[8],
+              bedrooms: values[9],
+              bathrooms: values[10],
+              area_sqft: values[11],
+              area_value: values[12],
+              area_unit: values[13],
+              description: values[14],
+              features: values[15],
+              status: values[16],
+              publication_status: sql.includes("'published'") ? 'published' : 'pending_review',
               is_featured: false,
               submitted_by_id: 3,
               moderation_note: '',
-              contact_name: values[17],
-              contact_phone: values[18],
-              contact_email: values[19],
+              contact_name: values[18],
+              contact_phone: values[19],
+              contact_email: values[20],
+            }],
+          };
+        }
+        if (sql.includes('INSERT INTO portal_admin_publicinformationpage')) {
+          return {
+            rowCount: 1,
+            rows: [{
+              page: values[0],
+              title_en: values[1],
+              title_am: values[2],
+              introduction_en: values[3],
+              introduction_am: values[4],
+              body_en: values[5],
+              body_am: values[6],
+              updated_at: '2026-10-23T00:00:00.000Z',
             }],
           };
         }
@@ -159,9 +207,18 @@ const pool = {
 };
 
 before(async () => {
+  mediaRoot = await mkdtemp(path.join(os.tmpdir(), 'infinity-house-property-delete-'));
+  const mediaConfig = {
+    publicRoot: path.join(mediaRoot, 'public'),
+    privateRoot: path.join(mediaRoot, 'private'),
+  };
+  await Promise.all([
+    mkdir(mediaConfig.publicRoot, { recursive: true }),
+    mkdir(mediaConfig.privateRoot, { recursive: true }),
+  ]);
   const app = express();
   app.use(express.json());
-  app.use('/api/v1', adminManagementWorkflowsRouter({ pool }));
+  app.use('/api/v1', adminManagementWorkflowsRouter({ pool, mediaConfig }));
   app.use(errorHandler({ logger: { error() {} } }));
   server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
@@ -169,7 +226,11 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  try {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  } finally {
+    await rm(mediaRoot, { recursive: true, force: true });
+  }
 });
 
 test('management public pages list uses the authenticated workflow route', async () => {
@@ -180,6 +241,56 @@ test('management public pages list uses the authenticated workflow route', async
   const data = await response.json();
   assert.equal(data.count, 3);
   assert.deepEqual(data.results.map((page) => page.page), ['about', 'contact', 'property-management']);
+});
+
+test('management public pages list includes defaults when database rows are missing', async () => {
+  publicPageRowsPresent = false;
+  try {
+    const response = await fetch(`${origin}/management/public-pages/`, {
+      headers: { Authorization: ['Bearer', token].join(' ') },
+    });
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.count, 3);
+    assert.deepEqual(data.results.map((page) => page.page), ['about', 'contact', 'property-management']);
+    assert.equal(data.results[0].title_en, 'About Infinity House');
+  } finally {
+    publicPageRowsPresent = true;
+  }
+});
+
+test('management can load an individual page when its database row is missing', async () => {
+  const response = await fetch(`${origin}/management/public-pages/about/`, {
+    headers: { Authorization: ['Bearer', token].join(' ') },
+  });
+  assert.equal(response.status, 200);
+  const page = await response.json();
+  assert.equal(page.page, 'about');
+  assert.equal(page.title_en, 'About Infinity House');
+});
+
+test('management can save a missing public page and create its initial database row', async () => {
+  transactionQueries.length = 0;
+  const response = await fetch(`${origin}/management/public-pages/contact/`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: ['Bearer', token].join(' '),
+      Cookie: `csrftoken=${csrf}`,
+      'X-CSRFToken': csrf,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ title_en: 'Contact our team' }),
+  });
+  assert.equal(response.status, 200);
+  const page = await response.json();
+  assert.equal(page.page, 'contact');
+  assert.equal(page.title_en, 'Contact our team');
+  assert.equal(page.introduction_en, 'Reach Infinity House using the contact options configured below.');
+  const insert = transactionQueries.find(({ sql }) => sql.includes('INSERT INTO portal_admin_publicinformationpage'));
+  assert.ok(insert);
+  assert.match(insert.sql, /ON CONFLICT \(page\) DO UPDATE/);
+  assert.deepEqual(insert.values.slice(0, 2), ['contact', 'Contact our team']);
+  assert.equal(insert.values[3], 'Reach Infinity House using the contact options configured below.');
 });
 
 test('management public pages are available to administrators who are not platform owners', async () => {
@@ -218,7 +329,7 @@ test('management public pages reject agents', async () => {
   }
 });
 
-test('managed property creation supplies non-null privacy and authorization flags', async () => {
+test('admin-created managed properties are published immediately with private defaults', async () => {
   managedPropertyInsertQueries.length = 0;
   const response = await fetch(`${origin}/management/properties/`, {
     method: 'POST',
@@ -235,15 +346,202 @@ test('managed property creation supplies non-null privacy and authorization flag
       category: 'house',
       listing_type: 'sale',
       price: '100000',
+      currency: 'USD',
       contact_name: 'Property contact',
     }),
   });
 
   assert.equal(response.status, 201);
+  const property = await response.json();
+  assert.equal(property.publication_status, 'published');
+  assert.equal(property.currency, 'USD');
   const insert = managedPropertyInsertQueries[0];
   assert.ok(insert);
+  assert.equal(insert.values[7], 'USD');
+  assert.match(insert.sql, /'published',\s*'agent_managed'/);
   assert.match(insert.sql, /advertising_authorized,\s*contact_publicly_visible,\s*exact_location_is_public/);
-  assert.match(insert.sql, /'agent_managed',FALSE,\$17,'',FALSE,FALSE,FALSE,\$18/);
+  assert.match(insert.sql, /'agent_managed',FALSE,\$18,'',FALSE,FALSE,FALSE,\$19/);
+});
+
+test('managed property creation accepts a blank price as negotiable', async () => {
+  managedPropertyInsertQueries.length = 0;
+  const response = await fetch(`${origin}/management/properties/`, {
+    method: 'POST',
+    headers: {
+      Authorization: ['Bearer', token].join(' '),
+      Cookie: `csrftoken=${csrf}`,
+      'X-CSRFToken': csrf,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      title: 'Negotiable property',
+      location: 'Addis Ababa',
+      administrative_location: 7,
+      category: 'house',
+      listing_type: 'sale',
+      price: '',
+      currency: 'ETB',
+      contact_name: 'Property contact',
+    }),
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).price, null);
+  assert.equal(managedPropertyInsertQueries[0].values[6], null);
+});
+
+test('managed property price validator accepts omitted or blank prices and rejects zero', () => {
+  const requiredFields = {
+    title: 'Negotiable property',
+    location: 'Addis Ababa',
+  };
+
+  assert.equal(managedPropertyCreateSchema.parse(requiredFields).price, null);
+  assert.equal(managedPropertyCreateSchema.parse(requiredFields).category, 'house');
+  assert.equal(managedPropertyCreateSchema.parse(requiredFields).listing_type, 'sale');
+  assert.equal(managedPropertyCreateSchema.parse({ ...requiredFields, price: '' }).price, null);
+  assert.equal(managedPropertyCreateSchema.safeParse({ ...requiredFields, price: '0' }).success, false);
+  assert.equal(managedPropertyCreateSchema.parse({ title: '', location: '' }).title, '');
+  assert.equal(managedPropertyPatchSchema.parse({ title: '', location: '' }).location, '');
+});
+
+test('property registration succeeds with only title and location and no account phone', async () => {
+  managedPropertyInsertQueries.length = 0;
+  testProfilePhone = '';
+  try {
+    const response = await fetch(`${origin}/management/properties/`, {
+      method: 'POST',
+      headers: {
+        Authorization: ['Bearer', token].join(' '),
+        Cookie: `csrftoken=${csrf}`,
+        'X-CSRFToken': csrf,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Minimum required fields',
+        location: 'Addis Ababa',
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    const property = await response.json();
+    assert.equal(property.title, 'Minimum required fields');
+    assert.equal(property.price, null);
+    assert.equal(managedPropertyInsertQueries[0].values[19], '');
+  } finally {
+    testProfilePhone = '0911000000';
+  }
+});
+
+test('agent-created managed properties remain pending administrator review', async () => {
+  testAccountRole = 'approved-agent';
+  managedPropertyInsertQueries.length = 0;
+  try {
+    const response = await fetch(`${origin}/management/properties/`, {
+      method: 'POST',
+      headers: {
+        Authorization: ['Bearer', token].join(' '),
+        Cookie: `csrftoken=${csrf}`,
+        'X-CSRFToken': csrf,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: 'Agent regression property',
+        location: 'Addis Ababa',
+        administrative_location: 7,
+        category: 'house',
+        listing_type: 'sale',
+        price: '100000',
+        contact_name: 'Property contact',
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    const property = await response.json();
+    assert.equal(property.publication_status, 'pending_review');
+    const insert = managedPropertyInsertQueries[0];
+    assert.ok(insert);
+    assert.match(insert.sql, /'pending_review',\s*'agent_managed'/);
+  } finally {
+    testAccountRole = 'platform-owner';
+  }
+});
+
+test('admin bulk deletion removes property associations and preserves listing reports', async () => {
+  transactionQueries.length = 0;
+  managedPropertiesToDelete = [{ id: 103, title: 'Published property', service_type: 'agent_managed' }];
+  propertyImagesToDelete = [{
+    id: 501,
+    property_id: 103,
+    image: 'property_images/published.jpg',
+    original_image: 'private_property_images/published.jpg',
+  }];
+  propertiesWithViewingRequests = [];
+  try {
+    const publicImage = path.join(mediaRoot, 'public', propertyImagesToDelete[0].image);
+    const privateImage = path.join(mediaRoot, 'private', propertyImagesToDelete[0].original_image);
+    await Promise.all([
+      mkdir(path.dirname(publicImage), { recursive: true }),
+      mkdir(path.dirname(privateImage), { recursive: true }),
+    ]);
+    await Promise.all([writeFile(publicImage, 'public image'), writeFile(privateImage, 'private image')]);
+    const response = await fetch(`${origin}/management/properties/bulk-delete/`, {
+      method: 'POST',
+      headers: {
+        Authorization: ['Bearer', token].join(' '),
+        Cookie: `csrftoken=${csrf}`,
+        'X-CSRFToken': csrf,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ids: [103] }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { deleted_count: 1 });
+    const sql = transactionQueries.map(({ sql: query }) => query);
+    assert.ok(sql.some((query) => query.includes('UPDATE properties_listingreport SET property_id = NULL')));
+    assert.ok(sql.some((query) => query.includes('DELETE FROM favorites_favorite')));
+    assert.ok(sql.some((query) => query.includes('DELETE FROM properties_propertyagentassignment')));
+    assert.ok(sql.some((query) => query.includes('DELETE FROM user_property_amenities')));
+    assert.ok(sql.some((query) => query.includes('DELETE FROM user_propertyimage')));
+    assert.ok(sql.some((query) => query.includes('DELETE FROM user_property WHERE id = ANY')));
+    await assert.rejects(stat(publicImage), { code: 'ENOENT' });
+    await assert.rejects(stat(privateImage), { code: 'ENOENT' });
+  } finally {
+    managedPropertiesToDelete = [];
+    propertyImagesToDelete = [];
+    propertiesWithViewingRequests = [];
+  }
+});
+
+test('admin cannot permanently delete listings with viewing history', async () => {
+  transactionQueries.length = 0;
+  managedPropertiesToDelete = [{ id: 104, title: 'Property with viewings', service_type: 'agent_managed' }];
+  propertyImagesToDelete = [];
+  propertiesWithViewingRequests = [104];
+  try {
+    const response = await fetch(`${origin}/management/properties/bulk-delete/`, {
+      method: 'POST',
+      headers: {
+        Authorization: ['Bearer', token].join(' '),
+        Cookie: `csrftoken=${csrf}`,
+        'X-CSRFToken': csrf,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ids: [104] }),
+    });
+
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error.message, /viewing requests/i);
+    assert.equal(
+      transactionQueries.some(({ sql }) => sql.includes('DELETE FROM user_property WHERE id = ANY')),
+      false,
+    );
+  } finally {
+    managedPropertiesToDelete = [];
+    propertyImagesToDelete = [];
+    propertiesWithViewingRequests = [];
+  }
 });
 
 test('management homepage note creation rejects invalid content before database writes', async () => {

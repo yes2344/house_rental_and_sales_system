@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import { cors } from './middleware/cors.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -17,6 +18,9 @@ export function createApp({
 
   app.disable('x-powered-by');
   app.use((request, response, next) => {
+    request.requestId = randomUUID();
+    request.requestStartedAt = process.hrtime.bigint();
+    response.set('X-Request-ID', request.requestId);
     response.set('X-Content-Type-Options', 'nosniff');
     response.set('Referrer-Policy', 'same-origin');
     next();

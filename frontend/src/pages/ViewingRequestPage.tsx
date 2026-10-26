@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext';
 import { getApiFieldErrors, getErrorMessage } from '../api/client';
 import { getProperty, type PropertyDetail } from '../api/properties';
 import { createViewingRequest, type ViewingRequestReceipt } from '../api/viewings';
+import { formatPropertyPrice } from '../components/propertyDisplay';
 import type { Locale, MessageKey } from '../i18n';
 
 type ViewingRequestField = 'full_name' | 'email' | 'phone' | 'preferred_date' | 'preferred_time' | 'message';
@@ -146,11 +147,6 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
     }
   };
 
-  const formatPrice = (price: string) => new Intl.NumberFormat(
-    locale === 'am' ? 'am-ET' : 'en-ET',
-    { maximumFractionDigits: 0 },
-  ).format(Number(price));
-
   if (loadingProperty) {
     return (
       <main id="main-content" className="viewing-request-page">
@@ -200,7 +196,14 @@ export function ViewingRequestPage({ locale, text }: ViewingRequestPageProps) {
               <h2>{property.title}</h2>
               <p><MapPin size={15} aria-hidden="true" />{property.location}</p>
             </div>
-            <strong>{text('ethiopianBirr')} {formatPrice(property.price)}</strong>
+            <strong>{formatPropertyPrice(
+              property.price,
+              property.listing_type,
+              property.rental_frequency,
+              locale,
+              text,
+              property.currency,
+            )}</strong>
           </div>
 
           {receipt ? (

@@ -30,7 +30,7 @@ function serializeProperty(row, request) {
     category: row.category,
     listing_type: row.listing_type,
     price: row.price,
-    currency: 'ETB',
+    currency: row.currency || 'ETB',
     bedrooms: row.bedrooms,
     bathrooms: row.bathrooms,
     area_sqft: row.area_sqft,
@@ -147,7 +147,7 @@ export async function listManagedProperties(pool, request, userId, filters) {
          AND NOT parent.parent_id = ANY(branch.visited)
      )
      SELECT p.id, p.title, p.slug, p.location, p.administrative_location_id,
-            p.property_type AS category, p.listing_type, p.price::text AS price,
+            p.property_type AS category, p.listing_type, p.price::text AS price, p.currency,
             p.bedrooms, p.bathrooms, p.area_sqft, p.area_value::text AS area_value,
             p.area_unit, p.rental_frequency, p.description, p.features, p.status,
             p.publication_status, p.is_featured, p.submitted_by_id, p.moderation_note,

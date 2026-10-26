@@ -1,0 +1,35 @@
+{
+  "paths": [
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+    "/accept-invitation",
+    "/viewing-requests/status",
+    "/viewing-requests/new",
+    "/viewing-requests",
+    "/settings",
+    "/agent-onboarding",
+    "/submissions/new",
+    "/my-submissions",
+    "/dashboard",
+    "/admin",
+    "/favorites",
+    "/account",
+    "/management/agents",
+    "/management/public-accounts",
+    "/management/listings",
+    "/management/listings/new",
+    "/management/submissions",
+    "/management/viewing-requests",
+    "/management/brokerage",
+    "/management/branding",
+    "/management/public-pages",
+    "/management/locations"
+  ],
+  "prefixes": [
+    "/submissions/",
+    "/management/listings/"
+  ]
+}

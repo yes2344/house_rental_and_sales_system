@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 const boolean = z.boolean();
 const positiveId = z.coerce.number().int().positive();
+const price = z.preprocess((value) => value === '' ? null : value, z.union([
+  z.null(),
+  z.union([z.string(), z.number()]).transform(String)
+    .refine((value) => /^\d{1,10}(\.\d{1,2})?$/.test(value) && Number(value) >= 0.01),
+]));
 const boundedString = (max, trim = true) => {
   const value = z.string().max(max);
   return trim ? value.trim() : value;
@@ -109,13 +114,13 @@ export const adminPropertyPatchSchema = z.object({
 }).strict().refine((value) => Object.keys(value).length > 0, 'At least one field is required.');
 
 export const managedPropertyCreateSchema = z.object({
-  title: boundedString(200).min(1),
-  location: boundedString(200).min(1),
+  title: boundedString(200),
+  location: boundedString(200),
   administrative_location: positiveId.nullable().optional().default(null),
-  category: z.enum(['house', 'villa', 'apartment', 'condominium', 'land', 'office', 'shop', 'warehouse', 'commercial', 'other']),
-  listing_type: z.enum(['sale', 'rent']),
-  price: z.union([z.string(), z.number()]).transform(String)
-    .refine((value) => /^\d{1,10}(\.\d{1,2})?$/.test(value) && Number(value) >= 0.01),
+  category: z.enum(['house', 'villa', 'apartment', 'condominium', 'land', 'office', 'shop', 'warehouse', 'commercial', 'other']).default('house'),
+  listing_type: z.enum(['sale', 'rent']).default('sale'),
+  price: price.optional().default(null),
+  currency: z.enum(['ETB', 'USD']).optional().default('ETB'),
   bedrooms: z.number().int().min(0).max(100).default(0),
   bathrooms: z.number().int().min(0).max(100).default(0),
   area_sqft: z.number().int().min(0).max(2_147_483_647).default(0),
@@ -134,13 +139,13 @@ export const managedPropertyCreateSchema = z.object({
 }).strict();
 
 export const managedPropertyPatchSchema = z.object({
-  title: boundedString(200).min(1).optional(),
-  location: boundedString(200).min(1).optional(),
+  title: boundedString(200).optional(),
+  location: boundedString(200).optional(),
   administrative_location: positiveId.nullable().optional(),
   category: z.enum(['house', 'villa', 'apartment', 'condominium', 'land', 'office', 'shop', 'warehouse', 'commercial', 'other']).optional(),
   listing_type: z.enum(['sale', 'rent']).optional(),
-  price: z.union([z.string(), z.number()]).transform(String)
-    .refine((value) => /^\d{1,10}(\.\d{1,2})?$/.test(value) && Number(value) >= 0.01).optional(),
+  price: price.optional(),
+  currency: z.enum(['ETB', 'USD']).optional(),
   bedrooms: z.number().int().min(0).max(100).optional(),
   bathrooms: z.number().int().min(0).max(100).optional(),
   area_sqft: z.number().int().min(0).max(2_147_483_647).optional(),

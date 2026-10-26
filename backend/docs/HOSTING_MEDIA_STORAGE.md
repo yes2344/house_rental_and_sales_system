@@ -9,11 +9,22 @@
   `MEDIA_ROOT\property_images`; private originals are saved below
   `PRIVATE_MEDIA_ROOT\private_property_images`. The private root is not served
   statically.
-- New property image uploads are limited to one JPEG, PNG, or WebP file per
-  request, at most 10 MiB per file, with a maximum of 10 images per property.
-  The server decodes the file bytes, limits decode size to 50 million pixels,
-  and rejects images below 256 x 160 pixels. Public files are re-encoded and
-  watermarked; a private copy of the original bytes is retained.
+- Each property-image request carries one JPEG, PNG, or WebP file. The
+  application does not impose a per-file byte or pixel-dimension limit, or a
+  per-property image-count limit. Public files are re-encoded and watermarked;
+  a private copy of the original bytes is retained. Hosting-provider, reverse
+  proxy, request-body, memory, and persistent-storage limits still apply and
+  must be checked separately.
+- Image decoding and media writes occur after a brief property authorization
+  transaction and before a second transaction rechecks authorization and
+  commits the image references. This avoids holding a PostgreSQL connection and
+  property lock while Sharp processes an image or the filesystem writes files.
+  If the final transaction fails, the new files are removed where possible.
+- Responses include an `X-Request-ID`. For unexpected server errors, protected
+  backend logs correlate that ID with the route, status, duration, upload
+  processing stage, validated file count/size, PostgreSQL SQLSTATE and safe
+  schema identifiers, and cleanup outcome. Request bodies, image bytes,
+  credentials, cookies, and submitted contact fields are not logged.
 - Node generates unique filenames. Existing `user_propertyimage` rows hold
   property relationship, public/private relative filenames, original filename
   and MIME type, caption, primary state, and creation time.
@@ -21,9 +32,10 @@
   [`001_media_file_metadata.sql`](../db/migrations/001_media_file_metadata.sql)
   migration stores public/original byte counts, detected type/extension,
   oriented image dimensions, and upload time for new and replaced images.
-  **This migration has not been applied.** Existing images are not automatically
-  backfilled. Do not enable uploads on a database before the migration has been
-  reviewed and applied to a disposable PostgreSQL copy.
+  The presence of this file does not prove that the migration has been applied
+  to a target database. Verify its status with the migration script; existing
+  images are not automatically backfilled. Do not apply it before review,
+  backup, and verification against an isolated PostgreSQL copy.
 - Authenticated administrators can request
   `GET /api/v1/admin/storage/`. It reports files/bytes beneath both roots,
   filesystem capacity/free space where Node can obtain it, database-reference
@@ -61,8 +73,8 @@ Before configuring production, obtain these answers from the hosting provider:
 4. Does PostgreSQL share that same quota/volume? What other application data,
    logs, backups, build artifacts, and temporary files count toward it?
 5. Are there per-file upload, request-body, bandwidth/egress, inode, or
-   storage-growth limits? Does a reverse proxy impose a lower body-size limit
-   than the 10 MiB application limit?
+   storage-growth limits? The application has no property-image byte limit,
+   but the host or reverse proxy may impose one.
 6. Are symlinks supported, and can the provider serve files from a mounted
    path or must Node serve public media itself?
 7. What backup/restore schedule, retention, and point-in-time consistency are

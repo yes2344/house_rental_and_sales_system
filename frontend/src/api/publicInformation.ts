@@ -10,7 +10,7 @@ export interface PublicInformationPage {
   introduction_am: string;
   body_en: string;
   body_am: string;
-  updated_at: string;
+  updated_at: string | null;
 }
 
 export type PublicInformationPageContent = Omit<PublicInformationPage, 'page' | 'updated_at'>;

@@ -218,7 +218,7 @@ function absoluteMediaUrl(request, filename) {
 function propertySelection(detail) {
   return `p.id, p.title, p.slug, p.location, p.administrative_location_id,
     location.name AS location_name, p.property_type AS category, p.listing_type,
-    p.price::text AS price, p.bedrooms, p.bathrooms, p.area_sqft,
+    p.price::text AS price, p.currency, p.bedrooms, p.bathrooms, p.area_sqft,
     p.area_value::text AS area_value, p.area_unit, p.rental_frequency,
     CASE WHEN p.status = 'active' THEN 'available' ELSE p.status END AS status,
     p.service_type,
@@ -307,7 +307,7 @@ function serializeProperty(row, request, detail) {
     category: row.category,
     listing_type: row.listing_type,
     price: row.price,
-    currency: 'ETB',
+    currency: row.currency || 'ETB',
     bedrooms: row.bedrooms,
     bathrooms: row.bathrooms,
     area_sqft: row.area_sqft,

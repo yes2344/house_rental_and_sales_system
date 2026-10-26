@@ -32,6 +32,7 @@ function makePool({
   readOnly = 'off',
   isSuperuser = false,
   tables = requiredTables,
+  columns = [['user_property', 'currency', 'NO'], ['user_property', 'price', 'YES']],
   missingPrivileges = [],
 } = {}) {
   return {
@@ -49,6 +50,13 @@ function makePool({
         };
       }
       if (sql.includes('FROM unnest')) return { rows: missingPrivileges };
+      if (sql.includes('information_schema.columns')) {
+        return {
+          rows: columns.map(([table_name, column_name, is_nullable]) => ({
+            table_name, column_name, is_nullable,
+          })),
+        };
+      }
       return { rows: tables.map((table_name) => ({ table_name })) };
     },
   };
@@ -81,6 +89,8 @@ test('deployment preflight permits PostgreSQL 13.23 as a temporary EOL compatibi
       && warning.includes('temporary HahuCloud compatibility exception')
       && warning.includes('isolated PostgreSQL 13.23 instance')));
     assert.deepEqual(report.database.missing_required_tables, []);
+    assert.deepEqual(report.database.missing_required_columns, []);
+    assert.deepEqual(report.database.non_nullable_required_columns, []);
     assert.equal(report.media.public.writable, true);
     assert.equal(report.media.private.writable, true);
     assert.ok(report.warnings.some((warning) => warning.includes('cannot prove persistence')));
@@ -123,6 +133,47 @@ test('deployment preflight reports missing schema tables and unsafe database rol
     assert.ok(report.blockers.some((blocker) => blocker.includes('read-only')));
     assert.ok(report.blockers.some((blocker) => blocker.includes('superuser')));
     assert.ok(report.warnings.some((warning) => warning.includes('MEDIA_CAPACITY_BYTES')));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('deployment preflight rejects missing currency and price columns', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'deployment-readiness-'));
+  try {
+    const mediaConfig = await makeMediaRoots(root);
+    const report = await checkDeploymentReadiness({
+      pool: makePool({ columns: [] }),
+      mediaConfig: { ...mediaConfig, capacityBytes: 1000 },
+      applicationRoot: path.join(root, 'application'),
+      environment: { NODE_ENV: 'production' },
+    });
+
+    assert.equal(report.ready, false);
+    assert.deepEqual(report.database.missing_required_columns, ['user_property.currency', 'user_property.price']);
+    assert.ok(report.blockers.some((blocker) => blocker.includes('user_property.currency')));
+    assert.ok(report.blockers.some((blocker) => blocker.includes('user_property.price')));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('deployment preflight rejects a non-null property price column', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'deployment-readiness-'));
+  try {
+    const mediaConfig = await makeMediaRoots(root);
+    const report = await checkDeploymentReadiness({
+      pool: makePool({
+        columns: [['user_property', 'currency', 'NO'], ['user_property', 'price', 'NO']],
+      }),
+      mediaConfig: { ...mediaConfig, capacityBytes: 1000 },
+      applicationRoot: path.join(root, 'application'),
+      environment: { NODE_ENV: 'production' },
+    });
+
+    assert.equal(report.ready, false);
+    assert.deepEqual(report.database.non_nullable_required_columns, ['user_property.price']);
+    assert.ok(report.blockers.some((blocker) => blocker.includes('must allow NULL values')));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

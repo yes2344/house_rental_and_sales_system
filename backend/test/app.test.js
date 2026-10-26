@@ -35,6 +35,7 @@ after(async () => {
 test('health endpoint confirms PostgreSQL connectivity', async () => {
   const response = await fetch(`${baseUrl}/api/v1/health/`);
   assert.equal(response.status, 200);
+  assert.match(response.headers.get('x-request-id') || '', /^[\da-f-]{36}$/i);
   assert.deepEqual(await response.json(), { status: 'ok', database: 'ok' });
 });
 
@@ -143,8 +144,151 @@ test('unexpected API errors log method and pathname without query parameters', a
     assert.equal(response.status, 500);
     assert.deepEqual(errors, [[
       'Unhandled API error:',
-      { method: 'GET', path: '/failure', code: '22P02' },
+      {
+        method: 'GET',
+        path: '/failure',
+        status_code: 500,
+        code: '22P02',
+        sqlstate: '22P02',
+      },
     ]]);
+  } finally {
+    await new Promise((resolve, reject) => {
+      errorServer.close((error) => error ? reject(error) : resolve());
+    });
+  }
+});
+
+test('PostgreSQL errors log safe diagnostics without exposing error details', async () => {
+  const errors = [];
+  const app = express();
+  const failures = [
+    {
+      path: '/failure/undefined-column',
+      code: '42703',
+      column: 'area_sqft',
+    },
+    {
+      path: '/failure/value-too-long',
+      code: '22001',
+      column: 'title',
+    },
+  ];
+  for (const failure of failures) {
+    app.get(failure.path, (_request, _response, next) => {
+      next(Object.assign(new Error('sensitive database message'), {
+        code: failure.code,
+        schema: 'public',
+        table: 'user_property',
+        column: failure.column,
+        dataType: 'character varying',
+        constraint: 'private_constraint',
+        detail: 'submitted private value',
+        query: 'INSERT with private values',
+      }));
+    });
+  }
+  app.use(errorHandler({ logger: { error: (...values) => errors.push(values) } }));
+  const errorServer = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => errorServer.once('listening', resolve));
+
+  try {
+    for (const failure of failures) {
+      const response = await fetch(`http://127.0.0.1:${errorServer.address().port}${failure.path}`);
+      assert.equal(response.status, 500);
+      assert.deepEqual(await response.json(), {
+        error: {
+          status_code: 500,
+          message: 'The server encountered an error.',
+          details: {},
+        },
+      });
+    }
+    assert.deepEqual(errors, [[
+      'Unhandled API error:',
+      {
+        method: 'GET',
+        path: '/failure/undefined-column',
+        status_code: 500,
+        code: '42703',
+        sqlstate: '42703',
+        schema: 'public',
+        table: 'user_property',
+        column: 'area_sqft',
+        dataType: 'character varying',
+        constraint: 'private_constraint',
+      },
+    ], [
+      'Unhandled API error:',
+      {
+        method: 'GET',
+        path: '/failure/value-too-long',
+        status_code: 500,
+        code: '22001',
+        sqlstate: '22001',
+        schema: 'public',
+        table: 'user_property',
+        column: 'title',
+        dataType: 'character varying',
+        constraint: 'private_constraint',
+      },
+    ]]);
+    assert.equal(JSON.stringify(errors).includes('submitted private value'), false);
+    assert.equal(JSON.stringify(errors).includes('INSERT with private values'), false);
+  } finally {
+    await new Promise((resolve, reject) => {
+      errorServer.close((error) => error ? reject(error) : resolve());
+    });
+  }
+});
+
+test('PostgreSQL missing-relation and not-null errors log only schema identifiers', async () => {
+  const errors = [];
+  const app = express();
+  const failures = [
+    {
+      path: '/failure/missing-relation',
+      code: '42P01',
+      message: 'relation "public.user_property" does not exist',
+      diagnostic: { missingRelation: 'public.user_property' },
+    },
+    {
+      path: '/failure/not-null',
+      code: '23502',
+      message: 'null value in column "price" of relation "user_property" violates not-null constraint',
+      diagnostic: { column: 'price', table: 'user_property' },
+    },
+  ];
+  for (const failure of failures) {
+    app.get(failure.path, (_request, _response, next) => {
+      next(Object.assign(new Error(failure.message), { code: failure.code }));
+    });
+  }
+  app.use(errorHandler({ logger: { error: (...values) => errors.push(values) } }));
+  const errorServer = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => errorServer.once('listening', resolve));
+
+  try {
+    for (const failure of failures) {
+      const response = await fetch(`http://127.0.0.1:${errorServer.address().port}${failure.path}`);
+      assert.equal(response.status, 500);
+    }
+    assert.deepEqual(errors.map(([, entry]) => {
+      const diagnostic = entry.missingRelation
+        ? { missingRelation: entry.missingRelation }
+        : { column: entry.column, table: entry.table };
+      return {
+        method: entry.method,
+        path: entry.path,
+        code: entry.code,
+        ...diagnostic,
+      };
+    }), failures.map((failure) => ({
+      method: 'GET',
+      path: failure.path,
+      code: failure.code,
+      ...failure.diagnostic,
+    })));
   } finally {
     await new Promise((resolve, reject) => {
       errorServer.close((error) => error ? reject(error) : resolve());

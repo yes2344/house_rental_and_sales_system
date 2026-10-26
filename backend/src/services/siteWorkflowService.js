@@ -6,6 +6,7 @@ import { ApiError } from '../errors.js';
 import { withTransaction } from '../db.js';
 import { storedMediaPath } from './propertyImageService.js';
 import { getPublicProperty } from './publicPropertyService.js';
+import { getDefaultPublicInformationPage } from './publicInformationPageSeedService.js';
 
 const MAX_BRANDING_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_BRANDING_IMAGE_PIXELS = 50_000_000;
@@ -195,14 +196,15 @@ export async function listHomepageNotes(pool, request) {
 }
 
 export async function getPublicInformationPage(pool, page) {
+  const fallback = getDefaultPublicInformationPage(page);
+  if (!fallback) throw new ApiError(404, 'Not found.');
   const result = await pool.query(
     `SELECT page, title_en, title_am, introduction_en, introduction_am,
             body_en, body_am, updated_at
      FROM portal_admin_publicinformationpage WHERE page = $1`,
     [page],
   );
-  if (result.rowCount !== 1) throw new ApiError(404, 'Not found.');
-  return result.rows[0];
+  return result.rows[0] || fallback;
 }
 
 export async function getBrokerageContact(pool, request) {
