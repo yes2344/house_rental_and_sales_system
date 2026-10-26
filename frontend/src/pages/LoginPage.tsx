@@ -47,16 +47,15 @@ export function LoginPage({ text }: LoginPageProps) {
   }
 
   return (
-    <main id="main-content" className="auth-page login-page">
+    <main id="main-content" className="auth-page">
       <section className="auth-card">
         <Link className="auth-back-home" to="/" aria-label={text('backHome')}>
           <ArrowLeft size={19} aria-hidden="true" />
         </Link>
         <span className="auth-icon"><KeyRound size={22} aria-hidden="true" /></span>
-        <p className="eyebrow eyebrow-muted">{text('loginAccountEyebrow')}</p>
+        <p className="eyebrow eyebrow-muted">{text('accountEyebrow')}</p>
         <h1>{text('loginHeading')}</h1>
         <p className="auth-intro">{text('loginIntro')}</p>
-        {state?.registered && <p className="auth-success" role="status">{text('registrationSuccess')}</p>}
         {state?.invitationAccepted && <p className="auth-success" role="status">{text('invitationAccepted')}</p>}
         {authError && <p className="auth-form-error" role="alert">{text('accountStatusError')} {authError}</p>}
         {error && <p className="auth-form-error" role="alert">{error}</p>}

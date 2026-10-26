@@ -6,11 +6,9 @@ export type ManagedPropertyType =
   | 'house' | 'villa' | 'apartment' | 'condominium' | 'land'
   | 'office' | 'shop' | 'warehouse' | 'commercial' | 'other';
 export type ManagedPropertyStatus = 'available' | 'rented' | 'sold' | 'inactive';
-export type PublicationStatus =
-  | 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended' | 'expired' | 'withdrawn';
+export type PublicationStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'suspended';
 export type ManagedAreaUnit = 'sqm' | 'sqft' | '';
 export type ManagedRentalFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
-export type ManagedCurrency = 'ETB' | 'USD';
 export type ViewingRequestStatus =
   | 'pending'
   | 'proposed'
@@ -182,8 +180,8 @@ export interface ManagedProperty {
   location_path: PropertyLocationPathItem[];
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
-  price: string | null;
-  currency: ManagedCurrency;
+  price: string;
+  currency: 'ETB';
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;
@@ -212,8 +210,7 @@ export interface ManagedPropertyPayload {
   administrative_location: number | null;
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
-  price: string | null;
-  currency: ManagedCurrency;
+  price: string;
   bedrooms: number;
   bathrooms: number;
   area_sqft: number;
@@ -291,8 +288,8 @@ export interface ManagedPropertyFilters {
 }
 
 export async function getAmenities(signal?: AbortSignal): Promise<AmenityOption[]> {
-  const response = await apiClient.get<AmenityOption[]>('/amenities/', { signal });
-  return response.data;
+  const response = await apiClient.get<PaginatedResponse<AmenityOption>>('/amenities/', { signal });
+  return response.data.results;
 }
 
 export async function getManagedProperties(

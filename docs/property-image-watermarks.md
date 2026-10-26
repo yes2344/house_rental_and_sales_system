@@ -1,16 +1,11 @@
 # Property image watermarks
 
-Uploaded property photos are stored twice: the public image includes centered
-`@Infinity House` watermark lettering at half the previous size and 50%
-opacity, without a background. The white vector lettering does not depend on
-fonts installed on the server and scales to fit the image. The unmodified
-original is kept in private storage for authorized access.
+Uploaded property photos are stored twice: the public image includes a low-opacity, millennial-pink centered `Infinity House` watermark, plus the current site name, logo, and configured contact phone in the lower-right corner. The unmodified original is kept in private storage for authorized access. The public corner watermark uses the phone configured under the administrator's brokerage contact settings. If no phone is configured, it displays the site name and logo only.
 
-New or replaced Node uploads are watermarked automatically. Existing public
-images are not refreshed automatically. The former Django management
-command for regenerating already-stored public images was removed; there is no
-replacement bulk-refresh command yet. Back up both media roots before any
-manual image processing.
+New uploads are watermarked automatically. After changing the site name, logo, or contact phone, regenerate public versions from the preserved private originals:
 
-The Node API also replaces an individual managed image while preserving its
-record ID, caption, and primary status.
+```powershell
+python manage.py watermark_property_images --refresh
+```
+
+The refresh replaces only each public image. It preserves the private original and its metadata. Running the command without `--refresh` processes legacy images that do not yet have a stored original and skips images already migrated.

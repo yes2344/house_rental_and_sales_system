@@ -1,4 +1,4 @@
-import { apiClient, nodePublicApiClient } from './client';
+import { apiClient } from './client';
 
 export interface MarketplaceLocation {
   id: number;
@@ -48,7 +48,7 @@ export function getUniquePropertyTypeOptions(options: PropertyTypeOption[]): Pro
 }
 
 export async function getPropertyTypeOptions(signal?: AbortSignal): Promise<PropertyTypeOption[]> {
-  const response = await nodePublicApiClient.get<PropertyTypeOption[]>('/property-types/', { signal });
+  const response = await apiClient.get<PropertyTypeOption[]>('/property-types/', { signal });
   return response.data;
 }
 
@@ -62,8 +62,8 @@ export interface PropertySummary {
   category: PropertyType;
   listing_type: ListingType;
   rental_frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | '';
-  price: string | null;
-  currency: 'ETB' | 'USD';
+  price: string;
+  currency: 'ETB';
   area_value: string | null;
   area_unit: 'sqm' | 'sqft' | '';
   bedrooms: number;
@@ -130,7 +130,7 @@ export async function getLocationsByTypes(
   signal?: AbortSignal,
 ): Promise<MarketplaceLocation[]> {
   const response = await apiClient.get<MarketplaceLocation[]>('/locations/', {
-    params: { all: 1, types: locationTypes.join(',') },
+    params: { types: locationTypes.join(',') },
     signal,
   });
   return response.data;
@@ -147,7 +147,7 @@ export async function getProperties(
   filters: PropertyFilters,
   signal?: AbortSignal,
 ): Promise<PaginatedResponse<PropertySummary>> {
-  const response = await nodePublicApiClient.get<PaginatedResponse<PropertySummary>>('/properties/', {
+  const response = await apiClient.get<PaginatedResponse<PropertySummary>>('/properties/', {
     params: filters,
     signal,
   });
@@ -155,7 +155,7 @@ export async function getProperties(
 }
 
 export async function getProperty(slug: string, signal?: AbortSignal): Promise<PropertyDetail> {
-  const response = await nodePublicApiClient.get<PropertyDetail>(
+  const response = await apiClient.get<PropertyDetail>(
     `/properties/${encodeURIComponent(slug)}/`,
     { signal },
   );

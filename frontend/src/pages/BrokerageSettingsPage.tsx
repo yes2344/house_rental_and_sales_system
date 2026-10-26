@@ -12,6 +12,7 @@ import {
   type HomepageNotePayload,
 } from '../api/homepageContent';
 import { useHomepageContent } from '../HomepageContentContext';
+import { PublicInformationPagesEditor } from '../components/PublicInformationPagesEditor';
 import { SocialMark } from '../components/SocialMark';
 import { useBrokerageContact } from '../BrokerageContactContext';
 import type { MessageKey } from '../i18n';
@@ -321,6 +322,7 @@ export function BrokerageSettingsPage({ text }: BrokerageSettingsPageProps) {
           </section>
         </form>
 
+        <PublicInformationPagesEditor text={text} />
 
         <section className="manager-form manager-form-section homepage-note-manager" aria-labelledby="homepage-note-heading">
           <div>

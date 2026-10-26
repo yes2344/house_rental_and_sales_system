@@ -11,7 +11,6 @@ export function RequireSettingsManager({ text }: RequireSettingsManagerProps) {
   const { account } = useAuth();
   const canManageSettings = Boolean(
     account?.is_platform_owner
-    || (account?.role === 'administrator' && account.management_permissions.includes('branding.manage'))
     || (account?.role === 'agent' && account.management_permissions.includes('settings.manage')),
   );
 

@@ -1,26 +1,40 @@
 services:
   - type: web
-    name: infinity-house-api
-    runtime: node
+    name: kefaleshabeshahome-api
+    runtime: python
     plan: free
-    rootDir: backend
-    buildCommand: npm ci
-    startCommand: npm start
-    healthCheckPath: /api/v1/health/
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && python manage.py ensure_demo_admin && gunicorn house.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --access-logfile - --error-logfile -
     envVars:
-      - key: NODE_ENV
-        value: production
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: kefaleshabeshahome-api.onrender.com
+      - key: DJANGO_TRUST_PROXY_SSL_HEADER
+        value: "True"
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "True"
+      - key: DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS
+        value: "True"
+      - key: DJANGO_CACHE_BACKEND
+        value: django.core.cache.backends.locmem.LocMemCache
+      - key: PUBLIC_FRONTEND_URL
+        sync: false
+      - key: EMAIL_BACKEND
+        value: accounts.email_backend.BrevoEmailBackend
+      - key: BREVO_API_KEY
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
       - key: DATABASE_URL
         sync: false
-      - key: PGSSL
+      - key: CLOUDINARY_URL
         sync: false
-      - key: FRONTEND_ORIGINS
+      - key: DJANGO_SUPERUSER_USERNAME
         sync: false
-      - key: CSRF_TRUSTED_ORIGINS
+      - key: DJANGO_SUPERUSER_EMAIL
         sync: false
-      - key: MEDIA_ROOT
-        sync: false
-      - key: PRIVATE_MEDIA_ROOT
-        sync: false
-      - key: MEDIA_CAPACITY_BYTES
+      - key: DJANGO_SUPERUSER_PASSWORD
         sync: false

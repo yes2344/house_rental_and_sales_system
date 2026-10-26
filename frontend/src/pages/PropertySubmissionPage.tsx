@@ -8,7 +8,6 @@ import {
   getAmenities,
   type AmenityOption,
   type ManagedAreaUnit,
-  type ManagedCurrency,
   type ManagedListingType,
   type ManagedPropertyType,
   type ManagedRentalFrequency,
@@ -22,7 +21,6 @@ import {
   type OwnerSubmissionPayload,
 } from '../api/ownerSubmissions';
 import { LocationCascade } from '../components/LocationCascade';
-import { formatPropertyFeatures, parsePropertyFeatures, PROPERTY_FACILITIES } from '../components/propertyFeatures';
 import type { Locale, MessageKey } from '../i18n';
 
 interface PropertySubmissionPageProps {
@@ -37,7 +35,6 @@ interface SubmissionValues {
   category: ManagedPropertyType;
   listing_type: ManagedListingType;
   price: string;
-  currency: ManagedCurrency;
   bedrooms: string;
   bathrooms: string;
   area_value: string;
@@ -58,7 +55,6 @@ const emptyValues: SubmissionValues = {
   category: 'house',
   listing_type: 'sale',
   price: '',
-  currency: 'ETB',
   bedrooms: '',
   bathrooms: '',
   area_value: '',
@@ -81,8 +77,7 @@ function valuesFromSubmission(submission: OwnerSubmission): SubmissionValues {
       : String(submission.administrative_location),
     category: submission.category,
     listing_type: submission.listing_type,
-    price: submission.price ?? '',
-    currency: submission.currency,
+    price: submission.price,
     bedrooms: String(submission.bedrooms),
     bathrooms: String(submission.bathrooms),
     area_value: submission.area_value ?? '',
@@ -167,6 +162,8 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
 
   const chooseImages = (event: ChangeEvent<HTMLInputElement>) => {
     const accepted = ['jpg', 'jpeg', 'png', 'webp'];
+    const existingImageCount = submission?.images.length ?? 0;
+    const maximumStagedImages = Math.max(0, 10 - existingImageCount);
     const files = Array.from(event.target.files ?? []);
     const nextImages = [...stagedImages];
     let issue = '';
@@ -174,6 +171,10 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
       const extension = file.name.split('.').pop()?.toLowerCase();
       if (!accepted.includes(extension ?? '')) {
         issue = text('imageTypeError');
+      } else if (file.size > 10 * 1024 * 1024) {
+        issue = text('imageSizeError');
+      } else if (nextImages.length >= maximumStagedImages) {
+        issue = text('imageLimitError');
       } else {
         nextImages.push(file);
       }
@@ -197,8 +198,7 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
         : null,
       category: values.category,
       listing_type: values.listing_type,
-      price: values.price.trim() || null,
-      currency: values.currency,
+      price: values.price.trim(),
       bedrooms: Number(values.bedrooms || 0),
       bathrooms: Number(values.bathrooms || 0),
       area_sqft: values.area_unit === 'sqft' && values.area_value
@@ -289,13 +289,13 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
           <h2>{text('propertyDetails')}</h2>
           <div className="manager-form-grid">
             <label className="manager-field">
-              <span>{text('propertyTitle')}</span>
-              <input maxLength={200} value={values.title} onChange={(event) => updateValue('title', event.target.value)} />
+              <span>{text('propertyTitle')} *</span>
+              <input required maxLength={200} value={values.title} onChange={(event) => updateValue('title', event.target.value)} />
               {fieldErrors.title && <small className="auth-field-error">{fieldErrors.title}</small>}
             </label>
             <label className="manager-field">
-              <span>{text('location')}</span>
-              <input maxLength={200} value={values.location} onChange={(event) => updateValue('location', event.target.value)} />
+              <span>{text('location')} *</span>
+              <input required maxLength={200} value={values.location} onChange={(event) => updateValue('location', event.target.value)} />
               {fieldErrors.location && <small className="auth-field-error">{fieldErrors.location}</small>}
             </label>
             <div className="manager-field">
@@ -304,11 +304,12 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
                 locale={locale}
                 onChange={(value) => updateValue('administrative_location', value)}
                 text={text}
+                required
               />
               {fieldErrors.administrative_location && <small className="auth-field-error">{fieldErrors.administrative_location}</small>}
             </div>
             <label className="manager-field">
-              <span>{text('propertyType')}</span>
+              <span>{text('propertyType')} *</span>
               <select value={values.category} onChange={(event) => updateValue('category', event.target.value as ManagedPropertyType)}>
                 {propertyTypes.map((type) => (
                   <option key={type} value={type}>
@@ -326,7 +327,7 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
               </select>
             </label>
             <label className="manager-field">
-              <span>{text('listingType')}</span>
+              <span>{text('listingType')} *</span>
               <select
                 value={values.listing_type}
                 onChange={(event) => {
@@ -340,28 +341,14 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
               </select>
             </label>
             <label className="manager-field">
-              <span>
-                {values.listing_type === 'rent' && values.rental_frequency
-                  ? text('priceWithPeriod')
-                    .replace('{currency}', values.currency === 'USD' ? text('usDollar') : 'ETB')
-                    .replace('{period}', text(values.rental_frequency))
-                  : `${text('priceLabel')} (${values.currency === 'USD' ? text('usDollar') : text('ethiopianBirr')})`}
-              </span>
-              <input type="number" min="0.01" step="0.01" value={values.price} onChange={(event) => updateValue('price', event.target.value)} />
-              <small>{text('priceNegotiableHint')}</small>
+              <span>{text('price')} (ETB) *</span>
+              <input type="number" min="0.01" step="0.01" required value={values.price} onChange={(event) => updateValue('price', event.target.value)} />
               {fieldErrors.price && <small className="auth-field-error">{fieldErrors.price}</small>}
-            </label>
-            <label className="manager-field">
-              <span>{text('currencyLabel')}</span>
-              <select value={values.currency} onChange={(event) => updateValue('currency', event.target.value as ManagedCurrency)}>
-                <option value="ETB">{text('ethiopianBirr')}</option>
-                <option value="USD">{text('usDollar')}</option>
-              </select>
             </label>
             {values.listing_type === 'rent' && (
               <label className="manager-field">
-                <span>{text('rentalFrequency')}</span>
-                <select value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
+                <span>{text('rentalFrequency')} *</span>
+                <select required value={values.rental_frequency} onChange={(event) => updateValue('rental_frequency', event.target.value as ManagedRentalFrequency)}>
                   <option value="">{text('selectOption')}</option>
                   <option value="daily">{text('daily')}</option>
                   <option value="monthly">{text('monthly')}</option>
@@ -382,7 +369,7 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
               <span>{text('sizeLabel')}</span>
               <div className="filter-two-columns">
                 <input type="number" min="0.01" step="0.01" value={values.area_value} onChange={(event) => updateValue('area_value', event.target.value)} />
-                <select value={values.area_unit} onChange={(event) => updateValue('area_unit', event.target.value as ManagedAreaUnit)}>
+                <select required={Boolean(values.area_value)} value={values.area_unit} onChange={(event) => updateValue('area_unit', event.target.value as ManagedAreaUnit)}>
                   <option value="">{text('selectOption')}</option>
                   <option value="sqm">m²</option>
                   <option value="sqft">sq ft</option>
@@ -391,46 +378,14 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
               {fieldErrors.area_unit && <small className="auth-field-error">{fieldErrors.area_unit}</small>}
             </label>
             <label className="manager-field manager-field-wide">
-              <span>{text('detailsHeading')}</span>
-              <textarea rows={5} value={values.description} onChange={(event) => updateValue('description', event.target.value)} />
+              <span>{text('detailsHeading')} *</span>
+              <textarea required rows={5} value={values.description} onChange={(event) => updateValue('description', event.target.value)} />
               {fieldErrors.description && <small className="auth-field-error">{fieldErrors.description}</small>}
             </label>
             <label className="manager-field manager-field-wide">
-              <span>{text('additionalFeaturesLabel')}</span>
-              <textarea
-                rows={3}
-                value={parsePropertyFeatures(values.features).additional}
-                onChange={(event) => {
-                  const parsed = parsePropertyFeatures(values.features);
-                  updateValue('features', formatPropertyFeatures(parsed.facilities, event.target.value));
-                }}
-              />
+              <span>{text('features')}</span>
+              <textarea rows={3} value={values.features} onChange={(event) => updateValue('features', event.target.value)} />
             </label>
-          </div>
-        </section>
-
-        <section className="manager-form-section">
-          <h2>{text('facilitiesHeading')}</h2>
-          <div className="amenity-choice-grid facility-choice-grid">
-            {PROPERTY_FACILITIES.map((facility) => {
-              const selectedFacilities = parsePropertyFeatures(values.features).facilities;
-              return (
-                <label className="amenity-choice facility-choice" key={facility}>
-                  <input
-                    type="checkbox"
-                    checked={selectedFacilities.includes(facility)}
-                    onChange={(event) => {
-                      const parsed = parsePropertyFeatures(values.features);
-                      const nextFacilities = event.target.checked
-                        ? [...parsed.facilities, facility]
-                        : parsed.facilities.filter((item) => item !== facility);
-                      updateValue('features', formatPropertyFeatures(nextFacilities, parsed.additional));
-                    }}
-                  />
-                  <span>{facility}</span>
-                </label>
-              );
-            })}
           </div>
         </section>
 
@@ -489,13 +444,13 @@ export function PropertySubmissionPage({ locale, text }: PropertySubmissionPageP
           <h2>{text('ownerContactDetails')}</h2>
           <div className="manager-form-grid">
             <label className="manager-field">
-              <span>{text('fullName')}</span>
-              <input maxLength={200} value={values.owner_contact_name} onChange={(event) => updateValue('owner_contact_name', event.target.value)} />
+              <span>{text('fullName')} *</span>
+              <input required maxLength={200} value={values.owner_contact_name} onChange={(event) => updateValue('owner_contact_name', event.target.value)} />
               {fieldErrors.owner_contact_name && <small className="auth-field-error">{fieldErrors.owner_contact_name}</small>}
             </label>
             <label className="manager-field">
-              <span>{text('phoneNumber')}</span>
-              <input type="tel" maxLength={50} value={values.owner_contact_phone} onChange={(event) => updateValue('owner_contact_phone', event.target.value)} />
+              <span>{text('phoneNumber')} *</span>
+              <input type="tel" required maxLength={50} value={values.owner_contact_phone} onChange={(event) => updateValue('owner_contact_phone', event.target.value)} />
               {fieldErrors.owner_contact_phone && <small className="auth-field-error">{fieldErrors.owner_contact_phone}</small>}
             </label>
             <label className="manager-field">

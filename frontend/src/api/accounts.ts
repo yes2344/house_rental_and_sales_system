@@ -29,6 +29,7 @@ export interface RegistrationPayload {
   email: string;
   password: string;
   phone?: string;
+  next_path?: string;
 }
 
 export interface AccountEmailPayload {

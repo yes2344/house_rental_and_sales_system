@@ -109,7 +109,7 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
   );
   const editingLocation = editingId === null ? null : locationById.get(editingId) ?? null;
   const selectedParentLocation = locationById.get(Number(values.parent_id));
-  const hasActiveEthiopia = !isAgent || locations.some(
+  const hasActiveEthiopia = locations.some(
     (location) =>
       location.location_type === 'country'
       && location.name.trim().toLocaleLowerCase() === 'ethiopia'
@@ -288,14 +288,6 @@ export function LocationManagementPage({ locale, text }: LocationManagementPageP
                 </select>
                 {fieldErrors.location_type && <small role="alert">{fieldErrors.location_type}</small>}
               </label>
-            )}
-            {!isAgent && (
-              <div className="filter-label">
-                {text('locationCountry')}
-                <div className="location-level-fixed">
-                  <strong>Ethiopia</strong>
-                </div>
-              </div>
             )}
             {!isAgent && editingId === null && values.location_type === 'city' && !hasActiveEthiopia && (
               <p className="manager-error location-form-message" role="alert">{text('locationCountryMissing')}</p>

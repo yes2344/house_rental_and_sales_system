@@ -96,67 +96,62 @@ export function PublicInformationPagesEditor({ text }: PublicInformationPagesEdi
   };
 
   return (
-    <main className="manager-page" id="main-content">
-      <section className="manager-heading">
-        <div>
-          <p className="eyebrow eyebrow-muted"><span className="eyebrow-dot" />{text('managerEyebrow')}</p>
-          <h1>{text('publicPagesManagementTitle')}</h1>
-          <p>{text('publicPagesManagementIntro')}</p>
+    <section className="manager-form manager-form-section public-page-editor" aria-labelledby="public-pages-editor-title">
+      <div>
+        <h2 id="public-pages-editor-title">{text('publicPagesManagementTitle')}</h2>
+        <p className="manager-hint">{text('publicPagesManagementIntro')}</p>
+      </div>
+      {loading ? (
+        <div className="listing-state" role="status">{text('publicPagesLoading')}</div>
+      ) : loadError ? (
+        <p className="manager-inline-error" role="alert">{text('publicPagesLoadError')} {loadError}</p>
+      ) : (
+        <div className="public-page-editor-list">
+          {pages.map((page) => (
+            <form
+              className="public-page-editor-card"
+              key={page.page}
+              onSubmit={(event) => void savePage(event, page)}
+            >
+              <h3>{text(pageTitleKeys[page.page])}</h3>
+              <div className="public-page-editor-fields">
+                {fields.map(({ key, label, multiline, rows, maxLength }) => (
+                  <label className="manager-field" key={key}>
+                    <span>{text(label)}</span>
+                    {multiline ? (
+                      <textarea
+                        required={key.startsWith('introduction_')}
+                        maxLength={maxLength}
+                        rows={rows}
+                        value={page[key]}
+                        onChange={(event) => updateField(page.page, key, event.target.value)}
+                      />
+                    ) : (
+                      <input
+                        required
+                        maxLength={maxLength}
+                        value={page[key]}
+                        onChange={(event) => updateField(page.page, key, event.target.value)}
+                      />
+                    )}
+                  </label>
+                ))}
+              </div>
+              {savedPage === page.page && (
+                <p className="manager-inline-success" role="status">{text('publicPageSaved')}</p>
+              )}
+              {saveError && savingPage === null && savedPage === null && (
+                <p className="manager-inline-error" role="alert">{text('publicPageSaveError')} {saveError}</p>
+              )}
+              <div className="manager-form-actions">
+                <button className="button button-primary" type="submit" disabled={savingPage !== null}>
+                  {savingPage === page.page ? text('publicPageSaving') : text('publicPageSave')}
+                </button>
+              </div>
+            </form>
+          ))}
         </div>
-      </section>
-      <section className="manager-form manager-form-section public-page-editor" aria-label={text('publicPagesManagementTitle')}>
-        {loading ? (
-          <div className="listing-state" role="status">{text('publicPagesLoading')}</div>
-        ) : loadError ? (
-          <p className="manager-inline-error" role="alert">{text('publicPagesLoadError')} {loadError}</p>
-        ) : (
-          <div className="public-page-editor-list">
-            {pages.map((page) => (
-              <form
-                className="public-page-editor-card"
-                key={page.page}
-                onSubmit={(event) => void savePage(event, page)}
-              >
-                <h2>{text(pageTitleKeys[page.page])}</h2>
-                <div className="public-page-editor-fields">
-                  {fields.map(({ key, label, multiline, rows, maxLength }) => (
-                    <label className="manager-field" key={key}>
-                      <span>{text(label)}</span>
-                      {multiline ? (
-                        <textarea
-                          required={key.startsWith('introduction_')}
-                          maxLength={maxLength}
-                          rows={rows}
-                          value={page[key]}
-                          onChange={(event) => updateField(page.page, key, event.target.value)}
-                        />
-                      ) : (
-                        <input
-                          required
-                          maxLength={maxLength}
-                          value={page[key]}
-                          onChange={(event) => updateField(page.page, key, event.target.value)}
-                        />
-                      )}
-                    </label>
-                  ))}
-                </div>
-                {savedPage === page.page && (
-                  <p className="manager-inline-success" role="status">{text('publicPageSaved')}</p>
-                )}
-                {saveError && savingPage === null && savedPage === null && (
-                  <p className="manager-inline-error" role="alert">{text('publicPageSaveError')} {saveError}</p>
-                )}
-                <div className="manager-form-actions">
-                  <button className="button button-primary" type="submit" disabled={savingPage !== null}>
-                    {savingPage === page.page ? text('publicPageSaving') : text('publicPageSave')}
-                  </button>
-                </div>
-              </form>
-            ))}
-          </div>
-        )}
-      </section>
-    </main>
+      )}
+    </section>
   );
 }

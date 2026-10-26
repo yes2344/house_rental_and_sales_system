@@ -1,47 +1,24 @@
 import { Phone } from 'lucide-react';
 
-import { useBrokerageContact } from '../BrokerageContactContext';
 import type { MessageKey } from '../i18n';
-import { SocialMark, socialPlatformNames } from './SocialMark';
+import { SocialMark } from './SocialMark';
 
 interface FloatingContactLinksProps {
   text: (key: MessageKey) => string;
 }
 
 export function FloatingContactLinks({ text }: FloatingContactLinksProps) {
-  const { contact } = useBrokerageContact();
-  const socialLinks = contact.social_links.filter((link) => (
-    link.is_enabled
-    && link.url
-    && (link.platform === 'whatsapp' || link.platform === 'telegram')
-  ));
-  if (!contact.phone && socialLinks.length === 0) return null;
-
   return (
     <nav className="floating-contact-links" aria-label={text('floatingContactLinks')}>
-      {contact.phone && (
-        <a className="floating-contact-link floating-contact-phone" href={`tel:${contact.phone}`} aria-label={text('contactByPhone')}>
-          <Phone aria-hidden="true" />
-        </a>
-      )}
-      {socialLinks.map((link) => (
-        <a
-          className={`floating-contact-link floating-contact-social floating-contact-${link.platform}`}
-          key={link.platform}
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={
-            link.platform === 'whatsapp'
-              ? text('contactByWhatsApp')
-              : link.platform === 'telegram'
-                ? text('contactByTelegram')
-                : socialPlatformNames[link.platform]
-          }
-        >
-          <SocialMark platform={link.platform} />
-        </a>
-      ))}
+      <a className="floating-contact-link floating-contact-phone" href="tel:0985957555" aria-label={text('contactByPhone')}>
+        <Phone size={19} aria-hidden="true" />
+      </a>
+      <a className="floating-contact-link floating-contact-telegram" href="https://t.me/Lion1621" target="_blank" rel="noreferrer" aria-label={text('contactByTelegram')}>
+        <SocialMark platform="telegram" />
+      </a>
+      <a className="floating-contact-link floating-contact-whatsapp" href="https://wa.me/251985957555" target="_blank" rel="noreferrer" aria-label={text('contactByWhatsApp')}>
+        <SocialMark platform="whatsapp" />
+      </a>
     </nav>
   );
 }

@@ -1,4 +1,4 @@
-import { Phone } from 'lucide-react';
+import { Mail, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { useAuth } from '../AuthContext';
@@ -60,7 +60,7 @@ export function Footer({ contact, contactError, text }: FooterProps) {
               <a href={`tel:${contact.phone}`}><Phone size={15} aria-hidden="true" />{contact.phone}</a>
             )}
             {contact.email && (
-              <a href={`mailto:${contact.email}`}>{contact.email}</a>
+              <a href={`mailto:${contact.email}`}><Mail size={15} aria-hidden="true" />{contact.email}</a>
             )}
             {contactError && <p className="footer-contact-error" role="status">{text('agentContactUnavailable')}</p>}
           </section>
@@ -68,11 +68,6 @@ export function Footer({ contact, contactError, text }: FooterProps) {
       </div>
       <div className="container footer-bottom">
         <span>{footerCopyright}</span>
-        <span className="footer-developer-credit">
-          Developed by Shumet · <a href="mailto:shumetyeserah8@gmail.com">shumetyeserah8@gmail.com</a>
-          {' · '}
-          <a href="tel:0923442839">0923442839</a>
-        </span>
       </div>
     </footer>
   );

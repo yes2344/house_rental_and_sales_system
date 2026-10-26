@@ -1,10 +1,4 @@
-# Historical non-functional requirements audit
-
-> This report describes an earlier Django-based repository state and is not a
-> current deployment assessment. The Django/Python runtime has since been
-> removed; Node API coverage is incomplete and production readiness has not
-> been established. See [`../DEPLOY_HAHUCLOUD.md`](../DEPLOY_HAHUCLOUD.md) for
-> current deployment blockers.
+# Non-functional requirements audit
 
 ## Scope and scoring
 
@@ -27,10 +21,6 @@ property is not treated as proven merely because the code has a relevant
 setting or feature.
 
 ## Baseline assessment
-
-> Historical audit: this document records the codebase and database setup at
-> the time of that audit. Its PostgreSQL and SQLite test references are not
-> current deployment instructions.
 
 | Category | Weight | Rating / 5 | Weighted points | Evidence and main gap |
 |---|---:|---:|---:|---|

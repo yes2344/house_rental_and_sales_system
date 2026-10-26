@@ -1,60 +1,39 @@
 # Local development
 
-## Requirements
+## Backend
 
-- Node.js 20 or newer
-- PostgreSQL with the application schema described in
-  [`backend/docs/POSTGRESQL_CATALOG_SNAPSHOT.md`](../backend/docs/POSTGRESQL_CATALOG_SNAPSHOT.md)
+1. Install PostgreSQL and start its local service.
+2. Copy `.env.example` to `.env` if you have not already done so. Keep `DJANGO_DEBUG=True`.
+3. Set `POSTGRES_PASSWORD` in `.env` to the password for your local PostgreSQL user. The defaults use database `house_db`, user `postgres`, host `localhost`, and port `5432`.
+4. Create the local database if it does not exist:
 
-The repository does not create a complete schema for a new empty PostgreSQL
-database yet. Use only a database that has been separately prepared and
-approved for development. Never point local development at a production
-database.
+   ```powershell
+   createdb -U postgres house_db
+   ```
 
-## Start the API
+   If `createdb` is not on `PATH`, use the PostgreSQL 18 installation path:
 
-Copy `backend/.env.example` to `backend/.env` and configure either
-`DATABASE_URL` or the `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and
-`PGPASSWORD` values. Keep credentials in the ignored `.env` file.
+   ```powershell
+   & 'C:\Program Files\PostgreSQL\18\bin\createdb.exe' -U postgres house_db
+   ```
 
-```powershell
-Set-Location 'D:\reacttrain\house sales and rental management system\backend'
-npm ci
-npm test
-npm start
-```
+5. Apply migrations and start Django:
 
-The API listens on `http://127.0.0.1:3000` by default and checks PostgreSQL at
-`http://127.0.0.1:3000/api/v1/health/`. Production mode additionally requires
-separate absolute `MEDIA_ROOT` and `PRIVATE_MEDIA_ROOT` directories. Local
-defaults use the workspace `media` and `private-media` folders.
+   ```powershell
+   python manage.py migrate
+   python manage.py runserver
+   ```
 
-## Start the frontend
+With `DJANGO_DEBUG=True`, Django uses only the local `POSTGRES_*` settings and does not use `DATABASE_URL`. This prevents local development commands from modifying a hosted database. Deployed environments with `DJANGO_DEBUG=False` continue to use their configured `DATABASE_URL` or PostgreSQL variables.
+
+## Frontend
 
 In a second terminal:
 
 ```powershell
-Set-Location 'D:\reacttrain\house sales and rental management system\frontend'
-npm ci
+Set-Location frontend
+npm install
 npm run dev
 ```
 
-Vite proxies `/api` and `/media` to Node at `http://127.0.0.1:3000`. Set
-`VITE_NODE_PROXY_TARGET` in the frontend environment to change that target.
-For a frontend hosted separately from the API, set `VITE_API_BASE_URL` to the
-API's full `/api/v1` URL and configure the backend's `FRONTEND_ORIGINS` and
-`CSRF_TRUSTED_ORIGINS` to the frontend's exact origin.
-
-## Current API coverage
-
-The frontend now sends API requests to Node; Django is no longer a fallback.
-Some frontend features still call routes that have not been implemented in
-Node, so those features will return 404. See
-[`backend/docs/API_MIGRATION_STATUS.md`](../backend/docs/API_MIGRATION_STATUS.md)
-before relying on account verification, password reset, favorites, viewing
-requests, management, or other pending features. Node tests exercise current
-handlers with isolated storage or mocked PostgreSQL; they do not certify a
-production database or full feature parity.
-
-For the existing media audit, storage behavior, and backup guidance, see
-[`backend/docs/LOCAL_MEDIA_MIGRATION.md`](../backend/docs/LOCAL_MEDIA_MIGRATION.md).
+The frontend's local API proxy targets Django at `http://127.0.0.1:8000` by default.
